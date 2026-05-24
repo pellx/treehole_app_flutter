@@ -1,0 +1,35 @@
+name: treehole
+description: 树通 - 学生的匿名论坛
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  flutter_svg: ^2.0.17
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon.png
+    - assets/numbers/
+    - assets/expand_icon.svg
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#121212"
+  adaptive_icon_foreground: "assets/icon.png"
