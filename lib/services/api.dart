@@ -6,7 +6,7 @@ import '../models/post.dart';
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
   static const _imgBase = 'https://www.leisure.xin:33433/upload';
-  static const _timeout = Duration(seconds: 10);
+  static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
   static Future<List<int>> getIdList() async {
