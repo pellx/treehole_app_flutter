@@ -52,12 +52,12 @@ class SquarePage extends StatefulWidget {
 }
 
 class _SquarePageState extends State<SquarePage> {
-  List<Post> _posts = [];
-  List<int> _allIds = [];
-  int _loadedCount = 0;
-  bool _loading = false;
-  String? _error;
-  final Set<int> _loadingIds = {};
+  List<Post> _posts = [];          // 当前展示的帖子列表
+  List<int> _allIds = [];          // 全部帖子 ID（按 API 返回顺序）
+  int _loadedCount = 0;            // 已加载到第几个 ID
+  bool _loading = false;           // 是否正在加载中
+  String? _error;                  // 错误信息（null = 正常）
+  final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
 
   @override
   void initState() {
@@ -65,51 +65,91 @@ class _SquarePageState extends State<SquarePage> {
     _initLoad();
   }
 
+  // ---- 首次启动加载 ----
+  //
+  // 流程：
+  //   1. 先从 API 获取最新 ID 列表（失败则用 Hive 缓存的旧列表）
+  //   2. 取前 7 个 ID，逐个加载帖子
+  //      - Hive 有 → 直接用
+  //      - Hive 无 → API 请求 → 存入 Hive
+  //   3. 帖子按 _allIds 顺序排列显示
+  //
+  // 第二次打开时，Hive 里的旧帖子秒出，新帖子从 API 补。
+  //
   Future<void> _initLoad() async {
-    final cachedPosts = PostStorage.getAllCachedPosts();
-    final cachedIds = cachedPosts.map((p) => p.id).toList();
-    if (cachedPosts.isNotEmpty) {
-      _posts = cachedPosts;
-      _allIds = PostStorage.getIdList();
-      _loadedCount = cachedPosts.length;
-      setState(() => _loading = false);
+    // 1. 获取最新 ID 列表
+    try {
+      _allIds = await ApiService.getIdList();
+      await PostStorage.saveIdList(_allIds);
+    } catch (_) {
+      _allIds = PostStorage.getIdList(); // API 失败，用本地缓存
     }
 
-    try {
-      final newIds = await ApiService.getIdList();
-      _allIds = PostStorage.mergeAndSaveIdList(newIds);
-      await _loadMore();
-    } catch (_) {
-      if (_posts.isEmpty) {
-        setState(() {
-          _loading = false;
-          _error = '加载失败，请检查网络';
-        });
-      }
+    if (_allIds.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = '加载失败，请检查网络';
+      });
+      return;
+    }
+
+    // 2. 按 ID 顺序加载帖子（缓存优先）
+    _posts = [];
+    _loadedCount = 0;
+    await _loadMore();
+
+    if (_posts.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = '加载失败，请检查网络';
+      });
     }
   }
 
+  // ---- 加载下一批帖子（7 篇）----
+  //
+  // 流程：
+  //   1. 从 _allIds 中取 _loadedCount 之后的 7 个 ID
+  //   2. 7 个请求并行发出（不串行等待）
+  //   3. 拿到一篇就立即显示一篇
+  //   4. 排序保证与 _allIds 顺序一致
+  //
+  // 调用时机：
+  //   - _initLoad 首次加载
+  //   - 列表滚到距底部 300px 时触发
+  //
   Future<void> _loadMore() async {
-    if (_loading) return;
-    final batch = _allIds.skip(_loadedCount).take(7).where((id) => !_loadingIds.contains(id)).toList();
+    if (_loading) return; // 上一批还没加载完，跳过
+    final batch = _allIds
+        .skip(_loadedCount)
+        .take(7)
+        .where((id) => !_loadingIds.contains(id))
+        .toList();
     if (batch.isEmpty) return;
 
     setState(() => _loading = true);
-    for (final id in batch) _loadingIds.add(id);
+    for (final id in batch) {
+      _loadingIds.add(id);
+    }
 
+    // 并行请求所有帖子（缓存 → API fallback）
     final futures = batch.map((id) async {
       final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
       if (post != null) await PostStorage.savePost(post);
       return post;
     }).toList();
 
+    // 按顺序处理结果，拿到一篇显示一篇
     for (int i = 0; i < futures.length; i++) {
       final post = await futures[i];
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
         setState(() {
           _posts.add(post);
-          _posts.sort((a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)));
+          // 按 _allIds 顺序排序，保证帖子列表与 ID 列表顺序一致
+          _posts.sort(
+            (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
+          );
         });
       }
     }
@@ -122,33 +162,37 @@ class _SquarePageState extends State<SquarePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
+        // 首次加载且无数据 → 居中转圈
         child: _loading && _posts.isEmpty
             ? const Center(child: CircularProgressIndicator())
+            // 有错误 → 显示错误文字
             : _error != null
                 ? Center(
                     child: Text(_error!,
                         style: const TextStyle(color: Colors.grey)))
+                // 正常 → 帖子列表 + 滚动加载
                 : NotificationListener<ScrollNotification>(
-                onNotification: (notification) {
-                  if (notification.metrics.pixels >=
-                          notification.metrics.maxScrollExtent - 300 &&
-                      !_loading) {
-                    _loadMore();
-                  }
-                  return false;
-                },
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    AppDimens.listPaddingLeft,
-                    AppDimens.listPaddingTop,
-                    AppDimens.listPaddingRight,
-                    AppDimens.listPaddingBottom,
+                    // 滚到距底部 300px 时触发 _loadMore
+                    onNotification: (notification) {
+                      if (notification.metrics.pixels >=
+                              notification.metrics.maxScrollExtent - 300 &&
+                          !_loading) {
+                        _loadMore();
+                      }
+                      return false;
+                    },
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        AppDimens.listPaddingLeft,
+                        AppDimens.listPaddingTop,
+                        AppDimens.listPaddingRight,
+                        AppDimens.listPaddingBottom,
+                      ),
+                      children: _posts
+                          .map((p) => PostCard(post: p))
+                          .toList(),
+                    ),
                   ),
-                  children: _posts
-                      .map((p) => PostCard(post: p))
-                      .toList(),
-                ),
-              ),
       ),
     );
   }

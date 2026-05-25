@@ -215,7 +215,7 @@ class _PostCardState extends State<PostCard> {
             child: SizedBox(
               width: AppDimens.thumbnailSize,
               height: AppDimens.thumbnailSize,
-              child: ThumbnailImage(fileName: img.fileName),
+              child: ThumbnailImage(key: ValueKey(img.fileName), fileName: img.fileName),
             ),
           );
         }).toList(),
