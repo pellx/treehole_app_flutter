@@ -54,6 +54,7 @@ class AppDimens {
   static const double fontSizeAt = 15;
   static const double fontSizeContent = 15;
   static const double fontSizeAuthor = 18;
+  static const double titleAuthorMaxWidth = 282;
   static const double authorAtGap = 3;
   static const double fontSizeSmall = 14;
 

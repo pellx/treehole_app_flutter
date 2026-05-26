@@ -116,31 +116,7 @@ class _PostCardState extends State<PostCard> {
         top: AppDimens.titleVPadding,
         bottom: AppDimens.titleVPadding,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Flexible(
-            child: Text(post.title,
-                style: TextStyle(
-                    fontSize: AppDimens.fontSizeTitle,
-                    fontWeight: FontWeight.w400,
-                    color: primary)),
-          ),
-          if (post.author.isNotEmpty) ...[
-            SizedBox(width: AppDimens.paddingLg),
-            Text('@',
-                style: TextStyle(
-                    fontSize: AppDimens.fontSizeAt,
-                    color: colors.green,
-                    fontStyle: FontStyle.italic)),
-            SizedBox(width: AppDimens.authorAtGap),
-            Text(post.author,
-                style: TextStyle(
-                    fontSize: AppDimens.fontSizeAuthor,
-                    color: colors.authorColor)),
-          ],
-        ],
-      ),
+      child: _TitleAuthorRow(post: post, primary: primary, colors: colors),
     );
   }
 
@@ -155,31 +131,31 @@ class _PostCardState extends State<PostCard> {
             BlendMode.srcIn,
           ),
           child: SizedBox(
-              width: AppDimens.idImageOverlap * (len - 1) +
-                  AppDimens.idDigitWidth,
-              height: AppDimens.idImageHeight,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: List.generate(len, (i) {
-                  final digit = post.id.toString()[i];
-                  return Positioned(
-                    left: i * AppDimens.idImageOverlap * 1.0,
-                    child: Image.asset(
-                      'assets/numbers/$digit.png',
-                      width: AppDimens.idDigitWidth,
-                      height: AppDimens.idImageHeight,
-                      fit: BoxFit.fill,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Text(digit,
-                              style: const TextStyle(
-                                  fontSize: AppDimens.fontSizeId,
-                                  color: Colors.red)),
-                    ),
-                  );
-                }),
-              ),
+            width: AppDimens.idImageOverlap * (len - 1) +
+                AppDimens.idDigitWidth,
+            height: AppDimens.idImageHeight,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: List.generate(len, (i) {
+                final digit = post.id.toString()[i];
+                return Positioned(
+                  left: i * AppDimens.idImageOverlap * 1.0,
+                  child: Image.asset(
+                    'assets/numbers/$digit.png',
+                    width: AppDimens.idDigitWidth,
+                    height: AppDimens.idImageHeight,
+                    fit: BoxFit.fill,
+                    errorBuilder: (context, error, stackTrace) =>
+                        Text(digit,
+                            style: const TextStyle(
+                                fontSize: AppDimens.fontSizeId,
+                                color: Colors.red)),
+                  ),
+                );
+              }),
             ),
           ),
+        ),
       );
 
     Widget content = child;
@@ -193,7 +169,6 @@ class _PostCardState extends State<PostCard> {
       child: content,
     );
   }
-
   Widget _content(String displayContent, Color primary) {
     return Text(displayContent,
         style: TextStyle(
@@ -349,6 +324,141 @@ class _PostCardState extends State<PostCard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _TitleAuthorRow extends StatelessWidget {
+  final dynamic post;
+  final Color primary;
+  final AppColors colors;
+
+  const _TitleAuthorRow({
+    required this.post,
+    required this.primary,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = TextStyle(
+        fontSize: AppDimens.fontSizeTitle,
+        fontWeight: FontWeight.w400,
+        color: primary);
+    final authorStyle = TextStyle(
+        fontSize: AppDimens.fontSizeAuthor,
+        color: colors.authorColor);
+    final atStyle = TextStyle(
+        fontSize: AppDimens.fontSizeAt,
+        color: colors.green,
+        fontStyle: FontStyle.italic);
+
+    // 测量标题和作者宽度
+    final tp = TextPainter(
+        text: TextSpan(text: post.title, style: titleStyle),
+        maxLines: 1,
+        textDirection: TextDirection.ltr)..layout();
+    final ap = TextPainter(
+        text: TextSpan(text: '@${post.author}', style: authorStyle),
+        maxLines: 1,
+        textDirection: TextDirection.ltr);
+    if (post.author.isNotEmpty) ap.layout();
+
+    final titleW = tp.width;
+    final authorW = post.author.isEmpty ? 0 : ap.width + AppDimens.paddingLg;
+
+    return ConstrainedBox(
+      constraints:
+          BoxConstraints(maxWidth: AppDimens.titleAuthorMaxWidth),
+      child: post.author.isEmpty
+          ? Text(post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle)
+          : titleW + authorW <= AppDimens.titleAuthorMaxWidth
+              // 不超宽：都 inline，不换行
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(post.title, style: titleStyle),
+                    SizedBox(width: AppDimens.paddingLg),
+                    Text('@', style: atStyle),
+                    SizedBox(width: AppDimens.authorAtGap),
+                    Text(post.author, style: authorStyle),
+                  ],
+                )
+              // 超宽
+              : () {
+                  final halfW = AppDimens.titleAuthorMaxWidth / 2;
+                  final gap = AppDimens.paddingLg;
+                  final bothLong = titleW > halfW && authorW > halfW;
+
+                  double titleFlex, authorFlex;
+                  if (bothLong) {
+                    // 按比例分配：titleShare = titleW / totalW * maxWidth
+                    final totalW = titleW + authorW;
+                    final avail = AppDimens.titleAuthorMaxWidth - gap;
+                    titleFlex = (titleW / totalW) * avail / avail;
+                    authorFlex = (authorW / totalW);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          flex: (titleW / totalW * avail).round().clamp(1, 999),
+                          child: Text(post.title, softWrap: true, style: titleStyle),
+                        ),
+                        SizedBox(width: gap),
+                        Flexible(
+                          flex: (authorW / totalW * avail).round().clamp(1, 999),
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: '@', style: atStyle),
+                              TextSpan(text: post.author, style: authorStyle),
+                            ]),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
+                    );
+                  } else {
+                    // 短的 inline，长的被约束到 maxWidth - 短宽度
+                    final titleLong = titleW > halfW;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (titleLong)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                                maxWidth: AppDimens.titleAuthorMaxWidth -
+                                    authorW -
+                                    gap),
+                            child: Text(post.title, style: titleStyle),
+                          )
+                        else
+                          Text(post.title, style: titleStyle),
+                        SizedBox(width: gap),
+                        if (!titleLong)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                                maxWidth: AppDimens.titleAuthorMaxWidth -
+                                    titleW -
+                                    gap),
+                            child: Text.rich(
+                              TextSpan(children: [
+                                TextSpan(text: '@', style: atStyle),
+                                TextSpan(text: post.author, style: authorStyle),
+                              ]),
+                            ),
+                          )
+                        else
+                          Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: '@', style: atStyle),
+                              TextSpan(text: post.author, style: authorStyle),
+                            ]),
+                          ),
+                      ],
+                    );
+                  }
+                }(),
     );
   }
 }
