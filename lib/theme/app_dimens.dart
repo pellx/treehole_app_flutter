@@ -12,7 +12,8 @@ class AppDimens {
   // ---- 帖子卡片 ----
   static const double cardHPadding = 7;
   static const double cardContentLeft = 7;
-  static const double cardImageTop = 6;
+  static const double cardImageTop = 2;
+  static const double cardImageBottom = 7;
   static const double cardBodySpacing = 5;
   static const double cardMarginBottom = 23;
   static const double cardLeftMargin = 22;
@@ -60,10 +61,11 @@ class AppDimens {
   static const int contentMaxLength = 256;
 
   // ---- 缩略图 ----
-  static const double singleImageWidth = 200;
-  static const double singleImageHeight = 200;
-  static const double gridImageSize = 90;
-  static const double thumbnailGap = 2;
+  static const double singleImageMaxArea = 40000;
+  static const double singleImageMinRatio = 0.25;
+  static const double singleImageMaxRatio = 4.0;
+  static const double gridImageSize = 92;
+  static const double thumbnailGap = 4;
 
   // ---- 展开/收起按钮 ----
   static const double expandBtnDotsGap = 10;

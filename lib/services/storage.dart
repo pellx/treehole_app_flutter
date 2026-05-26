@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import '../models/post.dart';
+import '../services/api.dart';
 
 class PostStorage {
   static const _idListKey = 'id_list';
@@ -94,14 +95,26 @@ class PostStorage {
 
   // ---- 缩略图 ----
 
-  static Uint8List? getThumbnail(String fileName) {
-    final key = 'thumb_$fileName';
-    final raw = _thumbBox.get(key);
+  static ThumbnailData? getThumbnail(String fileName) {
+    final raw = _thumbBox.get('thumb_$fileName');
     if (raw == null) return null;
-    return raw as Uint8List;
+    // 兼容旧格式（Uint8List）和新格式（Map）
+    if (raw is Uint8List) {
+      return ThumbnailData(bytes: raw, width: 0, height: 0);
+    }
+    final map = raw as Map;
+    return ThumbnailData(
+      bytes: map['bytes'] as Uint8List,
+      width: map['w'] as int,
+      height: map['h'] as int,
+    );
   }
 
-  static Future<void> saveThumbnail(String fileName, Uint8List bytes) async {
-    await _thumbBox.put('thumb_$fileName', bytes);
+  static Future<void> saveThumbnail(String fileName, ThumbnailData data) async {
+    await _thumbBox.put('thumb_$fileName', {
+      'bytes': data.bytes,
+      'w': data.width,
+      'h': data.height,
+    });
   }
 }

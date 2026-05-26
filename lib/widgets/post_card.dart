@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/post.dart';
 import '../theme/app_dimens.dart';
@@ -213,11 +214,27 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _buildSingleImage(post) {
+    final data = PostStorage.getThumbnail(post.images[0].fileName);
+    double w = 200, h = 200;
+
+    if (data != null && data.width > 0 && data.height > 0) {
+      double ratio = data.width / data.height;
+      // clamp ratio to [min, max]
+      if (ratio > AppDimens.singleImageMaxRatio) {
+        ratio = AppDimens.singleImageMaxRatio;
+      } else if (ratio < AppDimens.singleImageMinRatio) {
+        ratio = AppDimens.singleImageMinRatio;
+      }
+      // 面积约束：w*h <= maxArea, w/h = ratio
+      h = sqrt(AppDimens.singleImageMaxArea / ratio);
+      w = ratio * h;
+    }
+
     return Padding(
-      padding: EdgeInsets.only(top: AppDimens.cardImageTop),
+      padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
       child: SizedBox(
-        width: AppDimens.singleImageWidth,
-        height: AppDimens.singleImageHeight,
+        width: w,
+        height: h,
         child: ThumbnailImage(
             key: ValueKey(post.images[0].fileName),
             fileName: post.images[0].fileName),
@@ -227,7 +244,7 @@ class _PostCardState extends State<PostCard> {
 
   Widget _buildGrid(post) {
     return Padding(
-      padding: EdgeInsets.only(top: AppDimens.cardImageTop),
+      padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
       child: Wrap(
         spacing: AppDimens.thumbnailGap,
         runSpacing: AppDimens.thumbnailGap,
@@ -357,14 +374,14 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
   Future<void> _load() async {
     final cached = PostStorage.getThumbnail(widget.fileName);
     if (cached != null) {
-      setState(() { _bytes = cached; _loading = false; });
+      setState(() { _bytes = cached.bytes; _loading = false; });
       return;
     }
     final downloaded = await ApiService.downloadThumbnail(widget.fileName);
     if (!mounted) return;
     if (downloaded != null) {
       await PostStorage.saveThumbnail(widget.fileName, downloaded);
-      setState(() { _bytes = downloaded; });
+      setState(() { _bytes = downloaded.bytes; });
     }
     setState(() => _loading = false);
   }

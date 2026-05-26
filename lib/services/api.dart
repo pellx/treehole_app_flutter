@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 import '../models/post.dart';
 
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
-  static const _imgBase = 'https://www.leisure.xin:33433/upload';
+  static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
@@ -26,14 +27,26 @@ class ApiService {
     }
   }
 
-  static Future<Uint8List?> downloadThumbnail(String fileName) async {
+  static Future<ThumbnailData?> downloadThumbnail(String fileName) async {
     try {
-      final res = await http.get(Uri.parse('$_imgBase/$fileName!2thum')).timeout(_timeout);
+      final res = await http.get(Uri.parse('$_thumbBase/$fileName')).timeout(_timeout);
       if (res.statusCode != 200) return null;
-      return res.bodyBytes;
+      final bytes = res.bodyBytes;
+      final dims = await _decodeSize(bytes);
+      return ThumbnailData(bytes: bytes, width: dims.$1, height: dims.$2);
     } catch (_) {
       return null;
     }
+  }
+
+  static Future<(int, int)> _decodeSize(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final w = frame.image.width;
+    final h = frame.image.height;
+    frame.image.dispose();
+    codec.dispose();
+    return (w, h);
   }
 
   static Post _mockPost(int id) {
@@ -45,4 +58,11 @@ class ApiService {
       createdAt: DateTime.now().toIso8601String(),
     );
   }
+}
+
+class ThumbnailData {
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  const ThumbnailData({required this.bytes, required this.width, required this.height});
 }
