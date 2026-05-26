@@ -33,7 +33,7 @@ class AppDimens {
   // ---- 帖子 ID ----
   static const double idRight = -32;
   static const double idTop = -2;
-  static const double idOpacity = 0.32;
+  static const double idOpacity = 0.36;
   static const double idImageHeight = 32;
   static const double idImageOverlap = 15;
   static const double idDigitWidth = 23;
@@ -60,8 +60,10 @@ class AppDimens {
   static const int contentMaxLength = 256;
 
   // ---- 缩略图 ----
-  static const double thumbnailSize = 110;
-  static const double thumbnailRadius = 4;
+  static const double singleImageWidth = 200;
+  static const double singleImageHeight = 200;
+  static const double grid2to4ImageSize = 110;
+  static const double grid5to12ImageSize = 90;
   static const double thumbnailGap = 2;
 
   // ---- 展开/收起按钮 ----
@@ -99,4 +101,8 @@ class AppDimens {
   static const double listPaddingTop = 24;
   static const double listPaddingRight = 12;
   static const double listPaddingBottom = 40;
+
+  // ---- 加载动画 ----
+  static const double loadingGifSize = 40;
+  static const double loadingGifThumbSize = 24;
 }

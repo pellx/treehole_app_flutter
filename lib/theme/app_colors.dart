@@ -24,7 +24,7 @@ class AppColors extends ThemeExtension<AppColors> {
   static const light = AppColors(
     background: Color(0xFFFFFFFF),
     secondary: Color(0xFF747474),
-    borderColor: Color(0x30CCCCCC),
+    borderColor: Color(0x60999999),
     authorColor: Color(0xFF2F68C5),
     accentText: Color(0xFF33B1FF),
     buttonBg: Color(0xFF2CAEFF),
@@ -35,7 +35,7 @@ class AppColors extends ThemeExtension<AppColors> {
   static const dark = AppColors(
     background: Color(0xFF121212),
     secondary: Color(0x70999999),
-    borderColor: Color(0x30666666),
+    borderColor: Color(0x60444444),
     authorColor: Color(0xFF2F68C5),
     accentText: Color(0xBA5498FF),
     buttonBg: Color(0xFF2693FF),

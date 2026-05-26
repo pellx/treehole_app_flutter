@@ -27,6 +27,8 @@ flutter:
     - assets/icon.png
     - assets/numbers/
     - assets/expand_icon.svg
+    - assets/loading.gif
+    - assets/404.png
 
 flutter_launcher_icons:
   android: true

@@ -203,20 +203,60 @@ class _PostCardState extends State<PostCard> {
 
   Widget _images(post) {
     if (post.images.isEmpty) return const SizedBox.shrink();
+    final count = post.images.length;
+
+    if (count == 1) {
+      return _buildSingleImage(post);
+    } else if (count <= 4) {
+      return _buildGrid2to4(post);
+    } else {
+      return _buildGrid5to12(post);
+    }
+  }
+
+  Widget _buildSingleImage(post) {
+    return Padding(
+      padding: EdgeInsets.only(top: AppDimens.cardImageTop),
+      child: SizedBox(
+        width: AppDimens.singleImageWidth,
+        height: AppDimens.singleImageHeight,
+        child: ThumbnailImage(
+            key: ValueKey(post.images[0].fileName),
+            fileName: post.images[0].fileName),
+      ),
+    );
+  }
+
+  Widget _buildGrid2to4(post) {
     return Padding(
       padding: EdgeInsets.only(top: AppDimens.cardImageTop),
       child: Wrap(
         spacing: AppDimens.thumbnailGap,
         runSpacing: AppDimens.thumbnailGap,
-        children: post.images.take(9).map<Widget>((img) {
-          return ClipRRect(
-            borderRadius:
-                BorderRadius.circular(AppDimens.thumbnailRadius),
-            child: SizedBox(
-              width: AppDimens.thumbnailSize,
-              height: AppDimens.thumbnailSize,
-              child: ThumbnailImage(key: ValueKey(img.fileName), fileName: img.fileName),
-            ),
+        children: post.images.take(4).map<Widget>((img) {
+          return SizedBox(
+            width: AppDimens.grid2to4ImageSize,
+            height: AppDimens.grid2to4ImageSize,
+            child: ThumbnailImage(
+                key: ValueKey(img.fileName), fileName: img.fileName),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildGrid5to12(post) {
+    return Padding(
+      padding: EdgeInsets.only(top: AppDimens.cardImageTop),
+      child: Wrap(
+        spacing: AppDimens.thumbnailGap,
+        runSpacing: AppDimens.thumbnailGap,
+        children: post.images.take(12).map<Widget>((img) {
+          return SizedBox(
+            width: AppDimens.grid5to12ImageSize,
+            height: AppDimens.grid5to12ImageSize,
+            child: ThumbnailImage(
+                key: ValueKey(img.fileName), fileName: img.fileName),
           );
         }).toList(),
       ),
@@ -352,11 +392,11 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+      return const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifThumbSize, height: AppDimens.loadingGifThumbSize));
     }
     if (_bytes != null) {
       return Image.memory(_bytes!, fit: BoxFit.cover);
     }
-    return const Icon(Icons.broken_image, color: Colors.grey);
+    return Image.asset('assets/404.png', fit: BoxFit.cover);
   }
 }

@@ -164,7 +164,7 @@ class _SquarePageState extends State<SquarePage> {
       body: SafeArea(
         // 首次加载且无数据 → 居中转圈
         child: _loading && _posts.isEmpty
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifSize, height: AppDimens.loadingGifSize))
             // 有错误 → 显示错误文字
             : _error != null
                 ? Center(
