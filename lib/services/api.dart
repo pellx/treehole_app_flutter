@@ -7,6 +7,7 @@ import '../models/post.dart';
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
   static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
+  static const _originalBase = 'https://www.leisure.xin:33433/upload';
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
@@ -29,7 +30,11 @@ class ApiService {
 
   static Future<ThumbnailData?> downloadThumbnail(String fileName) async {
     try {
-      final res = await http.get(Uri.parse('$_thumbBase/$fileName')).timeout(_timeout);
+      final isGif = fileName.toLowerCase().endsWith('.gif');
+      final url = isGif
+          ? '$_originalBase/$fileName'
+          : '$_thumbBase/$fileName';
+      final res = await http.get(Uri.parse(url)).timeout(_timeout);
       if (res.statusCode != 200) return null;
       final bytes = res.bodyBytes;
       final dims = await _decodeSize(bytes);

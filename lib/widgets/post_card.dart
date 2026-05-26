@@ -189,30 +189,17 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _buildSingleImage(post) {
-    final data = PostStorage.getThumbnail(post.images[0].fileName);
-    double w = 200, h = 200;
-
-    if (data != null && data.width > 0 && data.height > 0) {
-      double ratio = data.width / data.height;
-      // clamp ratio to [min, max]
-      if (ratio > AppDimens.singleImageMaxRatio) {
-        ratio = AppDimens.singleImageMaxRatio;
-      } else if (ratio < AppDimens.singleImageMinRatio) {
-        ratio = AppDimens.singleImageMinRatio;
-      }
-      // 面积约束：w*h <= maxArea, w/h = ratio
-      h = sqrt(AppDimens.singleImageMaxArea / ratio);
-      w = ratio * h;
-    }
-
     return Padding(
       padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
-      child: SizedBox(
-        width: w,
-        height: h,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: AppDimens.singleImageMaxRatio * AppDimens.titleAuthorMaxWidth,
+        ),
         child: ThumbnailImage(
             key: ValueKey(post.images[0].fileName),
-            fileName: post.images[0].fileName),
+            fileName: post.images[0].fileName,
+            fit: BoxFit.contain,
+            constrainSingle: true),
       ),
     );
   }
@@ -465,7 +452,9 @@ class _TitleAuthorRow extends StatelessWidget {
 
 class ThumbnailImage extends StatefulWidget {
   final String fileName;
-  const ThumbnailImage({super.key, required this.fileName});
+  final BoxFit fit;
+  final bool constrainSingle;
+  const ThumbnailImage({super.key, required this.fileName, this.fit = BoxFit.cover, this.constrainSingle = false});
 
   @override
   State<ThumbnailImage> createState() => _ThumbnailImageState();
@@ -502,7 +491,21 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
       return const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifThumbSize, height: AppDimens.loadingGifThumbSize));
     }
     if (_bytes != null) {
-      return Image.memory(_bytes!, fit: BoxFit.cover);
+      Widget img = Image.memory(_bytes!, fit: widget.fit);
+      if (widget.constrainSingle) {
+        final data = PostStorage.getThumbnail(widget.fileName);
+        if (data != null && data.width > 0 && data.height > 0) {
+          double ratio = data.width / data.height;
+          ratio = ratio.clamp(AppDimens.singleImageMinRatio, AppDimens.singleImageMaxRatio);
+          final h = sqrt(AppDimens.singleImageMaxArea / ratio);
+          final w = ratio * h;
+          img = ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: w, maxHeight: h),
+            child: img,
+          );
+        }
+      }
+      return img;
     }
     return Image.asset('assets/404.png', fit: BoxFit.cover);
   }

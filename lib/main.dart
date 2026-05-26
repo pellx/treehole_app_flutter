@@ -156,6 +156,17 @@ class _SquarePageState extends State<SquarePage> {
 
     _loadedCount += batch.length;
     setState(() => _loading = false);
+
+    // 后台预下载缩略图，Hive 有就跳过
+    for (final post in _posts) {
+      for (final img in post.images) {
+        if (PostStorage.getThumbnail(img.fileName) == null) {
+          ApiService.downloadThumbnail(img.fileName).then((data) {
+            if (data != null) PostStorage.saveThumbnail(img.fileName, data);
+          });
+        }
+      }
+    }
   }
 
   @override
