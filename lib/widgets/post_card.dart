@@ -207,10 +207,8 @@ class _PostCardState extends State<PostCard> {
 
     if (count == 1) {
       return _buildSingleImage(post);
-    } else if (count <= 4) {
-      return _buildGrid2to4(post);
     } else {
-      return _buildGrid5to12(post);
+      return _buildGrid(post);
     }
   }
 
@@ -227,25 +225,7 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _buildGrid2to4(post) {
-    return Padding(
-      padding: EdgeInsets.only(top: AppDimens.cardImageTop),
-      child: Wrap(
-        spacing: AppDimens.thumbnailGap,
-        runSpacing: AppDimens.thumbnailGap,
-        children: post.images.take(4).map<Widget>((img) {
-          return SizedBox(
-            width: AppDimens.grid2to4ImageSize,
-            height: AppDimens.grid2to4ImageSize,
-            child: ThumbnailImage(
-                key: ValueKey(img.fileName), fileName: img.fileName),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildGrid5to12(post) {
+  Widget _buildGrid(post) {
     return Padding(
       padding: EdgeInsets.only(top: AppDimens.cardImageTop),
       child: Wrap(
@@ -253,8 +233,8 @@ class _PostCardState extends State<PostCard> {
         runSpacing: AppDimens.thumbnailGap,
         children: post.images.take(12).map<Widget>((img) {
           return SizedBox(
-            width: AppDimens.grid5to12ImageSize,
-            height: AppDimens.grid5to12ImageSize,
+            width: AppDimens.gridImageSize,
+            height: AppDimens.gridImageSize,
             child: ThumbnailImage(
                 key: ValueKey(img.fileName), fileName: img.fileName),
           );

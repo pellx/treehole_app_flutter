@@ -62,8 +62,7 @@ class AppDimens {
   // ---- 缩略图 ----
   static const double singleImageWidth = 200;
   static const double singleImageHeight = 200;
-  static const double grid2to4ImageSize = 110;
-  static const double grid5to12ImageSize = 90;
+  static const double gridImageSize = 90;
   static const double thumbnailGap = 2;
 
   // ---- 展开/收起按钮 ----
