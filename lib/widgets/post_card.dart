@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../services/storage.dart';
 import '../services/api.dart';
 import 'dart:typed_data';
+import 'image_overlay.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -188,34 +189,87 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
+  List<GlobalKey> _gridKeys = [];
+  List<GlobalKey> _singleKey = [];
+
+  void _openOverlay(List<PostImage> images, int index, List<GlobalKey> keys) {
+    if (ImageOverlay.currentEntry != null) return;
+    final rects = <Rect?>[];
+    for (final key in keys) {
+      final box = key.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null) {
+        rects.add(null);
+        continue;
+      }
+      final offset = box.localToGlobal(Offset.zero);
+      final size = box.size;
+      rects.add(Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height));
+    }
+    // 确保至少有 index 对应的 rect
+    while (rects.length <= index) rects.add(null);
+
+    final thumbs = <Uint8List?>[];
+    for (final img in images) {
+      thumbs.add(PostStorage.getThumbnail(img.fileName)?.bytes);
+    }
+
+    final overlay = Overlay.of(context);
+    ImageOverlay.currentEntry = OverlayEntry(builder: (_) {
+      return ImageOverlay(
+        images: images,
+        initialIndex: index,
+        thumbRects: rects,
+        thumbnails: thumbs,
+      );
+    });
+    overlay.insert(ImageOverlay.currentEntry!);
+  }
+
   Widget _buildSingleImage(post) {
-    return Padding(
-      padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: AppDimens.singleImageMaxRatio * AppDimens.titleAuthorMaxWidth,
+    if (_singleKey.isEmpty) _singleKey = [GlobalKey()];
+    return GestureDetector(
+      onTap: () => _openOverlay(post.images, 0, _singleKey),
+      child: Padding(
+        padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: AppDimens.singleImageMaxRatio * AppDimens.titleAuthorMaxWidth,
+          ),
+          child: SizedBox(
+            key: _singleKey[0],
+            child: ThumbnailImage(
+                key: ValueKey(post.images[0].fileName),
+                fileName: post.images[0].fileName,
+                fit: BoxFit.contain,
+                constrainSingle: true),
+          ),
         ),
-        child: ThumbnailImage(
-            key: ValueKey(post.images[0].fileName),
-            fileName: post.images[0].fileName,
-            fit: BoxFit.contain,
-            constrainSingle: true),
       ),
     );
   }
 
   Widget _buildGrid(post) {
+    if (_gridKeys.length != post.images.length) {
+      _gridKeys = List.generate(post.images.length, (_) => GlobalKey());
+    }
+
     return Padding(
       padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
       child: Wrap(
         spacing: AppDimens.thumbnailGap,
         runSpacing: AppDimens.thumbnailGap,
-        children: post.images.take(12).map<Widget>((img) {
-          return SizedBox(
-            width: AppDimens.gridImageSize,
-            height: AppDimens.gridImageSize,
-            child: ThumbnailImage(
-                key: ValueKey(img.fileName), fileName: img.fileName),
+        children: post.images.asMap().entries.take(12).map<Widget>((entry) {
+          final i = entry.key;
+          final img = entry.value;
+          return GestureDetector(
+            onTap: () => _openOverlay(post.images, i, _gridKeys),
+            child: SizedBox(
+              key: _gridKeys[i],
+              width: AppDimens.gridImageSize,
+              height: AppDimens.gridImageSize,
+              child: ThumbnailImage(
+                  key: ValueKey(img.fileName), fileName: img.fileName),
+            ),
           );
         }).toList(),
       ),

@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/post.dart';
 import '../services/api.dart';
 
@@ -116,5 +118,27 @@ class PostStorage {
       'w': data.width,
       'h': data.height,
     });
+  }
+
+  // ---- PNG 原图文件缓存 ----
+
+  static Future<Directory> _pngCacheDir() async {
+    final dir = Directory(
+        '${(await getTemporaryDirectory()).path}/png_cache');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  static Future<Uint8List?> getPng(String fileName) async {
+    final file = File(
+        '${(await _pngCacheDir()).path}/$fileName');
+    if (await file.exists()) return await file.readAsBytes();
+    return null;
+  }
+
+  static Future<void> savePng(String fileName, Uint8List bytes) async {
+    final file = File(
+        '${(await _pngCacheDir()).path}/$fileName');
+    await file.writeAsBytes(bytes);
   }
 }

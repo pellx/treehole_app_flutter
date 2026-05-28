@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/post.dart';
 import 'widgets/post_card.dart';
+import 'widgets/image_overlay.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_dimens.dart';
 import 'services/api.dart';
@@ -63,6 +64,7 @@ class _SquarePageState extends State<SquarePage> {
   void initState() {
     super.initState();
     _initLoad();
+    ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
   }
 
   // ---- 首次启动加载 ----
@@ -171,7 +173,12 @@ class _SquarePageState extends State<SquarePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: ImageOverlay.currentEntry == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) ImageOverlay.closeCurrent();
+      },
+      child: Scaffold(
       body: SafeArea(
         // 首次加载且无数据 → 居中转圈
         child: _loading && _posts.isEmpty
@@ -205,6 +212,7 @@ class _SquarePageState extends State<SquarePage> {
                     ),
                   ),
       ),
+    ),
     );
   }
 }
