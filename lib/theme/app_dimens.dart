@@ -107,4 +107,14 @@ class AppDimens {
   // ---- 加载动画 ----
   static const double loadingGifSize = 40;
   static const double loadingGifThumbSize = 24;
+
+  // ---- 图片查看器动画 ----
+  static const int imageExpandMs = 250; // 打开/关闭伸缩动画时长
+  static const int imageFadeMs = 500; // WebP 淡出时长
+  static const double pageSnapMass = 0.2; // 切页弹簧质量（越小越快）
+  static const double pageSnapStiffness = 300; // 切页弹簧刚度（越大越快）
+  static const double pageSnapDampingRatio = 1.4; // 切页阻尼比（0.9=稍有回弹, 1.0=临界无回弹, 1.1=柔和减速）
+  static const double bounceMass = 0.2; // 溢出回弹弹簧质量（越小越快）
+  static const double bounceStiffness = 300; // 溢出回弹弹簧刚度（越大越快）
+  static const double bounceDampingRatio = 1.4; // 溢出回弹阻尼比
 }

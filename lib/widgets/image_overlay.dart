@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/post.dart';
 import '../services/storage.dart';
+import '../theme/app_dimens.dart';
+import 'page_physics.dart';
 
 class ImageOverlay extends StatefulWidget {
   final List<PostImage> images;
@@ -54,7 +56,7 @@ class _ImageOverlayState extends State<ImageOverlay>
     super.initState();
     _currentIndex = widget.initialIndex;
     _animCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 250));
+        vsync: this, duration: Duration(milliseconds: AppDimens.imageExpandMs));
     _expandAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _bgAnim = ColorTween(begin: Colors.transparent, end: Colors.black)
         .animate(_expandAnim);
@@ -75,6 +77,10 @@ class _ImageOverlayState extends State<ImageOverlay>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ImageOverlay.onChanged?.call();
     });
+
+    // 预加载相邻图
+    if (widget.initialIndex + 1 < widget.images.length) _loadPng(widget.initialIndex + 1);
+    if (widget.initialIndex > 0) _loadPng(widget.initialIndex - 1);
   }
 
   @override
@@ -113,7 +119,7 @@ class _ImageOverlayState extends State<ImageOverlay>
       _loading.remove(index);
       _fadeCtrls[index]?.dispose();
       final fc = AnimationController(
-          vsync: this, duration: const Duration(milliseconds: 500));
+          vsync: this, duration: Duration(milliseconds: AppDimens.imageFadeMs));
       _fadeCtrls[index] = fc;
       if (bytes != null) {
         PostStorage.savePng(fileName, bytes);
@@ -177,10 +183,14 @@ class _ImageOverlayState extends State<ImageOverlay>
   Widget _buildContent() {
     return PageView.builder(
       controller: PageController(initialPage: widget.initialIndex),
+      physics: FastPageScrollPhysics(parent: BouncingScrollPhysics(decelerationRate: ScrollDecelerationRate.fast)),
       itemCount: widget.images.length,
       onPageChanged: (index) {
         setState(() => _currentIndex = index);
         _loadPng(index);
+        // 预加载相邻图
+        if (index + 1 < widget.images.length) _loadPng(index + 1);
+        if (index > 0) _loadPng(index - 1);
       },
       itemBuilder: (context, index) {
         _loadPng(index);
@@ -191,9 +201,7 @@ class _ImageOverlayState extends State<ImageOverlay>
             : null;
         final fadeCtrl = _fadeCtrls[index];
 
-        return InteractiveViewer(
-          minScale: 1.0,
-          maxScale: 4.0,
+        return _ZoomablePage(
           child: Stack(
             fit: StackFit.passthrough,
             children: [
@@ -216,6 +224,41 @@ class _ImageOverlayState extends State<ImageOverlay>
           ),
         );
       },
+    );
+  }
+}
+
+class _ZoomablePage extends StatefulWidget {
+  final Widget child;
+  const _ZoomablePage({required this.child});
+
+  @override
+  State<_ZoomablePage> createState() => _ZoomablePageState();
+}
+
+class _ZoomablePageState extends State<_ZoomablePage> {
+  double _scale = 1.0;
+  double _baseScale = 1.0;
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _baseScale = _scale;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    setState(() {
+      _scale = (_baseScale * d.scale).clamp(1.0, 4.0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onScaleStart: _onScaleStart,
+      onScaleUpdate: _onScaleUpdate,
+      child: Transform.scale(
+        scale: _scale,
+        child: widget.child,
+      ),
     );
   }
 }
