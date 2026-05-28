@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:http/http.dart' as http;
 import '../models/post.dart';
 import '../services/storage.dart';
@@ -42,10 +44,13 @@ class ImageOverlay extends StatefulWidget {
 class _ImageOverlayState extends State<ImageOverlay>
     with TickerProviderStateMixin {
   late AnimationController _animCtrl;
+  late AnimationController _actionBarCtrl;
+  late AnimationController _dotsCtrl;
   late Animation<double> _expandAnim;
   late Animation<Color?> _bgAnim;
   int _currentIndex = 0;
   bool _shown = false;
+  bool _showActionBar = false;
 
   final Map<int, Uint8List?> _pngCache = {};
   final Set<int> _loading = {};
@@ -60,8 +65,14 @@ class _ImageOverlayState extends State<ImageOverlay>
     _expandAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _bgAnim = ColorTween(begin: Colors.transparent, end: Colors.black)
         .animate(_expandAnim);
+    _actionBarCtrl = AnimationController(
+        vsync: this, duration: Duration(milliseconds: AppDimens.actionBarAnimMs))
+      ..addListener(() { if (mounted) setState(() {}); });
+    _dotsCtrl = AnimationController(
+        vsync: this, duration: Duration(milliseconds: AppDimens.pageIndicatorFadeMs));
 
     _animCtrl.forward().then((_) => setState(() => _shown = true));
+    _dotsCtrl.forward();
     _animCtrl.addStatusListener((status) {
       if (status == AnimationStatus.dismissed) {
         ImageOverlay.currentEntry?.remove();
@@ -89,6 +100,7 @@ class _ImageOverlayState extends State<ImageOverlay>
       c.dispose();
     }
     _animCtrl.dispose();
+    _actionBarCtrl.dispose();
     super.dispose();
   }
 
@@ -137,6 +149,7 @@ class _ImageOverlayState extends State<ImageOverlay>
         _animCtrl.status == AnimationStatus.dismissed) return;
     _shown = false;
     setState(() {});
+    _dotsCtrl.reverse();
     _animCtrl.reverse();
   }
 
@@ -157,7 +170,19 @@ class _ImageOverlayState extends State<ImageOverlay>
     final rect = Rect.lerp(startR, fullRect, progress)!;
 
     return GestureDetector(
-      onTap: () => _close(),
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        if (_showActionBar) {
+          setState(() => _showActionBar = false);
+          _actionBarCtrl.reverse();
+        } else {
+          _close();
+        }
+      },
+      onLongPress: () {
+        setState(() => _showActionBar = true);
+        _actionBarCtrl.forward();
+      },
       child: Stack(
         children: [
           Positioned.fill(
@@ -175,24 +200,89 @@ class _ImageOverlayState extends State<ImageOverlay>
               child: _buildContent(),
             ),
           ),
+          if (widget.images.length > 1)
+            Positioned(
+              bottom: AppDimens.pageIndicatorBottomMargin,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: _dotsCtrl,
+                child: Center(
+                  child: Wrap(
+                  spacing: AppDimens.pageIndicatorDotGap,
+                  runSpacing: 0,
+                  children: List.generate(widget.images.length, (i) {
+                    final active = i == _currentIndex;
+                    return Container(
+                      width: AppDimens.pageIndicatorDotSize,
+                      height: AppDimens.pageIndicatorDotSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(
+                          alpha: active
+                              ? AppDimens.pageIndicatorActiveOpacity
+                              : AppDimens.pageIndicatorInactiveOpacity,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ),
+            ),
+          if (_showActionBar || _actionBarCtrl.value > 0)
+            Positioned(
+              left: 0, right: 0,
+              bottom: _showActionBar
+                  ? -AppDimens.actionBarHeight + _actionBarCtrl.value * (AppDimens.actionBarBottomMargin + AppDimens.actionBarHeight)
+                  : AppDimens.actionBarBottomMargin,
+              child: Opacity(
+                opacity: _actionBarCtrl.value,
+                child: Center(
+                    child: Container(
+                      height: AppDimens.actionBarHeight,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[900]!.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(AppDimens.actionBarRadius),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                          IconButton(
+                            icon: Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Colors.white),
+                            onPressed: () {},
+                          ),
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                          IconButton(
+                            icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: Colors.white),
+                            onPressed: () {},
+                          ),
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                        ],
+                  ),
+                ),
+              ),
+            ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildContent() {
-    return PageView.builder(
-      controller: PageController(initialPage: widget.initialIndex),
-      physics: FastPageScrollPhysics(parent: BouncingScrollPhysics(decelerationRate: ScrollDecelerationRate.fast)),
+    return PhotoViewGallery.builder(
+      backgroundDecoration: const BoxDecoration(color: Colors.transparent),
+      scrollPhysics: FastPageScrollPhysics(parent: BouncingScrollPhysics(decelerationRate: ScrollDecelerationRate.fast)),
+      pageController: PageController(initialPage: widget.initialIndex),
       itemCount: widget.images.length,
       onPageChanged: (index) {
         setState(() => _currentIndex = index);
         _loadPng(index);
-        // 预加载相邻图
         if (index + 1 < widget.images.length) _loadPng(index + 1);
         if (index > 0) _loadPng(index - 1);
       },
-      itemBuilder: (context, index) {
+      builder: (context, index) {
         _loadPng(index);
         final png = _pngCache[index];
         final hasPng = png != null;
@@ -201,14 +291,12 @@ class _ImageOverlayState extends State<ImageOverlay>
             : null;
         final fadeCtrl = _fadeCtrls[index];
 
-        return _ZoomablePage(
+        return PhotoViewGalleryPageOptions.customChild(
           child: Stack(
             fit: StackFit.passthrough,
             children: [
-              // PNG 在底部，直接显示，不参与动画
               if (hasPng)
                 Align(child: Image.memory(png!, width: double.infinity, fit: BoxFit.contain)),
-              // WebP 始终存在，只改透明度：无 PNG 时=1，有 PNG 时淡出
               if (thumb != null)
                 Align(
                   child: Opacity(
@@ -222,43 +310,10 @@ class _ImageOverlayState extends State<ImageOverlay>
                 const Center(child: SizedBox.shrink()),
             ],
           ),
+          minScale: PhotoViewComputedScale.contained,
+          maxScale: PhotoViewComputedScale.covered * 3,
         );
       },
-    );
-  }
-}
-
-class _ZoomablePage extends StatefulWidget {
-  final Widget child;
-  const _ZoomablePage({required this.child});
-
-  @override
-  State<_ZoomablePage> createState() => _ZoomablePageState();
-}
-
-class _ZoomablePageState extends State<_ZoomablePage> {
-  double _scale = 1.0;
-  double _baseScale = 1.0;
-
-  void _onScaleStart(ScaleStartDetails d) {
-    _baseScale = _scale;
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails d) {
-    setState(() {
-      _scale = (_baseScale * d.scale).clamp(1.0, 4.0);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onScaleStart: _onScaleStart,
-      onScaleUpdate: _onScaleUpdate,
-      child: Transform.scale(
-        scale: _scale,
-        child: widget.child,
-      ),
     );
   }
 }

@@ -112,9 +112,25 @@ class AppDimens {
   static const int imageExpandMs = 250; // 打开/关闭伸缩动画时长
   static const int imageFadeMs = 500; // WebP 淡出时长
   static const double pageSnapMass = 0.2; // 切页弹簧质量（越小越快）
-  static const double pageSnapStiffness = 300; // 切页弹簧刚度（越大越快）
+  static const double pageSnapStiffness = 100; // 切页弹簧刚度（越大越快）
   static const double pageSnapDampingRatio = 1.4; // 切页阻尼比（0.9=稍有回弹, 1.0=临界无回弹, 1.1=柔和减速）
   static const double bounceMass = 0.2; // 溢出回弹弹簧质量（越小越快）
   static const double bounceStiffness = 300; // 溢出回弹弹簧刚度（越大越快）
   static const double bounceDampingRatio = 1.4; // 溢出回弹阻尼比
+
+  // ---- 长按操作栏 ----
+  static const double actionBarHeight = 48; // 操作栏高度
+  static const double actionBarRadius = 12; // 操作栏圆角
+  static const double actionBarBottomMargin = 60; // 距底部距离
+  static const double actionBarBtnSize = 28; // 按钮图标大小
+  static const int actionBarAnimMs = 80; // 操作栏显示/隐藏动画时长
+  static const double actionBarBtnGap = 40; // 两按钮间距
+
+  // ---- 页码指示器 ----
+  static const double pageIndicatorDotSize = 6; // 圆点大小
+  static const double pageIndicatorDotGap = 8; // 圆点间距
+  static const double pageIndicatorActiveOpacity = 0.9; // 当前页透明度
+  static const double pageIndicatorInactiveOpacity = 0.4; // 非当前页透明度
+  static const double pageIndicatorBottomMargin = 40; // 距底部距离
+  static const int pageIndicatorFadeMs = 80; // 页码指示器消失动画时长
 }
