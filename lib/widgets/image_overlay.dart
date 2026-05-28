@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:gal/gal.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../models/post.dart';
 import '../services/storage.dart';
@@ -46,11 +50,13 @@ class _ImageOverlayState extends State<ImageOverlay>
   late AnimationController _animCtrl;
   late AnimationController _actionBarCtrl;
   late AnimationController _dotsCtrl;
+  late AnimationController _saveToastCtrl;
   late Animation<double> _expandAnim;
   late Animation<Color?> _bgAnim;
   int _currentIndex = 0;
   bool _shown = false;
   bool _showActionBar = false;
+  bool _saving = false;
 
   final Map<int, Uint8List?> _pngCache = {};
   final Set<int> _loading = {};
@@ -70,6 +76,9 @@ class _ImageOverlayState extends State<ImageOverlay>
       ..addListener(() { if (mounted) setState(() {}); });
     _dotsCtrl = AnimationController(
         vsync: this, duration: Duration(milliseconds: AppDimens.pageIndicatorFadeMs));
+    _saveToastCtrl = AnimationController(
+        vsync: this, duration: Duration(milliseconds: AppDimens.saveToastAnimMs))
+      ..addListener(() { if (mounted) setState(() {}); });
 
     _animCtrl.forward().then((_) => setState(() => _shown = true));
     _dotsCtrl.forward();
@@ -101,6 +110,8 @@ class _ImageOverlayState extends State<ImageOverlay>
     }
     _animCtrl.dispose();
     _actionBarCtrl.dispose();
+    _dotsCtrl.dispose();
+    _saveToastCtrl.dispose();
     super.dispose();
   }
 
@@ -140,6 +151,44 @@ class _ImageOverlayState extends State<ImageOverlay>
           fc.forward();
         });
       }
+    });
+  }
+
+  Future<void> _saveImage() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final index = _currentIndex;
+      final fileName = widget.images[index].fileName;
+      Uint8List? bytes = _pngCache[index];
+      bytes ??= await ImageOverlay.downloadPng(fileName);
+      if (bytes != null) {
+        await Gal.putImageBytes(bytes, name: fileName);
+        setState(() { _showActionBar = false; _actionBarCtrl.reverse(); });
+        _showSaveToast();
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _shareImage() async {
+    final index = _currentIndex;
+    final fileName = widget.images[index].fileName;
+    Uint8List? bytes = _pngCache[index];
+    bytes ??= await ImageOverlay.downloadPng(fileName);
+    if (bytes == null) return;
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsBytes(bytes);
+    await Share.shareXFiles([XFile(file.path)], text: '来自树通');
+  }
+
+  void _showSaveToast() {
+    _saveToastCtrl.forward().then((_) {
+      Future.delayed(Duration(milliseconds: AppDimens.saveToastDurationMs), () {
+        if (mounted) _saveToastCtrl.reverse();
+      });
     });
   }
 
@@ -250,13 +299,18 @@ class _ImageOverlayState extends State<ImageOverlay>
                         children: [
                           SizedBox(width: AppDimens.actionBarBtnGap),
                           IconButton(
-                            icon: Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Colors.white),
-                            onPressed: () {},
+                            icon: _saving
+                                ? SizedBox(
+                                    width: AppDimens.actionBarBtnSize,
+                                    height: AppDimens.actionBarBtnSize,
+                                    child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Colors.white),
+                            onPressed: _saveImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
                           IconButton(
                             icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: Colors.white),
-                            onPressed: () {},
+                            onPressed: _shareImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
                         ],
@@ -264,6 +318,24 @@ class _ImageOverlayState extends State<ImageOverlay>
                 ),
               ),
             ),
+            ),
+          if (_saveToastCtrl.value > 0)
+            Positioned(
+              bottom: AppDimens.saveToastBottomMargin,
+              left: 0,
+              right: 0,
+              child: Opacity(
+                opacity: _saveToastCtrl.value,
+                child: Center(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: const Text(
+                      '已保存至相册',
+                      style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
             ),
         ],
       ),

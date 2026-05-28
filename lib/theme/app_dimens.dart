@@ -126,6 +126,15 @@ class AppDimens {
   static const int actionBarAnimMs = 80; // 操作栏显示/隐藏动画时长
   static const double actionBarBtnGap = 40; // 两按钮间距
 
+  // ---- 保存提示弹窗 ----
+  static const double saveToastRadius = 5; // 弹窗圆角
+  static const double saveToastHPadding = 24; // 弹窗水平内边距
+  static const double saveToastVPadding = 10; // 弹窗垂直内边距
+  static const double saveToastBottomMargin = 112; // 距底部距离
+  static const double saveToastFontSize = 14; // 文字大小
+  static const int saveToastDurationMs = 1500; // 显示时长
+  static const int saveToastAnimMs = 80; // 动画时长
+
   // ---- 页码指示器 ----
   static const double pageIndicatorDotSize = 6; // 圆点大小
   static const double pageIndicatorDotGap = 8; // 圆点间距
