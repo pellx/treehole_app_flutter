@@ -123,7 +123,8 @@ class AppDimens {
   static const double actionBarRadius = 12; // 操作栏圆角
   static const double actionBarBottomMargin = 60; // 距底部距离
   static const double actionBarBtnSize = 28; // 按钮图标大小
-  static const int actionBarAnimMs = 80; // 操作栏显示/隐藏动画时长
+  static const int actionBarAnimMs = 80; // 操作栏显示动画时长
+  static const int actionBarCloseAnimMs = 80; // 操作栏隐藏动画时长
   static const double actionBarBtnGap = 40; // 两按钮间距
 
   // ---- 保存提示弹窗 ----

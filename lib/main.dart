@@ -200,6 +200,7 @@ class _SquarePageState extends State<SquarePage> {
                       return false;
                     },
                     child: ListView(
+                      cacheExtent: 3000,
                       padding: EdgeInsets.fromLTRB(
                         AppDimens.listPaddingLeft,
                         AppDimens.listPaddingTop,
@@ -207,7 +208,7 @@ class _SquarePageState extends State<SquarePage> {
                         AppDimens.listPaddingBottom,
                       ),
                       children: _posts
-                          .map((p) => PostCard(post: p))
+                          .map((p) => PostCard(key: ValueKey(p.id), post: p))
                           .toList(),
                     ),
                   ),

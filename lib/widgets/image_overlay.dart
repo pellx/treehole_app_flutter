@@ -61,6 +61,8 @@ class _ImageOverlayState extends State<ImageOverlay>
   final Map<int, Uint8List?> _pngCache = {};
   final Set<int> _loading = {};
   final Map<int, AnimationController> _fadeCtrls = {};
+  final List<AnimationController> _pendingFades = [];
+  final Map<int, bool> _pngReady = {};
 
   @override
   void initState() {
@@ -80,7 +82,13 @@ class _ImageOverlayState extends State<ImageOverlay>
         vsync: this, duration: Duration(milliseconds: AppDimens.saveToastAnimMs))
       ..addListener(() { if (mounted) setState(() {}); });
 
-    _animCtrl.forward().then((_) => setState(() => _shown = true));
+    _animCtrl.forward().then((_) {
+      setState(() => _shown = true);
+      for (final fc in _pendingFades) {
+        if (mounted) fc.forward();
+      }
+      _pendingFades.clear();
+    });
     _dotsCtrl.forward();
     _animCtrl.addStatusListener((status) {
       if (status == AnimationStatus.dismissed) {
@@ -108,6 +116,9 @@ class _ImageOverlayState extends State<ImageOverlay>
     for (final c in _fadeCtrls.values) {
       c.dispose();
     }
+    for (final c in _pendingFades) {
+      c.dispose();
+    }
     _animCtrl.dispose();
     _actionBarCtrl.dispose();
     _dotsCtrl.dispose();
@@ -122,36 +133,47 @@ class _ImageOverlayState extends State<ImageOverlay>
 
     final fileName = widget.images[index].fileName;
 
-    // 1. 先查文件缓存
     PostStorage.getPng(fileName).then((cached) {
-      if (!mounted) return;
+      if (!mounted) { _loading.remove(index); return; }
       _loading.remove(index);
       if (cached != null) {
-        setState(() => _pngCache[index] = cached);
+        _startPngFade(index, cached);
         return;
       }
-      // 2. 没有文件缓存 → 网络下载
-      _downloadPng(index, fileName);
+      _loading.add(index);
+      ImageOverlay.downloadPng(fileName).then((bytes) {
+        if (!mounted) { _loading.remove(index); return; }
+        _loading.remove(index);
+        if (bytes != null) {
+          PostStorage.savePng(fileName, bytes);
+          _startPngFade(index, bytes);
+        }
+      });
     });
   }
 
-  void _downloadPng(int index, String fileName) {
-    _loading.add(index);
-    ImageOverlay.downloadPng(fileName).then((bytes) {
-      if (!mounted) return;
-      _loading.remove(index);
-      _fadeCtrls[index]?.dispose();
-      final fc = AnimationController(
-          vsync: this, duration: Duration(milliseconds: AppDimens.imageFadeMs));
-      _fadeCtrls[index] = fc;
-      if (bytes != null) {
-        PostStorage.savePng(fileName, bytes);
-        setState(() {
-          _pngCache[index] = bytes;
-          fc.forward();
-        });
-      }
+  void _startPngFade(int index, Uint8List bytes) {
+    _fadeCtrls[index]?.dispose();
+    final fc = AnimationController(
+        vsync: this, duration: Duration(milliseconds: AppDimens.imageFadeMs));
+    _fadeCtrls[index] = fc;
+    fc.addListener(() { if (mounted) setState(() {}); });
+    setState(() {
+      _pngCache[index] = bytes;
+      _pngReady[index] = false;
     });
+  }
+
+  void _onPngFrameReady(int index) {
+    if (_pngReady[index] == true) return;
+    _pngReady[index] = true;
+    final fc = _fadeCtrls[index];
+    if (fc == null) return;
+    if (_shown) {
+      fc.forward();
+    } else {
+      _pendingFades.add(fc);
+    }
   }
 
   Future<void> _saveImage() async {
@@ -198,7 +220,10 @@ class _ImageOverlayState extends State<ImageOverlay>
         _animCtrl.status == AnimationStatus.dismissed) return;
     _shown = false;
     setState(() {});
+    _showActionBar = false;
     _dotsCtrl.reverse();
+    _actionBarCtrl.duration = Duration(milliseconds: AppDimens.actionBarCloseAnimMs);
+    _actionBarCtrl.reverse();
     _animCtrl.reverse();
   }
 
@@ -230,6 +255,7 @@ class _ImageOverlayState extends State<ImageOverlay>
       },
       onLongPress: () {
         setState(() => _showActionBar = true);
+        _actionBarCtrl.duration = Duration(milliseconds: AppDimens.actionBarAnimMs);
         _actionBarCtrl.forward();
       },
       child: Stack(
@@ -368,7 +394,17 @@ class _ImageOverlayState extends State<ImageOverlay>
             fit: StackFit.passthrough,
             children: [
               if (hasPng)
-                Align(child: Image.memory(png!, width: double.infinity, fit: BoxFit.contain)),
+                Align(child: Image.memory(png!, width: double.infinity,
+                    fit: BoxFit.contain,
+                    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                      if (frame != null) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _onPngFrameReady(index);
+                        });
+                      }
+                      return child;
+                    },
+                )),
               if (thumb != null)
                 Align(
                   child: Opacity(

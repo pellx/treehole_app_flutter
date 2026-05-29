@@ -517,49 +517,87 @@ class ThumbnailImage extends StatefulWidget {
 class _ThumbnailImageState extends State<ThumbnailImage> {
   Uint8List? _bytes;
   bool _loading = true;
+  double? _displayW;
+  double? _displayH;
 
   @override
   void initState() {
     super.initState();
+    _initDims();
     _load();
+  }
+
+  void _initDims() {
+    if (!widget.constrainSingle) return;
+    final data = PostStorage.getThumbnail(widget.fileName);
+    if (data != null) _calcDisplaySize(data);
+  }
+
+  void _calcDisplaySize(ThumbnailData data) {
+    if (data.width > 0 && data.height > 0) {
+      final ratio = (data.width / data.height)
+          .clamp(AppDimens.singleImageMinRatio, AppDimens.singleImageMaxRatio);
+      final h = sqrt(AppDimens.singleImageMaxArea / ratio);
+      _displayH = h;
+      _displayW = ratio * h;
+    }
   }
 
   Future<void> _load() async {
     final cached = PostStorage.getThumbnail(widget.fileName);
     if (cached != null) {
+      _calcDisplaySize(cached);
       setState(() { _bytes = cached.bytes; _loading = false; });
       return;
     }
     final downloaded = await ApiService.downloadThumbnail(widget.fileName);
-    if (!mounted) return;
     if (downloaded != null) {
       await PostStorage.saveThumbnail(widget.fileName, downloaded);
-      setState(() { _bytes = downloaded.bytes; });
     }
-    setState(() => _loading = false);
+    if (!mounted) return;
+    if (downloaded != null) {
+      _calcDisplaySize(downloaded);
+      setState(() { _bytes = downloaded.bytes; _loading = false; });
+    } else {
+      setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final defaultMax = sqrt(AppDimens.singleImageMaxArea);
     if (_loading) {
-      return const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifThumbSize, height: AppDimens.loadingGifThumbSize));
+      final child = const Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifThumbSize, height: AppDimens.loadingGifThumbSize);
+      if (widget.constrainSingle) {
+        final w = _displayW ?? defaultMax;
+        final h = _displayH ?? defaultMax;
+        return SizedBox(
+          width: w,
+          height: h,
+          child: Center(child: child),
+        );
+      }
+      return Center(child: child);
     }
     if (_bytes != null) {
       Widget img = Image.memory(_bytes!, fit: widget.fit);
       if (widget.constrainSingle) {
-        final data = PostStorage.getThumbnail(widget.fileName);
-        if (data != null && data.width > 0 && data.height > 0) {
-          double ratio = data.width / data.height;
-          ratio = ratio.clamp(AppDimens.singleImageMinRatio, AppDimens.singleImageMaxRatio);
-          final h = sqrt(AppDimens.singleImageMaxArea / ratio);
-          final w = ratio * h;
-          img = ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: w, maxHeight: h),
-            child: img,
-          );
-        }
+        final w = _displayW ?? defaultMax;
+        final h = _displayH ?? defaultMax;
+        img = SizedBox(
+          width: w,
+          height: h,
+          child: img,
+        );
       }
       return img;
+    }
+    if (widget.constrainSingle) {
+      return SizedBox(
+        width: defaultMax,
+        height: defaultMax,
+        child: Image.asset('assets/404.png', fit: BoxFit.cover),
+      );
     }
     return Image.asset('assets/404.png', fit: BoxFit.cover);
   }
