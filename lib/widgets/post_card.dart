@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/post.dart';
+import '../models/comment.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -11,15 +12,18 @@ import 'image_overlay.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
-  const PostCard({super.key, required this.post});
+  final List<Comment> comments; // 帖子回复列表
+  const PostCard({super.key, required this.post, this.comments = const []});
 
   @override
   State<PostCard> createState() => _PostCardState();
 }
 
 class _PostCardState extends State<PostCard> {
-  bool _expanded = false;
-  bool _hasBeenExpanded = false;
+  bool _expanded = false;           // 正文是否展开
+  bool _hasBeenExpanded = false;    // 是否被展开过（控制图标颜色）
+  int _commentsShowCount = AppDimens.commentMaxShown; // 当前展开的回复数
+  int? _expandedAuthorId;           // 当前展开的回复署名 ID
 
   String _dateTransform(String dateStr) {
     if (dateStr.isEmpty) return '';
@@ -30,6 +34,14 @@ class _PostCardState extends State<PostCard> {
     final h = date.hour.toString().padLeft(2, '0');
     final mi = date.minute.toString().padLeft(2, '0');
     return '$y.$m.$d-$h:$mi';
+  }
+
+  String _timeTransform(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    final date = DateTime.parse(dateStr);
+    final h = date.hour.toString().padLeft(2, '0');
+    final mi = date.minute.toString().padLeft(2, '0');
+    return '$h:$mi';
   }
 
   @override
@@ -58,7 +70,7 @@ class _PostCardState extends State<PostCard> {
           Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: colors.borderColor,
+                color: colors.borderColor.withValues(alpha: AppDimens.cardBorderOpacity),
                 width: AppDimens.cardBorderWidth,
               ),
               borderRadius:
@@ -75,7 +87,7 @@ class _PostCardState extends State<PostCard> {
                     if (hasBody)
                       Container(
                         height: AppDimens.cardBorderWidth,
-                        color: colors.borderColor,
+                color: colors.borderColor.withValues(alpha: AppDimens.cardBorderOpacity),
                       ),
                     if (hasBody)
                       Padding(
@@ -104,6 +116,7 @@ class _PostCardState extends State<PostCard> {
           SizedBox(height: AppDimens.dateRowTopSpacing),
           _dateRow(colors, isLong),
           SizedBox(height: AppDimens.dateRowBottomSpacing),
+          if (widget.comments.isNotEmpty) _commentSection(colors, primary),
         ],
       ),
     );
@@ -287,6 +300,192 @@ class _PostCardState extends State<PostCard> {
                   color: colors.attachment));
         }).toList(),
       ),
+    );
+  }
+
+  // 回复区域：无边框，默认折叠显示前 commentMaxShown 条，末尾右侧有展开/收起按钮
+  Widget _commentSection(AppColors colors, Color primary) {
+    final all = widget.comments;
+    final showMore = all.length > _commentsShowCount;
+    final hasMinus = _commentsShowCount > AppDimens.commentMaxShown;
+    final visible = all.take(_commentsShowCount).toList();
+    final postDay = widget.post.createdAt.length >= 10
+        ? widget.post.createdAt.substring(0, 10)
+        : '';
+
+    String? lastDay;
+    final rows = <Widget>[];
+    for (int i = 0; i < visible.length; i++) {
+      final cmtDay = visible[i].createdAt.length >= 10
+          ? visible[i].createdAt.substring(0, 10)
+          : '';
+      if (cmtDay != postDay && cmtDay != lastDay) {
+        rows.add(Padding(
+          key: ValueKey('sep_$cmtDay'),
+          padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
+          child: _commentDateSeparator(visible[i].createdAt, colors),
+        ));
+      }
+      rows.add(Padding(
+        key: ValueKey('cmt_${visible[i].id}'),
+        padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
+        child: _commentRow(visible[i], colors, primary, _expandedAuthorId == visible[i].id),
+      ));
+      lastDay = cmtDay;
+    }
+    if (showMore || hasMinus) {
+      final remain = all.length - _commentsShowCount;
+      rows.add(Align(
+        key: const ValueKey('comment_btns'),
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showMore) ...[
+              Padding(
+                padding: EdgeInsets.only(top: AppDimens.commentRemainTopOffset),
+                child: Text(
+                  '+$remain',
+                  style: TextStyle(
+                    fontSize: AppDimens.commentRemainFontSize,
+                    color: colors.secondary,
+                  ),
+                ),
+              ),
+              SizedBox(width: AppDimens.commentRemainBtnGap),
+            ],
+            if (hasMinus)
+              GestureDetector(
+                onTap: () => setState(() => _commentsShowCount = AppDimens.commentMaxShown),
+                child: SvgPicture.asset(
+                  'assets/minus.svg',
+                  width: AppDimens.commentBtnSize,
+                  height: AppDimens.commentBtnSize,
+                  colorFilter: ColorFilter.mode(colors.secondary, BlendMode.srcIn),
+                ),
+              ),
+            if (showMore && hasMinus) SizedBox(width: AppDimens.commentBtnGap),
+            if (showMore)
+              GestureDetector(
+                onTap: () => setState(() => _commentsShowCount += AppDimens.commentStep),
+                child: SvgPicture.asset(
+                  'assets/plus.svg',
+                  width: AppDimens.commentBtnSize,
+                  height: AppDimens.commentBtnSize,
+                  colorFilter: ColorFilter.mode(colors.secondary, BlendMode.srcIn),
+                ),
+              ),
+          ],
+        ),
+      ));
+    }
+
+    return Container(
+      margin: EdgeInsets.only(top: AppDimens.commentSectionMarginTop),
+      decoration: BoxDecoration(
+        color: colors.secondary.withValues(alpha: AppDimens.commentBgOpacity),
+        borderRadius: BorderRadius.circular(AppDimens.commentBgRadius),
+      ),
+      padding: EdgeInsets.only(
+        left: AppDimens.paddingSm,
+        right: AppDimens.paddingSm,
+        top: AppDimens.commentSectionTopPadding,
+        bottom: AppDimens.cardBodySpacing,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: rows,
+      ),
+    );
+  }
+
+  Widget _commentDateSeparator(String dateStr, AppColors colors) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
+      child: Row(
+        children: [
+          Text(
+            _dateOnlyTransform(dateStr),
+            style: TextStyle(
+              fontSize: AppDimens.commentDateFontSize,
+              color: colors.secondary,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: AppDimens.commentDateLineTopOffset),
+              child: Container(
+                height: 1,
+                color: colors.secondary.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _dateOnlyTransform(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    final date = DateTime.parse(dateStr);
+    final y = date.year.toString().substring(2);
+    final m = date.month;
+    final d = date.day;
+    return '$y.$m.$d';
+  }
+
+  // 单条回复行：[时间] 内容(单行截断) [署名]
+  Widget _commentRow(Comment comment, AppColors colors, Color primary, bool isExpanded) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: AppDimens.commentDateWidth,
+          child: Text(
+            _timeTransform(comment.createdAt),
+            style: TextStyle(
+              fontSize: AppDimens.commentDateFontSize,
+              color: colors.secondary,
+            ),
+          ),
+        ),
+        SizedBox(width: AppDimens.commentDateRightMargin),
+        Expanded(
+          child: Text(
+            comment.content,
+            maxLines: AppDimens.commentMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: AppDimens.commentFontSize,
+              color: primary,
+              height: AppDimens.commentLineHeight,
+            ),
+          ),
+        ),
+        SizedBox(width: AppDimens.commentDateRightMargin),
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _expandedAuthorId = isExpanded ? null : comment.id;
+            });
+          },
+          child: SizedBox(
+            width: isExpanded ? null : AppDimens.commentAuthorWidth,
+            child: Text(
+              comment.author,
+              maxLines: isExpanded ? 1000 : 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontSize: AppDimens.commentAuthorFontSize,
+                color: colors.authorColor,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

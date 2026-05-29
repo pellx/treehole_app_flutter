@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/post.dart';
+import '../models/comment.dart';
 import '../services/api.dart';
 
 class PostStorage {
@@ -10,11 +11,13 @@ class PostStorage {
   static late Box _idBox;
   static late Box _postBox;
   static late Box _thumbBox;
+  static late Box _commentBox; // 回复 Hive 缓存
 
   static Future<void> init() async {
     _idBox = await Hive.openBox('id_list');
     _postBox = await Hive.openBox('posts');
     _thumbBox = await Hive.openBox('thumbnails');
+    _commentBox = await Hive.openBox('comments');
   }
 
   // ---- ID 列表 ----
@@ -140,5 +143,29 @@ class PostStorage {
     final file = File(
         '${(await _pngCacheDir()).path}/$fileName');
     await file.writeAsBytes(bytes);
+  }
+
+  // ---- 回复缓存 ----
+
+  static Comment? getComment(int id) {
+    final raw = _commentBox.get(id);
+    if (raw == null) return null;
+    final map = Map<String, dynamic>.from(raw as Map);
+    return Comment.fromJson(map);
+  }
+
+  static Future<void> saveComment(Comment comment) async {
+    await _commentBox.put(comment.id, <String, dynamic>{
+      'id': comment.id,
+      'post_id': comment.postId,
+      'to_id': comment.toId,
+      'author': comment.author,
+      'content': comment.content,
+      'created_at': comment.createdAt,
+    });
+  }
+
+  static List<Comment> getComments(List<int> ids) {
+    return ids.map((id) => getComment(id)).whereType<Comment>().toList();
   }
 }

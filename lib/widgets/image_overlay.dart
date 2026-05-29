@@ -116,9 +116,7 @@ class _ImageOverlayState extends State<ImageOverlay>
     for (final c in _fadeCtrls.values) {
       c.dispose();
     }
-    for (final c in _pendingFades) {
-      c.dispose();
-    }
+    _pendingFades.clear();
     _animCtrl.dispose();
     _actionBarCtrl.dispose();
     _dotsCtrl.dispose();

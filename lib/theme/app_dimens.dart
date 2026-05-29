@@ -14,11 +14,12 @@ class AppDimens {
   static const double cardContentLeft = 7;
   static const double cardImageTop = 2;
   static const double cardImageBottom = 7;
-  static const double cardBodySpacing = 5;
-  static const double cardMarginBottom = 23;
+  static const double cardBodySpacing = 2;
+  static const double cardMarginBottom = 28;
   static const double cardLeftMargin = 22;
   static const double cardBorderRadius = 8;
   static const double cardBorderWidth = 1.7;
+  static const double cardBorderOpacity = 0.18;   // 卡片边框透明度
 
   // ---- 标题区域 ----
   static const double titleVPadding = 3;
@@ -69,7 +70,7 @@ class AppDimens {
   static const double thumbnailGap = 4;
 
   // ---- 展开/收起按钮 ----
-  static const double expandBtnDotsGap = 10;
+  static const double expandBtnDotsGap = 2;
   static const double expandIconSize = 27;
   static const double expandIconCornerRadius = 3;
   static const int expandIconAnimMs = 0;
@@ -90,7 +91,8 @@ class AppDimens {
   static const double dotsTopPadding = -5.2;
   static const double dotsLeftPadding = 5;
   static const double dotsRightPadding = 5;
-  static const double dotsBgOpacity = 0.13;
+  static const double dotsBgOpacity = 0.09;
+  static const double commentBgOpacity = 0.09;   // 回复区域背景透明度
   static const double dotsPositionedRight = 1;
   static const double dotsPositionedTop = 2;
 
@@ -136,7 +138,29 @@ class AppDimens {
   static const int saveToastDurationMs = 1500; // 显示时长
   static const int saveToastAnimMs = 80; // 动画时长
 
-  // ---- 页码指示器 ----
+  // ---- 回复 ----
+  static const double commentFontSize = 14;          // 回复内容字号
+  static const double commentDateFontSize = 14;      // 回复日期字号
+  static const double commentAuthorFontSize = 14;    // 回复署名字号
+  static const int commentMaxLines = 1000;              // 回复内容最大行数
+  static const int commentMaxShown = 3;              // 折叠时最多显示条数
+  static const int commentStep = 3;                   // 每次点击 + 增加的条数
+  static const double commentLineHeight = 1.4;       // 回复内容行高
+  static const double commentVPadding = 0;           // 回复条间距
+  static const double commentDateWidth = 46;         // 日期列宽
+  static const double commentDateRightMargin = 0;    // 日期右侧间距
+  static const double commentAuthorWidth = 52;       // 署名列宽
+  static const double commentSectionTopPadding = 2;  // 回复区域内顶部间距
+  static const double commentDateLineTopOffset = 9;   // 日期分隔横线竖直偏移
+  static const double commentSectionMarginTop = 0;   // 回复区域距上方日期行间距
+  static const double commentBgRadius = 4;            // 回复区域背景圆角
+  static const double commentBtnSize = 18;            // +/- 按钮大小
+  static const double commentBtnGap = 2;             // +/- 按钮间距
+  static const double commentRemainFontSize = 12;     // 剩余回复数字号
+  static const double commentRemainTopOffset = 0;      // 剩余回复数竖直偏移
+  static const double commentRemainBtnGap = 6;         // +N 与 [-] 间距
+
+
   static const double pageIndicatorDotSize = 6; // 圆点大小
   static const double pageIndicatorDotGap = 8; // 圆点间距
   static const double pageIndicatorActiveOpacity = 0.9; // 当前页透明度

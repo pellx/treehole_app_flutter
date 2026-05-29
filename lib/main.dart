@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/post.dart';
+import 'models/comment.dart';
 import 'widgets/post_card.dart';
 import 'widgets/image_overlay.dart';
 import 'theme/app_colors.dart';
@@ -59,6 +60,7 @@ class _SquarePageState extends State<SquarePage> {
   bool _loading = false;           // 是否正在加载中
   String? _error;                  // 错误信息（null = 正常）
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
+  final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
 
   @override
   void initState() {
@@ -146,9 +148,9 @@ class _SquarePageState extends State<SquarePage> {
       final post = await futures[i];
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
+        _loadComments(post);
         setState(() {
           _posts.add(post);
-          // 按 _allIds 顺序排序，保证帖子列表与 ID 列表顺序一致
           _posts.sort(
             (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
           );
@@ -168,6 +170,34 @@ class _SquarePageState extends State<SquarePage> {
           });
         }
       }
+    }
+  }
+
+  // 加载帖子回复：优先 API 获取最新 ID 列表，缓存优先拉内容
+  Future<void> _loadComments(Post post) async {
+    // 始终从 API 获取最新 comment ID 列表，发现新增回复
+    List<int> commentIds = post.comments;
+    try {
+      final fresh = await ApiService.getPost(post.id);
+      if (fresh != null && fresh.comments.isNotEmpty) {
+        commentIds = fresh.comments;
+      }
+    } catch (_) {}
+    if (commentIds.isEmpty) return;
+
+    final cached = PostStorage.getComments(commentIds);
+    if (cached.length == commentIds.length) {
+      _comments[post.id] = cached;
+      return;
+    }
+    final futures = commentIds.map((id) async {
+      final cmt = PostStorage.getComment(id) ?? await ApiService.getComment(id);
+      if (cmt != null) await PostStorage.saveComment(cmt);
+      return cmt;
+    });
+    final list = (await Future.wait(futures)).whereType<Comment>().toList();
+    if (mounted) {
+      setState(() => _comments[post.id] = list);
     }
   }
 
@@ -208,7 +238,7 @@ class _SquarePageState extends State<SquarePage> {
                         AppDimens.listPaddingBottom,
                       ),
                       children: _posts
-                          .map((p) => PostCard(key: ValueKey(p.id), post: p))
+                          .map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? []))
                           .toList(),
                     ),
                   ),

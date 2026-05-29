@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 import '../models/post.dart';
+import '../models/comment.dart';
 
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
+  static const _commentBase = 'https://tree.leisure.xin/node/posts/comment'; // 回复 API
   static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
   static const _originalBase = 'https://www.leisure.xin:33433/upload';
   static const _timeout = Duration(seconds: 30);
@@ -52,6 +54,18 @@ class ApiService {
     frame.image.dispose();
     codec.dispose();
     return (w, h);
+  }
+
+  // ---- 回复 ----
+
+  static Future<Comment?> getComment(int id) async {
+    try {
+      final res = await http.get(Uri.parse('$_commentBase/$id')).timeout(_timeout);
+      if (res.statusCode != 200) return null;
+      return Comment.fromJson(jsonDecode(res.body));
+    } catch (_) {
+      return null;
+    }
   }
 
   static Post _mockPost(int id) {
