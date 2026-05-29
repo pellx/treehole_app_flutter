@@ -71,6 +71,7 @@ class AppDimens {
 
   // ---- 展开/收起按钮 ----
   static const double expandBtnDotsGap = 2;
+  static const double expandRemainGap = 4;   // 展开按钮与 +N 间距
   static const double expandIconSize = 27;
   static const double expandIconCornerRadius = 3;
   static const int expandIconAnimMs = 0;

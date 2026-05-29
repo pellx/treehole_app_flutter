@@ -37,12 +37,36 @@ migrate_working_dir/
 app.*.symbols
 
 # Obfuscation related
+app.*.symbols
 app.*.map.json
+
+# Build output (anywhere)
+**/build/
+
+# iOS
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
 
 # Android
 /android/.gradle/
+/android/build/
+/android/app/build/
 /android/local.properties
 /android/key.properties
+
+# Web
+/web/build/
+
+# macOS
+/macos/Pods/
+
+# Windows
+/windows/flutter/
+
+# Linux
+/linux/flutter/
 
 # Hive local storage (generated at runtime)
 *.hive

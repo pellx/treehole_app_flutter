@@ -48,6 +48,7 @@ class _PostCardState extends State<PostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final isLong = post.content.length > AppDimens.contentMaxLength;
+    final remaining = isLong ? post.content.length - AppDimens.contentMaxLength : 0;
     final displayContent = (_expanded || !isLong)
         ? post.content
         : post.content.substring(0, AppDimens.contentMaxLength);
@@ -114,7 +115,7 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
           SizedBox(height: AppDimens.dateRowTopSpacing),
-          _dateRow(colors, isLong),
+          _dateRow(colors, isLong, remaining),
           SizedBox(height: AppDimens.dateRowBottomSpacing),
           if (widget.comments.isNotEmpty) _commentSection(colors, primary),
         ],
@@ -489,7 +490,7 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _dateRow(AppColors colors, bool isLong) {
+  Widget _dateRow(AppColors colors, bool isLong, int remaining) {
     return Stack(
       alignment: Alignment.centerLeft,
       children: [
@@ -500,6 +501,22 @@ class _PostCardState extends State<PostCard> {
                   fontSize: AppDimens.fontSizeSmall,
                   color: colors.secondary)),
         ),
+          if (isLong)
+            Positioned(
+              top: AppDimens.expandIconTop,
+              right: AppDimens.dotsPositionedRight +
+                  AppDimens.dotsBtnWidth +
+                  AppDimens.expandBtnDotsGap +
+                  AppDimens.expandIconSize +
+                  AppDimens.expandRemainGap,
+              child: Text(
+                '+$remaining',
+                style: TextStyle(
+                  fontSize: AppDimens.fontSizeSmall,
+                  color: colors.secondary,
+                ),
+              ),
+            ),
           if (isLong)
             Positioned(
               top: AppDimens.expandIconTop,

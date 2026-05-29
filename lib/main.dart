@@ -148,7 +148,7 @@ class _SquarePageState extends State<SquarePage> {
       final post = await futures[i];
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
-        _loadComments(post);
+        await _loadComments(post);
         setState(() {
           _posts.add(post);
           _posts.sort(
