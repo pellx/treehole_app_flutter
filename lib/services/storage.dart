@@ -70,6 +70,14 @@ class PostStorage {
     await _postBox.put(post.id, map);
   }
 
+  static Future<void> updatePostCommentIds(int postId, List<int> newIds) async {
+    final raw = _postBox.get(postId);
+    if (raw == null) return;
+    final map = Map<String, dynamic>.from(raw as Map);
+    map['comments'] = newIds;
+    await _postBox.put(postId, map);
+  }
+
   static Future<void> markFetched(int id) async {
     final raw = _postBox.get(id);
     if (raw != null) {

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/post.dart';
@@ -61,6 +62,15 @@ class _SquarePageState extends State<SquarePage> {
   String? _error;                  // 错误信息（null = 正常）
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
+  final Set<int> _postsNeedCommentRefresh = {};  // 需要刷新回复的帖子 ID
+
+  void _onNeedCommentRefresh(int postId) {
+    if (!_postsNeedCommentRefresh.contains(postId)) return;
+    print('[comment] refreshing postId=$postId');
+    final post = _posts.firstWhere((p) => p.id == postId);
+    _refreshPostComments(post);
+    _postsNeedCommentRefresh.remove(postId);
+  }
 
   @override
   void initState() {
@@ -131,6 +141,7 @@ class _SquarePageState extends State<SquarePage> {
         .toList();
     if (batch.isEmpty) return;
 
+    print('[loadMore] start, _loading=$_loading, _loadedCount=$_loadedCount');
     setState(() => _loading = true);
     for (final id in batch) {
       _loadingIds.add(id);
@@ -148,7 +159,7 @@ class _SquarePageState extends State<SquarePage> {
       final post = await futures[i];
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
-        await _loadComments(post);
+        await _refreshPostComments(post);
         setState(() {
           _posts.add(post);
           _posts.sort(
@@ -159,6 +170,7 @@ class _SquarePageState extends State<SquarePage> {
     }
 
     _loadedCount += batch.length;
+    print('[loadMore] done, _loadedCount=$_loadedCount, _posts=${_posts.length}');
     setState(() => _loading = false);
 
     // 后台预下载缩略图，Hive 有就跳过
@@ -173,32 +185,93 @@ class _SquarePageState extends State<SquarePage> {
     }
   }
 
-  // 加载帖子回复：优先 API 获取最新 ID 列表，缓存优先拉内容
-  Future<void> _loadComments(Post post) async {
-    // 始终从 API 获取最新 comment ID 列表，发现新增回复
-    List<int> commentIds = post.comments;
+  // ---- 下拉刷新 ----
+  Future<void> _refresh() async {
+    print('[refresh] start');
+    _loading = true;
+    List<int> newIds;
+    try {
+      newIds = await ApiService.getIdList();
+      await PostStorage.saveIdList(newIds);
+    } catch (_) {
+      newIds = PostStorage.getIdList();
+    }
+    if (newIds.isEmpty) { _loading = false; return; }
+
+    final existingIds = _posts.map((p) => p.id).toSet();
+    final addedIds = newIds.where((id) => !existingIds.contains(id)).toList();
+
+    final newPosts = <Post>[];
+    for (final id in addedIds) {
+      final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
+      if (post != null) {
+        await PostStorage.savePost(post);
+        newPosts.add(post);
+      }
+    }
+
+    _allIds = newIds;
+    _loadedCount = _posts.length + newPosts.length;
+    if (newPosts.isNotEmpty) {
+      _posts.insertAll(0, newPosts);
+      _posts.sort(
+        (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
+      );
+      setState(() {});
+    }
+
+    for (final p in _posts) {
+      _postsNeedCommentRefresh.add(p.id);
+    }
+    for (final post in _posts.take(7)) {
+      if (_postsNeedCommentRefresh.contains(post.id)) {
+        await _refreshPostComments(post);
+        _postsNeedCommentRefresh.remove(post.id);
+      }
+    }
+    _loading = false;
+    print('[refresh] done');
+  }
+
+  // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增
+  Future<void> _refreshPostComments(Post post) async {
+    List<int> newIds;
     try {
       final fresh = await ApiService.getPost(post.id);
-      if (fresh != null && fresh.comments.isNotEmpty) {
-        commentIds = fresh.comments;
-      }
-    } catch (_) {}
-    if (commentIds.isEmpty) return;
+      newIds = fresh?.comments ?? post.comments;
+    } catch (_) {
+      newIds = post.comments;
+    }
+    if (newIds.isEmpty) return;
 
-    final cached = PostStorage.getComments(commentIds);
-    if (cached.length == commentIds.length) {
-      _comments[post.id] = cached;
+    final existingIds = _comments[post.id]?.map((c) => c.id).toSet() ?? {};
+    final missingIds = newIds.where((id) => !existingIds.contains(id)).toList();
+
+    if (missingIds.isEmpty) {
+      if (_comments[post.id] == null || _comments[post.id]!.length != newIds.length) {
+        _comments[post.id] = PostStorage.getComments(newIds);
+        await PostStorage.updatePostCommentIds(post.id, newIds);
+        if (mounted) setState(() {});
+      }
       return;
     }
-    final futures = commentIds.map((id) async {
-      final cmt = PostStorage.getComment(id) ?? await ApiService.getComment(id);
+
+    final futures = missingIds.map((id) async {
+      final cmt = await ApiService.getComment(id);
       if (cmt != null) await PostStorage.saveComment(cmt);
       return cmt;
     });
-    final list = (await Future.wait(futures)).whereType<Comment>().toList();
-    if (mounted) {
-      setState(() => _comments[post.id] = list);
+    final newCmts = (await Future.wait(futures)).whereType<Comment>().toList();
+
+    final existing = _comments[post.id] ?? PostStorage.getComments(newIds);
+    final merged = <Comment>[...existing];
+    for (final c in newCmts) {
+      if (!merged.any((e) => e.id == c.id)) merged.add(c);
     }
+    merged.sort((a, b) => newIds.indexOf(a.id).compareTo(newIds.indexOf(b.id)));
+
+    await PostStorage.updatePostCommentIds(post.id, newIds);
+    if (mounted) setState(() => _comments[post.id] = merged);
   }
 
   @override
@@ -220,26 +293,33 @@ class _SquarePageState extends State<SquarePage> {
                         style: const TextStyle(color: Colors.grey)))
                 // 正常 → 帖子列表 + 滚动加载
                 : NotificationListener<ScrollNotification>(
-                    // 滚到距底部 300px 时触发 _loadMore
-                    onNotification: (notification) {
-                      if (notification.metrics.pixels >=
-                              notification.metrics.maxScrollExtent - 300 &&
-                          !_loading) {
+                    onNotification: (n) {
+                      if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
                         _loadMore();
                       }
                       return false;
                     },
-                    child: ListView(
+                    child: CustomScrollView(
+                      physics: const BouncingScrollPhysics(decelerationRate: ScrollDecelerationRate.fast),
                       cacheExtent: 3000,
-                      padding: EdgeInsets.fromLTRB(
-                        AppDimens.listPaddingLeft,
-                        AppDimens.listPaddingTop,
-                        AppDimens.listPaddingRight,
-                        AppDimens.listPaddingBottom,
-                      ),
-                      children: _posts
-                          .map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? []))
-                          .toList(),
+                      slivers: [
+                        CupertinoSliverRefreshControl(
+                          onRefresh: _refresh,
+                        ),
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            AppDimens.listPaddingLeft,
+                            AppDimens.listPaddingTop,
+                            AppDimens.listPaddingRight,
+                            AppDimens.listPaddingBottom,
+                          ),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate(
+                              _posts.map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? [], onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id))).toList(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
       ),

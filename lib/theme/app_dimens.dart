@@ -111,6 +111,11 @@ class AppDimens {
   static const double loadingGifSize = 40;
   static const double loadingGifThumbSize = 24;
 
+  // ---- 下拉刷新 ----
+  static const int refreshIndicatorColor = 0xFF0EAB00;            // 刷新圆圈颜色（同贴子ID）
+  static const int refreshIndicatorBackgroundColor = 0xFFFFFFFF;  // 刷新背景色（纯白）
+  static const double refreshIndicatorDisplacement = 2.0;        // 下拉位移（0=不推内容）
+
   // ---- 图片查看器动画 ----
   static const int imageExpandMs = 250; // 打开/关闭伸缩动画时长
   static const int imageFadeMs = 500; // WebP 淡出时长

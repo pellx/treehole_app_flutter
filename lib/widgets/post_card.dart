@@ -13,7 +13,8 @@ import 'image_overlay.dart';
 class PostCard extends StatefulWidget {
   final Post post;
   final List<Comment> comments; // 帖子回复列表
-  const PostCard({super.key, required this.post, this.comments = const []});
+  final VoidCallback? onNeedCommentRefresh;
+  const PostCard({super.key, required this.post, this.comments = const [], this.onNeedCommentRefresh});
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -24,6 +25,12 @@ class _PostCardState extends State<PostCard> {
   bool _hasBeenExpanded = false;    // 是否被展开过（控制图标颜色）
   int _commentsShowCount = AppDimens.commentMaxShown; // 当前展开的回复数
   int? _expandedAuthorId;           // 当前展开的回复署名 ID
+
+  @override
+  void initState() {
+    super.initState();
+    widget.onNeedCommentRefresh?.call();
+  }
 
   String _dateTransform(String dateStr) {
     if (dateStr.isEmpty) return '';
@@ -501,7 +508,7 @@ class _PostCardState extends State<PostCard> {
                   fontSize: AppDimens.fontSizeSmall,
                   color: colors.secondary)),
         ),
-          if (isLong)
+          if (isLong && !_hasBeenExpanded)
             Positioned(
               top: AppDimens.expandIconTop,
               right: AppDimens.dotsPositionedRight +
