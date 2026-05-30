@@ -291,10 +291,10 @@ class _ImageOverlayState extends State<ImageOverlay>
                       height: AppDimens.pageIndicatorDotSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withValues(
+                        color: Color(AppDimens.overlayPageDotColor).withValues(
                           alpha: active
-                              ? AppDimens.pageIndicatorActiveOpacity
-                              : AppDimens.pageIndicatorInactiveOpacity,
+                              ? AppDimens.overlayPageDotActiveOpacity
+                              : AppDimens.overlayPageDotInactiveOpacity,
                         ),
                       ),
                     );
@@ -315,7 +315,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                     child: Container(
                       height: AppDimens.actionBarHeight,
                       decoration: BoxDecoration(
-                        color: Colors.grey[900]!.withValues(alpha: 0.9),
+                        color: Color(AppDimens.overlayActionBarBgColor),
                         borderRadius: BorderRadius.circular(AppDimens.actionBarRadius),
                       ),
                       child: Row(
@@ -327,13 +327,13 @@ class _ImageOverlayState extends State<ImageOverlay>
                                 ? SizedBox(
                                     width: AppDimens.actionBarBtnSize,
                                     height: AppDimens.actionBarBtnSize,
-                                    child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Colors.white),
+                                    child: const CircularProgressIndicator(strokeWidth: 2, color: Color(AppDimens.overlayIconColor)))
+                                : Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Color(AppDimens.overlayIconColor)),
                             onPressed: _saveImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
                           IconButton(
-                            icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: Colors.white),
+                            icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: Color(AppDimens.overlayIconColor)),
                             onPressed: _shareImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
@@ -355,7 +355,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                     color: Colors.transparent,
                     child: const Text(
                       '已保存至相册',
-                      style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Colors.white),
+                      style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Color(AppDimens.overlayIconColor)),
                     ),
                   ),
                 ),

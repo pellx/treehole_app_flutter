@@ -115,6 +115,24 @@ class AppDimens {
   static const int refreshIndicatorColor = 0xFF0EAB00;            // 刷新圆圈颜色（同贴子ID）
   static const int refreshIndicatorBackgroundColor = 0xFFFFFFFF;  // 刷新背景色（纯白）
   static const double refreshIndicatorDisplacement = 2.0;        // 下拉位移（0=不推内容）
+  static const double drawerEdgeDragWidth = 50.0;               // 左滑唤出抽屉灵敏度
+  static const int drawerAnimMs = 300;                          // 抽屉动画时长(ms)
+  static const int drawerHeaderBgColor = 0xFFE8F5E9;           // 抽屉头部色块背景
+  static const double drawerAvatarSize = 56;                    // 抽屉头像大小
+  static const double drawerHeaderPaddingLeft = 16;             // 头部左间距
+  static const double drawerHeaderPaddingRight = 16;            // 头部右间距
+  static const double drawerHeaderPaddingTop = 50;              // 头部上间距
+  static const double drawerHeaderPaddingBottom = 20;           // 头部下间距
+  static const double drawerAvatarTextGap = 12;                 // 头像与名字间距
+  static const double drawerNameFontSize = 16;                  // 名字字号
+
+  // ---- 图片查看器操作栏 ----
+  static const int overlayActionBarBgColor = 0xE6212121;   // 操作栏背景色（grey[900] 90% 不透明）
+  static const int overlayIconColor = 0xFFFFFFFF;          // 操作栏按钮图标色（纯白）
+  static const int overlayPageDotColor = 0xFFFFFFFF;       // 页码指示器颜色（纯白）
+  static const double overlayPageDotActiveOpacity = 0.9;   // 当前页不透明度
+  static const double overlayPageDotInactiveOpacity = 0.4;  // 非当前页不透明度
+  static const double overlaySaveToastBgOpacity = 0.0;     // 保存提示弹窗背景透明度
 
   // ---- 图片查看器动画 ----
   static const int imageExpandMs = 250; // 打开/关闭伸缩动画时长

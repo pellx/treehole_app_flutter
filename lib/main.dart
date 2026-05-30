@@ -1,6 +1,8 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'models/post.dart';
 import 'models/comment.dart';
 import 'widgets/post_card.dart';
@@ -63,6 +65,15 @@ class _SquarePageState extends State<SquarePage> {
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
   final Set<int> _postsNeedCommentRefresh = {};  // 需要刷新回复的帖子 ID
+  File? _avatarFile;                              // 抽屉头像文件
+
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 256);
+    if (picked != null && mounted) {
+      setState(() => _avatarFile = File(picked.path));
+    }
+  }
 
   void _onNeedCommentRefresh(int postId) {
     if (!_postsNeedCommentRefresh.contains(postId)) return;
@@ -274,6 +285,14 @@ class _SquarePageState extends State<SquarePage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
+  Widget _drawerTile(IconData icon, String title) {
+    return ListTile(
+      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurface),
+      title: Text(title, style: TextStyle(fontSize: 15)),
+      onTap: () {},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -282,6 +301,64 @@ class _SquarePageState extends State<SquarePage> {
         if (!didPop) ImageOverlay.closeCurrent();
       },
       child: Scaffold(
+      drawerEdgeDragWidth: MediaQuery.of(context).size.width,
+      drawer: Drawer(
+        shape: const RoundedRectangleBorder(),
+        width: MediaQuery.of(context).size.width * 4 / 5,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Container(
+                color: Color(AppDimens.drawerHeaderBgColor),
+                padding: EdgeInsets.only(
+                  left: AppDimens.drawerHeaderPaddingLeft,
+                  right: AppDimens.drawerHeaderPaddingRight,
+                  top: AppDimens.drawerHeaderPaddingTop,
+                  bottom: AppDimens.drawerHeaderPaddingBottom,
+                ),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _pickAvatar,
+                      child: _avatarFile != null
+                          ? CircleAvatar(
+                              radius: AppDimens.drawerAvatarSize / 2,
+                              backgroundImage: FileImage(_avatarFile!),
+                            )
+                          : CircleAvatar(
+                              radius: AppDimens.drawerAvatarSize / 2,
+                              backgroundColor: Color(AppDimens.idTintColor).withValues(alpha: 0.2),
+                              backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
+                            ),
+                    ),
+                    SizedBox(width: AppDimens.drawerAvatarTextGap),
+                    Expanded(
+                      child: Text('匿名用户', style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _drawerTile(Icons.home_outlined, '主页'),
+                    _drawerTile(Icons.person_outline, '用户'),
+                    _drawerTile(Icons.settings_outlined, '设置'),
+                    _drawerTile(Icons.menu_book_outlined, '操作教学'),
+                    _drawerTile(Icons.system_update_outlined, '更新'),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Text('版本 1.0.0', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(
         // 首次加载且无数据 → 居中转圈
         child: _loading && _posts.isEmpty
