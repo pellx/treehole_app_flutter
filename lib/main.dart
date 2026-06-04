@@ -357,11 +357,54 @@ class _ColorModePageState extends State<_ColorModePage> {
   }
 
   void _showColorDetail(String title, AppColors themeColors) {
-    final entries = themeColors.colors.entries.toList();
+    final pc = themeColors.postCard;
+    final Map<String, Map<String, Color>> categories = {
+      '贴文颜色': {
+        '卡片边框': pc.cardBorder, '正文分割线': pc.bodyDivider,
+        '标题文字': pc.title, '正文文字': pc.content,
+        '日期文字': pc.dateText, '剩余字数': pc.remainCount,
+        '作者署名': pc.authorName, 'AT符号': pc.atSymbol,
+        '附件文字': pc.attachmentText, '评论文字': pc.commentContent,
+        '评论署名': pc.commentAuthor, '评论日期': pc.commentDate,
+        '剩余回复数': pc.commentRemain, '评论背景': pc.commentBg,
+        '评论图标': pc.commentIcon, '评论日期分隔线': pc.commentDateSeparatorLine,
+        '展开按钮激活': pc.expandIconBlue, '展开按钮灰色': pc.expandIconGray,
+        '点按钮背景': pc.dotsButtonBg, '帖子ID颜色': pc.idTint,
+        'ID错误占位': pc.idErrorFallback,
+      },
+      '侧边栏颜色': {
+        '抽屉头部背景': themeColors.drawerHeaderBg,
+        'ID品牌色': themeColors.idTint,
+      },
+      '设置栏颜色': {
+        '箭头图标': themeColors.arrowIcon, '栏文字颜色': themeColors.barText,
+        '分割线': themeColors.divider, '尾部图标': themeColors.trailingIcon,
+        '开关激活': themeColors.switchActive, '展开按钮': themeColors.expandIconActive,
+      },
+      '基本颜色': {
+        '页面背景': themeColors.background, '卡片表面': themeColors.surface,
+        '主文字': themeColors.onSurface, '次要文字': themeColors.secondary,
+        '边框色': themeColors.borderColor, '强调色': themeColors.accentText,
+        '绿色标识': themeColors.green, '按钮背景': themeColors.buttonBg,
+        '附件色': themeColors.attachment,
+      },
+    };
     navigateToSubPage(context, title, ListView(
       padding: EdgeInsets.all(16),
       children: [
-        ...entries.map((e) {
+        for (final cat in categories.entries) ...[
+          _navCard(context, cat.key, () => _showCategoryColors('$title · ${cat.key}', cat.value)),
+          _itemDivider(),
+        ],
+      ],
+    ));
+  }
+
+  void _showCategoryColors(String title, Map<String, Color> colors) {
+    navigateToSubPage(context, title, ListView(
+      padding: EdgeInsets.all(16),
+      children: [
+        ...colors.entries.map((e) {
           final displayColor = _customColors[e.key] ?? e.value;
           return _colorRow(e.key, displayColor, () => _showColorPicker(e.key, displayColor));
         }),

@@ -353,9 +353,16 @@ class _ImageOverlayState extends State<ImageOverlay>
                 child: Center(
                   child: Material(
                     color: Colors.transparent,
-                    child: const Text(
-                      '已保存至相册',
-                      style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Color(AppDimens.overlayIconColor)),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: AppDimens.saveToastHPadding, vertical: AppDimens.saveToastVPadding),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(AppDimens.saveToastRadius),
+                      ),
+                      child: const Text(
+                        '已保存至相册',
+                        style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Color(AppDimens.overlayIconColor)),
+                      ),
                     ),
                   ),
                 ),
