@@ -65,6 +65,7 @@ class _PostCardState extends State<PostCard> {
 
     final colors = Theme.of(context).extension<AppColors>()!;
     final primary = Theme.of(context).colorScheme.onSurface;
+    final pc = colors.postCard;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -78,7 +79,7 @@ class _PostCardState extends State<PostCard> {
           Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: colors.borderColor.withValues(alpha: AppDimens.cardBorderOpacity),
+                color: pc.cardBorder,
                 width: AppDimens.cardBorderWidth,
               ),
               borderRadius:
@@ -95,7 +96,7 @@ class _PostCardState extends State<PostCard> {
                     if (hasBody)
                       Container(
                         height: AppDimens.cardBorderWidth,
-                color: colors.borderColor.withValues(alpha: AppDimens.cardBorderOpacity),
+                color: pc.cardBorder,
                       ),
                     if (hasBody)
                       Padding(
@@ -108,7 +109,7 @@ class _PostCardState extends State<PostCard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (post.content.isNotEmpty)
-                              _content(displayContent, primary),
+                              _content(displayContent, pc),
                             if (post.images.isNotEmpty) _images(post),
                             if (post.attachments.isNotEmpty)
                               _attachments(post, colors),
@@ -117,7 +118,7 @@ class _PostCardState extends State<PostCard> {
                       ),
                   ],
                 ),
-                _idWidget(post),
+                _idWidget(post, pc),
               ],
             ),
           ),
@@ -142,14 +143,12 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _idWidget(post) {
+  Widget _idWidget(post, PostCardColors pc) {
     final len = post.id.toString().length;
 
-    final child = Opacity(
-        opacity: AppDimens.idOpacity,
-        child: ColorFiltered(
-          colorFilter: ColorFilter.mode(
-            Color(AppDimens.idTintColor),
+    final child = ColorFiltered(
+        colorFilter: ColorFilter.mode(
+            pc.idTint,
             BlendMode.srcIn,
           ),
           child: SizedBox(
@@ -169,16 +168,15 @@ class _PostCardState extends State<PostCard> {
                     fit: BoxFit.fill,
                     errorBuilder: (context, error, stackTrace) =>
                         Text(digit,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: AppDimens.fontSizeId,
-                                color: Colors.red)),
+                                color: pc.idErrorFallback)),
                   ),
                 );
               }),
             ),
           ),
-        ),
-      );
+        );
 
     Widget content = child;
     if (AppDimens.idVertical) {
@@ -191,11 +189,11 @@ class _PostCardState extends State<PostCard> {
       child: content,
     );
   }
-  Widget _content(String displayContent, Color primary) {
+  Widget _content(String displayContent, PostCardColors pc) {
     return Text(displayContent,
         style: TextStyle(
             fontSize: AppDimens.fontSizeContent,
-            color: primary,
+            color: pc.content,
             height: AppDimens.contentLineHeight));
   }
 
@@ -298,6 +296,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _attachments(post, AppColors colors) {
+    final pc = colors.postCard;
     return Padding(
       padding: EdgeInsets.only(top: AppDimens.paddingSm),
       child: Column(
@@ -305,7 +304,7 @@ class _PostCardState extends State<PostCard> {
           return Text('📎 ${att.sourceName}',
               style: TextStyle(
                   fontSize: AppDimens.fontSizeSmall,
-                  color: colors.attachment));
+                  color: pc.attachmentText));
         }).toList(),
       ),
     );
@@ -313,6 +312,7 @@ class _PostCardState extends State<PostCard> {
 
   // 回复区域：无边框，默认折叠显示前 commentMaxShown 条，末尾右侧有展开/收起按钮
   Widget _commentSection(AppColors colors, Color primary) {
+    final pc = colors.postCard;
     final all = widget.comments;
     final showMore = all.length > _commentsShowCount;
     final hasMinus = _commentsShowCount > AppDimens.commentMaxShown;
@@ -356,7 +356,7 @@ class _PostCardState extends State<PostCard> {
                   '+$remain',
                   style: TextStyle(
                     fontSize: AppDimens.commentRemainFontSize,
-                    color: colors.secondary,
+                    color: pc.commentRemain,
                   ),
                 ),
               ),
@@ -369,7 +369,7 @@ class _PostCardState extends State<PostCard> {
                   'assets/minus.svg',
                   width: AppDimens.commentBtnSize,
                   height: AppDimens.commentBtnSize,
-                  colorFilter: ColorFilter.mode(colors.secondary, BlendMode.srcIn),
+                  colorFilter: ColorFilter.mode(pc.commentIcon, BlendMode.srcIn),
                 ),
               ),
             if (showMore && hasMinus) SizedBox(width: AppDimens.commentBtnGap),
@@ -380,7 +380,7 @@ class _PostCardState extends State<PostCard> {
                   'assets/plus.svg',
                   width: AppDimens.commentBtnSize,
                   height: AppDimens.commentBtnSize,
-                  colorFilter: ColorFilter.mode(colors.secondary, BlendMode.srcIn),
+                  colorFilter: ColorFilter.mode(pc.commentIcon, BlendMode.srcIn),
                 ),
               ),
           ],
@@ -391,7 +391,7 @@ class _PostCardState extends State<PostCard> {
     return Container(
       margin: EdgeInsets.only(top: AppDimens.commentSectionMarginTop),
       decoration: BoxDecoration(
-        color: colors.secondary.withValues(alpha: AppDimens.commentBgOpacity),
+        color: pc.commentBg,
         borderRadius: BorderRadius.circular(AppDimens.commentBgRadius),
       ),
       padding: EdgeInsets.only(
@@ -409,6 +409,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _commentDateSeparator(String dateStr, AppColors colors) {
+    final pc = colors.postCard;
     return Padding(
       padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
       child: Row(
@@ -417,7 +418,7 @@ class _PostCardState extends State<PostCard> {
             _dateOnlyTransform(dateStr),
             style: TextStyle(
               fontSize: AppDimens.commentDateFontSize,
-              color: colors.secondary,
+              color: pc.commentDate,
             ),
           ),
           const SizedBox(width: 4),
@@ -426,7 +427,7 @@ class _PostCardState extends State<PostCard> {
               padding: EdgeInsets.only(top: AppDimens.commentDateLineTopOffset),
               child: Container(
                 height: 1,
-                color: colors.secondary.withValues(alpha: 0.3),
+                color: pc.commentDateSeparatorLine,
               ),
             ),
           ),
@@ -446,6 +447,7 @@ class _PostCardState extends State<PostCard> {
 
   // 单条回复行：[时间] 内容(单行截断) [署名]
   Widget _commentRow(Comment comment, AppColors colors, Color primary, bool isExpanded) {
+    final pc = colors.postCard;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -455,7 +457,7 @@ class _PostCardState extends State<PostCard> {
             _timeTransform(comment.createdAt),
             style: TextStyle(
               fontSize: AppDimens.commentDateFontSize,
-              color: colors.secondary,
+              color: pc.commentDate,
             ),
           ),
         ),
@@ -467,7 +469,7 @@ class _PostCardState extends State<PostCard> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: AppDimens.commentFontSize,
-              color: primary,
+              color: pc.commentContent,
               height: AppDimens.commentLineHeight,
             ),
           ),
@@ -488,7 +490,7 @@ class _PostCardState extends State<PostCard> {
               textAlign: TextAlign.left,
               style: TextStyle(
                 fontSize: AppDimens.commentAuthorFontSize,
-                color: colors.authorColor,
+                color: pc.commentAuthor,
               ),
             ),
           ),
@@ -498,6 +500,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Widget _dateRow(AppColors colors, bool isLong, int remaining) {
+    final pc = colors.postCard;
     return Stack(
       alignment: Alignment.centerLeft,
       children: [
@@ -506,7 +509,7 @@ class _PostCardState extends State<PostCard> {
           child: Text(_dateTransform(widget.post.createdAt),
               style: TextStyle(
                   fontSize: AppDimens.fontSizeSmall,
-                  color: colors.secondary)),
+                  color: pc.dateText)),
         ),
           if (isLong && !_hasBeenExpanded)
             Positioned(
@@ -520,7 +523,7 @@ class _PostCardState extends State<PostCard> {
                 '+$remaining',
                 style: TextStyle(
                   fontSize: AppDimens.fontSizeSmall,
-                  color: colors.secondary,
+              color: pc.commentDate,
                 ),
               ),
             ),
@@ -544,9 +547,8 @@ class _PostCardState extends State<PostCard> {
                     height: AppDimens.expandIconSize,
                     colorFilter: ColorFilter.mode(
                       _hasBeenExpanded
-                          ? colors.secondary.withValues(
-                              alpha: AppDimens.expandIconGrayAlpha)
-                          : Color(AppDimens.expandIconColorBlue),
+                          ? pc.expandIconGray
+                          : pc.expandIconBlue,
                       BlendMode.srcIn,
                     ),
                   ),
@@ -560,8 +562,7 @@ class _PostCardState extends State<PostCard> {
             width: AppDimens.dotsBtnWidth,
             height: AppDimens.dotsBtnHeight,
             decoration: BoxDecoration(
-              color: colors.secondary
-                  .withValues(alpha: AppDimens.dotsBgOpacity),
+              color: pc.dotsButtonBg,
               borderRadius:
                   BorderRadius.circular(AppDimens.dotsBtnRadius),
             ),
@@ -605,16 +606,17 @@ class _TitleAuthorRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pc = colors.postCard;
     final titleStyle = TextStyle(
         fontSize: AppDimens.fontSizeTitle,
         fontWeight: FontWeight.w400,
-        color: primary);
+        color: pc.title);
     final authorStyle = TextStyle(
         fontSize: AppDimens.fontSizeAuthor,
-        color: colors.authorColor);
+        color: pc.authorName);
     final atStyle = TextStyle(
         fontSize: AppDimens.fontSizeAt,
-        color: colors.green,
+        color: pc.atSymbol,
         fontStyle: FontStyle.italic);
 
     // 测量标题和作者宽度

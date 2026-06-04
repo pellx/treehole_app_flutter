@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'models/post.dart';
 import 'models/comment.dart';
 import 'widgets/post_card.dart';
@@ -12,41 +15,436 @@ import 'theme/app_dimens.dart';
 import 'services/api.dart';
 import 'services/storage.dart';
 
+final GlobalKey<_TreeholeAppState> appKey = GlobalKey<_TreeholeAppState>();
+ThemeMode _themeMode = ThemeMode.system;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await PostStorage.init();
-  runApp(const TreeholeApp());
+  runApp(TreeholeApp(key: appKey));
 }
 
-class TreeholeApp extends StatelessWidget {
-  const TreeholeApp({super.key});
+class TreeholeApp extends StatefulWidget {
+  TreeholeApp({super.key});
 
+  static void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    appKey.currentState?.setState(() {});
+  }
+
+  @override
+  State<TreeholeApp> createState() => _TreeholeAppState();
+}
+
+class _TreeholeAppState extends State<TreeholeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '树通',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.light,
+      themeMode: _themeMode,
       theme: ThemeData.light().copyWith(
-        scaffoldBackgroundColor: const Color(0xFFFFFFFF),
-        colorScheme: const ColorScheme.light(
-          surface: Color(0xFFFFFFFF),
-          onSurface: Color(0xFF333333),
+        scaffoldBackgroundColor: AppColors.light.background,
+        colorScheme: ColorScheme.light(
+          surface: AppColors.light.surface,
+          onSurface: AppColors.light.onSurface,
         ),
         extensions: const [AppColors.light],
       ),
       darkTheme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        colorScheme: const ColorScheme.dark(
-          surface: Color(0xFF222222),
-          onSurface: Color(0xFFF0F0F0),
+        scaffoldBackgroundColor: AppColors.dark.background,
+        colorScheme: ColorScheme.dark(
+          surface: AppColors.dark.surface,
+          onSurface: AppColors.dark.onSurface,
         ),
         extensions: const [AppColors.dark],
       ),
       home: const SquarePage(),
     );
   }
+}
+
+class _ColorModePage extends StatefulWidget {
+  const _ColorModePage();
+
+  @override
+  State<_ColorModePage> createState() => _ColorModePageState();
+}
+
+class _ColorModePageState extends State<_ColorModePage> {
+  ThemeMode _selectedMode = _themeMode;
+  bool _showCustom = false;
+  bool _modeExpanded = false;
+  final Map<String, Color> _customColors = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final e in PostStorage.getCustomColors().entries) {
+      _customColors[e.key] = Color(e.value);
+    }
+  }
+
+  String _modeLabel(ThemeMode m) => switch (m) { ThemeMode.light => '浅色模式', ThemeMode.dark => '深色模式', ThemeMode.system => '跟随系统' };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme.onSurface;
+    final sub = c.withValues(alpha: 0.5);
+    return ListView(
+      padding: EdgeInsets.all(16),
+      children: [
+        _dropdownCard(
+          context,
+          value: _modeLabel(_selectedMode),
+          expanded: _modeExpanded,
+          onTap: () => setState(() => _modeExpanded = !_modeExpanded),
+          children: [
+            _optionTile('浅色模式', _selectedMode == ThemeMode.light, () => _selectMode(ThemeMode.light)),
+            _optionTile('深色模式', _selectedMode == ThemeMode.dark, () => _selectMode(ThemeMode.dark)),
+            _optionTile('跟随系统', _selectedMode == ThemeMode.system, () => _selectMode(ThemeMode.system)),
+          ],
+        ),
+        _itemDivider(),
+        _switchCard(context, '自定义颜色设置', _showCustom, (v) => setState(() => _showCustom = v)),
+        _itemDivider(),
+        if (_showCustom) ...[
+          _navCard(context, '浅色模式颜色', () => _showColorDetail('浅色模式颜色', AppColors.light)),
+          _itemDivider(),
+          _navCard(context, '深色模式颜色', () => _showColorDetail('深色模式颜色', AppColors.light)),
+          _itemDivider(),
+        ],
+      ],
+    );
+  }
+
+  void _selectMode(ThemeMode m) {
+    setState(() { _selectedMode = m; _modeExpanded = false; });
+    TreeholeApp.setThemeMode(m);
+  }
+
+  // ---- 通用组件 ----
+
+  Widget _itemDivider() {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    return Divider(height: 1, thickness: 0.5, color: colors.divider);
+  }
+
+  Widget _itemRow(BuildContext ctx, Widget child) => SizedBox(
+    height: AppDimens.settingsItemHeight,
+    child: Center(child: child),
+  );
+
+  Widget _arrowBadge(Widget icon) => Padding(
+    padding: EdgeInsets.only(right: AppDimens.settingsArrowRightMargin),
+    child: icon,
+  );
+
+  Widget _dropdownCard(BuildContext ctx, {required String value, required bool expanded, required VoidCallback onTap, required List<Widget> children}) {
+    final c = Theme.of(ctx).colorScheme.onSurface;
+    final colors = Theme.of(ctx).extension<AppColors>()!;
+    return AnimatedSize(
+      duration: Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      alignment: Alignment.topCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: _itemRow(ctx, Row(children: [
+              Text(value, style: TextStyle(fontSize: AppDimens.settingsItemFontSize, color: c)),
+              Spacer(),
+              _arrowBadge(AnimatedRotation(turns: expanded ? 0.5 : 0, duration: Duration(milliseconds: 200), child: Icon(Icons.expand_more, size: AppDimens.settingsArrowSize, color: colors.arrowIcon))),
+            ])),
+          ),
+          if (expanded) ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _switchCard(BuildContext ctx, String label, bool value, ValueChanged<bool> onChanged) {
+    final colors = Theme.of(ctx).extension<AppColors>()!;
+    return _itemRow(ctx, Row(children: [
+      Text(label, style: TextStyle(fontSize: AppDimens.settingsItemFontSize, color: Theme.of(ctx).colorScheme.onSurface)),
+      Spacer(),
+      Switch(value: value, activeColor: colors.switchActive, onChanged: onChanged),
+    ]));
+  }
+
+  Widget _navCard(BuildContext ctx, String label, VoidCallback onTap) {
+    final colors = Theme.of(ctx).extension<AppColors>()!;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: _itemRow(ctx, Row(children: [
+        Text(label, style: TextStyle(fontSize: AppDimens.settingsItemFontSize, color: Theme.of(ctx).colorScheme.onSurface)),
+        Spacer(),
+        _arrowBadge(Icon(Icons.chevron_right, size: AppDimens.settingsArrowSize, color: colors.arrowIcon)),
+      ])),
+    );
+  }
+
+  Widget _optionTile(String label, bool selected, VoidCallback onTap) {
+    final c = Theme.of(context).colorScheme.onSurface;
+    final colors = Theme.of(context).extension<AppColors>()!;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        color: selected ? colors.switchActive.withValues(alpha: 0.08) : null,
+        child: _itemRow(context, Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: selected ? colors.switchActive : colors.trailingIcon),
+              SizedBox(width: 8),
+              Text(label, style: TextStyle(fontSize: 13, color: c)),
+            ],
+          ),
+        )),
+      ),
+    );
+  }
+
+  Widget _colorRow(String name, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Expanded(child: Text(name, style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurface))),
+            Container(width: AppDimens.settingsColorSwatchSize, height: AppDimens.settingsColorSwatchSize, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade400))),
+            SizedBox(width: 8),
+            Text('#${color.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}', style: TextStyle(fontSize: 12, color: Theme.of(context).extension<AppColors>()!.trailingIcon)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showColorPicker(String name, Color currentColor) {
+    double hue = HSVColor.fromColor(currentColor).hue;
+    double sat = HSVColor.fromColor(currentColor).saturation;
+    double val = HSVColor.fromColor(currentColor).value;
+    double alpha = currentColor.a;
+    Color getColor() => HSVColor.fromAHSV(alpha, hue, sat, val).toColor();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      enableDrag: false,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setInner) {
+          void changed() { setInner(() {}); _onColorSelected(name, getColor()); }
+          final barColor = Theme.of(context).extension<AppColors>()!.drawerHeaderBg;
+          final hexCtrl = TextEditingController(text: getColor().value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase());
+          final hexListener = () {
+            final text = hexCtrl.text.replaceFirst('#', '');
+            final c = colorFromHex(text, enableAlpha: true);
+            if (c != null) {
+              final h = HSVColor.fromColor(c);
+              hue = h.hue; sat = h.saturation; val = h.value; alpha = h.alpha;
+              changed();
+            }
+          };
+          hexCtrl.addListener(hexListener);
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: hexCtrl,
+                          style: TextStyle(fontSize: 14, fontFamily: 'monospace'),
+                          decoration: InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Container(width: 36, height: 36, decoration: BoxDecoration(color: getColor(), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey.shade400))),
+                      SizedBox(width: 12),
+                      SizedBox(
+                        height: 40,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: barColor),
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text('确定', style: TextStyle(color: Colors.black87, fontSize: 14)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: AppDimens.colorPickerSVSize,
+                        height: AppDimens.colorPickerSVSize,
+                        child: ColorPickerArea(HSVColor.fromAHSV(1, hue, sat, val), (hsv) { sat = hsv.saturation; val = hsv.value; changed(); }, PaletteType.hsv),
+                      ),
+                      SizedBox(width: AppDimens.colorPickerAreaGap),
+                      SizedBox(
+                        height: AppDimens.colorPickerSliderHeight,
+                        child: Row(
+                          children: [
+                            _rotatedSlider(TrackType.hue, HSVColor.fromAHSV(1, hue, sat, val), (hsv) { hue = hsv.hue; changed(); }),
+                            SizedBox(width: AppDimens.colorPickerSliderGap),
+                            _rotatedSlider(TrackType.alpha, HSVColor.fromAHSV(alpha, hue, sat, val), (hsv) { alpha = hsv.alpha; changed(); }),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _rotatedSlider(TrackType type, HSVColor hsv, ValueChanged<HSVColor> onChanged) {
+    return SizedBox(
+      // 这里不要改！！！！
+      width: AppDimens.colorPickerSliderWidth,
+      height: AppDimens.colorPickerSliderHeight,
+      child: RotatedBox(
+        quarterTurns: -1,
+        child: ColorPickerSlider(type, hsv, onChanged),
+      ),
+    );
+  }
+
+  void _onColorSelected(String name, Color color) {
+    setState(() => _customColors[name] = color);
+    final map = <String, int>{};
+    for (final e in _customColors.entries) map[e.key] = e.value.value;
+    PostStorage.saveCustomColors(map);
+  }
+
+  void _restoreDefaults() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('恢复初始值'),
+        content: Text('是否确认恢复所有颜色为默认值？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('否')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('是')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await PostStorage.clearCustomColors();
+      setState(() => _customColors.clear());
+    }
+  }
+
+  void _showColorDetail(String title, AppColors themeColors) {
+    final entries = themeColors.colors.entries.toList();
+    navigateToSubPage(context, title, ListView(
+      padding: EdgeInsets.all(16),
+      children: [
+        ...entries.map((e) {
+          final displayColor = _customColors[e.key] ?? e.value;
+          return _colorRow(e.key, displayColor, () => _showColorPicker(e.key, displayColor));
+        }),
+        _itemDivider(),
+        ListTile(
+          leading: Icon(Icons.restore, color: Theme.of(context).extension<AppColors>()!.trailingIcon),
+          title: Text('恢复初始值'),
+          onTap: _restoreDefaults,
+        ),
+      ],
+    ));
+  }
+}
+
+void navigateToSubPage(BuildContext context, String title, Widget body) {
+  final colors = Theme.of(context).extension<AppColors>()!;
+  final barText = colors.barText;
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(
+    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    body: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Container(
+            height: AppDimens.settingsBarHeight,
+            color: colors.drawerHeaderBg,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.arrow_back, color: barText),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Expanded(
+                  child: Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: barText)),
+                ),
+                SizedBox(width: 48),
+              ],
+            ),
+          ),
+          Expanded(child: body),
+        ],
+      ),
+    ),
+  )));
+}
+
+void navigateToSettingsPage(BuildContext context, String title, Widget body) {
+  final colors = Theme.of(context).extension<AppColors>()!;
+  final barText = colors.barText;
+  Navigator.of(context).push(PageRouteBuilder(
+    pageBuilder: (_, __, ___) => Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Container(
+              height: AppDimens.settingsBarHeight,
+              color: colors.drawerHeaderBg,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close, color: barText),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Expanded(
+                    child: Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: barText)),
+                  ),
+                  SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(child: body),
+          ],
+        ),
+      ),
+    ),
+    transitionsBuilder: (_, animation, __, child) => SlideTransition(
+      position: Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+      child: child,
+    ),
+    transitionDuration: Duration(milliseconds: AppDimens.drawerAnimMs),
+  ));
 }
 
 class SquarePage extends StatefulWidget {
@@ -65,13 +463,29 @@ class _SquarePageState extends State<SquarePage> {
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
   final Set<int> _postsNeedCommentRefresh = {};  // 需要刷新回复的帖子 ID
-  File? _avatarFile;                              // 抽屉头像文件
+  Uint8List? _avatarBytes;                          // 抽屉头像字节
+
+  Future<File> _avatarSavePath() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/avatar.jpg');
+  }
+
+  Future<void> _loadAvatar() async {
+    final file = await _avatarSavePath();
+    if (await file.exists()) {
+      final bytes = await file.readAsBytes();
+      if (mounted) setState(() => _avatarBytes = bytes);
+    }
+  }
 
   Future<void> _pickAvatar() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 256);
-    if (picked != null && mounted) {
-      setState(() => _avatarFile = File(picked.path));
+    if (picked != null) {
+      final bytes = await File(picked.path).readAsBytes();
+      final saveFile = await _avatarSavePath();
+      await saveFile.writeAsBytes(bytes);
+      if (mounted) setState(() => _avatarBytes = bytes);
     }
   }
 
@@ -86,6 +500,7 @@ class _SquarePageState extends State<SquarePage> {
   @override
   void initState() {
     super.initState();
+    _loadAvatar();
     _initLoad();
     ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
   }
@@ -285,11 +700,40 @@ class _SquarePageState extends State<SquarePage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
-  Widget _drawerTile(IconData icon, String title) {
+  Widget _drawerTile(IconData icon, String title, {VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: Theme.of(context).colorScheme.onSurface),
       title: Text(title, style: TextStyle(fontSize: 15)),
-      onTap: () {},
+      onTap: onTap ?? () {},
+    );
+  }
+
+  void _showSettings() {
+    final color = Theme.of(context).colorScheme.onSurface;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', Center(child: Text('用户设置', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('署名设置', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('关注设置', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.palette_outlined, '颜色模式', () { Navigator.pop(context); navigateToSettingsPage(context, '颜色模式', const _ColorModePage()); }),
+            SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _settingsTile(IconData icon, String title, VoidCallback onTap) {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: Icon(Icons.chevron_right, color: colors.trailingIcon),
+      onTap: onTap,
     );
   }
 
@@ -302,14 +746,16 @@ class _SquarePageState extends State<SquarePage> {
       },
       child: Scaffold(
       drawerEdgeDragWidth: MediaQuery.of(context).size.width,
-      drawer: Drawer(
+      drawer: Builder(builder: (ctx) {
+        final colors = Theme.of(ctx).extension<AppColors>()!;
+        return Drawer(
         shape: const RoundedRectangleBorder(),
-        width: MediaQuery.of(context).size.width * 4 / 5,
+        width: MediaQuery.of(ctx).size.width * 4 / 5,
         child: SafeArea(
           child: Column(
             children: [
               Container(
-                color: Color(AppDimens.drawerHeaderBgColor),
+                color: colors.drawerHeaderBg,
                 padding: EdgeInsets.only(
                   left: AppDimens.drawerHeaderPaddingLeft,
                   right: AppDimens.drawerHeaderPaddingRight,
@@ -320,14 +766,14 @@ class _SquarePageState extends State<SquarePage> {
                   children: [
                     GestureDetector(
                       onTap: _pickAvatar,
-                      child: _avatarFile != null
+                      child: _avatarBytes != null
                           ? CircleAvatar(
                               radius: AppDimens.drawerAvatarSize / 2,
-                              backgroundImage: FileImage(_avatarFile!),
+                              backgroundImage: MemoryImage(_avatarBytes!),
                             )
                           : CircleAvatar(
                               radius: AppDimens.drawerAvatarSize / 2,
-                              backgroundColor: Color(AppDimens.idTintColor).withValues(alpha: 0.2),
+                              backgroundColor: colors.idTint.withValues(alpha: 0.2),
                               backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
                             ),
                     ),
@@ -335,7 +781,7 @@ class _SquarePageState extends State<SquarePage> {
                     Expanded(
                       child: Text('匿名用户', style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
                     ),
-                    Icon(Icons.chevron_right, color: Colors.grey),
+                    Icon(Icons.chevron_right, color: colors.trailingIcon),
                   ],
                 ),
               ),
@@ -345,7 +791,7 @@ class _SquarePageState extends State<SquarePage> {
                   children: [
                     _drawerTile(Icons.home_outlined, '主页'),
                     _drawerTile(Icons.person_outline, '用户'),
-                    _drawerTile(Icons.settings_outlined, '设置'),
+                    _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学'),
                     _drawerTile(Icons.system_update_outlined, '更新'),
                   ],
@@ -353,21 +799,22 @@ class _SquarePageState extends State<SquarePage> {
               ),
               Padding(
                 padding: EdgeInsets.only(bottom: 16),
-                child: Text('版本 1.0.0', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                child: Text('版本 1.0.0', style: TextStyle(fontSize: 12, color: colors.trailingIcon)),
               ),
             ],
           ),
-        ),
-      ),
+          ),
+        );
+      }),
       body: SafeArea(
-        // 首次加载且无数据 → 居中转圈
+        bottom: false,
         child: _loading && _posts.isEmpty
             ? const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifSize, height: AppDimens.loadingGifSize))
             // 有错误 → 显示错误文字
-            : _error != null
-                ? Center(
-                    child: Text(_error!,
-                        style: const TextStyle(color: Colors.grey)))
+                : _error != null
+                    ? Center(
+                        child: Text(_error!,
+                            style: TextStyle(color: Theme.of(context).extension<AppColors>()!.trailingIcon)))
                 // 正常 → 帖子列表 + 滚动加载
                 : NotificationListener<ScrollNotification>(
                     onNotification: (n) {
@@ -399,7 +846,7 @@ class _SquarePageState extends State<SquarePage> {
                       ],
                     ),
                   ),
-      ),
+        ),
     ),
     );
   }

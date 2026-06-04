@@ -12,12 +12,14 @@ class PostStorage {
   static late Box _postBox;
   static late Box _thumbBox;
   static late Box _commentBox; // 回复 Hive 缓存
+  static late Box _customColorsBox; // 自定义颜色缓存
 
   static Future<void> init() async {
     _idBox = await Hive.openBox('id_list');
     _postBox = await Hive.openBox('posts');
     _thumbBox = await Hive.openBox('thumbnails');
     _commentBox = await Hive.openBox('comments');
+    _customColorsBox = await Hive.openBox('custom_colors');
   }
 
   // ---- ID 列表 ----
@@ -175,5 +177,21 @@ class PostStorage {
 
   static List<Comment> getComments(List<int> ids) {
     return ids.map((id) => getComment(id)).whereType<Comment>().toList();
+  }
+
+  // ---- 自定义颜色 ----
+
+  static Map<String, int> getCustomColors() {
+    final raw = _customColorsBox.get('colors');
+    if (raw == null) return {};
+    return Map<String, int>.from(raw as Map);
+  }
+
+  static Future<void> saveCustomColors(Map<String, int> colors) async {
+    await _customColorsBox.put('colors', colors);
+  }
+
+  static Future<void> clearCustomColors() async {
+    await _customColorsBox.delete('colors');
   }
 }

@@ -40,13 +40,9 @@ class AppDimens {
   static const double idImageOverlap = 15;
   static const double idDigitWidth = 23;
   static const bool idVertical = true;
-  static const int idGradientTop = 0xD10EAB00;
-  static const int idGradientMid = 0x770E7799;
-  static const int idGradientBottom = 0x000EAB00;
   static const double idGradientStopTop = 0.0;
   static const double idGradientStopMid = 0.5;
   static const double idGradientStopBottom = 1.0;
-  static const int idTintColor = 0xFF0EAB00;
 
   // ---- 文字 ----
   static const double fontSizeQuote = 57;
@@ -76,7 +72,6 @@ class AppDimens {
   static const double expandIconCornerRadius = 3;
   static const int expandIconAnimMs = 0;
   static const double expandIconTop = -4;
-  static const int expandIconColorBlue = 0xFF3B82F6;
   static const double expandIconGrayAlpha = 0.13;
 
   // ---- 内容文字 ----
@@ -125,6 +120,20 @@ class AppDimens {
   static const double drawerHeaderPaddingBottom = 20;           // 头部下间距
   static const double drawerAvatarTextGap = 12;                 // 头像与名字间距
   static const double drawerNameFontSize = 16;                  // 名字字号
+
+  static const double settingsBarHeight = 48;                   // 设置页顶部栏高度
+  static const double settingsItemFontSize = 16;                 // 设置项字号
+  static const double settingsItemHeight = 60;                   // 设置项行高
+  static const double settingsArrowRightMargin = 17;             // 箭头距右侧距离
+  static const double settingsArrowSize = 21;                    // 箭头图标大小
+  static const double settingsColorSwatchSize = 22;              // 颜色展示色块大小
+
+  static const double colorPickerSliderHeight = 230;             // 选色器滑杆高度
+  static const double colorPickerSliderWidth = 45;               // 选色器滑杆宽度
+  static const double colorPickerSliderGap = 0;                  // 两滑杆间距
+  static const double colorPickerAreaGap = 5;                   // 色域与滑杆间距
+  
+  static const double colorPickerSVSize = 220;                   // 渐变色域大小(正方形边长)
 
   // ---- 图片查看器操作栏 ----
   static const int overlayActionBarBgColor = 0xE6212121;   // 操作栏背景色（grey[900] 90% 不透明）
@@ -183,7 +192,6 @@ class AppDimens {
   static const double commentRemainFontSize = 12;     // 剩余回复数字号
   static const double commentRemainTopOffset = 0;      // 剩余回复数竖直偏移
   static const double commentRemainBtnGap = 6;         // +N 与 [-] 间距
-
 
   static const double pageIndicatorDotSize = 6; // 圆点大小
   static const double pageIndicatorDotGap = 8; // 圆点间距
