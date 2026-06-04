@@ -107,7 +107,7 @@ class _ColorModePageState extends State<_ColorModePage> {
           ],
         ),
         _itemDivider(),
-        _switchCard(context, '自定义颜色设置', _showCustom, (v) => setState(() => _showCustom = v)),
+        _switchCard(context, '自定义颜色设置（没做完）', _showCustom, (v) => setState(() => _showCustom = v)),
         _itemDivider(),
         if (_showCustom) ...[
           _navCard(context, '浅色模式颜色', () => _showColorDetail('浅色模式颜色', AppColors.light)),
@@ -716,9 +716,9 @@ class _SquarePageState extends State<SquarePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', Center(child: Text('用户设置', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('署名设置', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('关注设置', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
             _settingsTile(Icons.palette_outlined, '颜色模式', () { Navigator.pop(context); navigateToSettingsPage(context, '颜色模式', const _ColorModePage()); }),
             SizedBox(height: 16),
           ],
@@ -789,11 +789,11 @@ class _SquarePageState extends State<SquarePage> {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    _drawerTile(Icons.home_outlined, '主页'),
-                    _drawerTile(Icons.person_outline, '用户'),
+                    _drawerTile(Icons.home_outlined, '主页（没做）'),
+                    _drawerTile(Icons.person_outline, '用户（没做）'),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
-                    _drawerTile(Icons.menu_book_outlined, '操作教学'),
-                    _drawerTile(Icons.system_update_outlined, '更新'),
+                    _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
+                    _drawerTile(Icons.system_update_outlined, '更新（没做）'),
                   ],
                 ),
               ),
