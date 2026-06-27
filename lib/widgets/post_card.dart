@@ -25,6 +25,7 @@ class _PostCardState extends State<PostCard> {
   bool _hasBeenExpanded = false;    // 是否被展开过（控制图标颜色）
   int _commentsShowCount = AppDimens.commentMaxShown; // 当前展开的回复数
   int? _expandedAuthorId;           // 当前展开的回复署名 ID
+  bool _showActions = false;        // 操作菜单是否展开
 
   @override
   void initState() {
@@ -511,7 +512,7 @@ class _PostCardState extends State<PostCard> {
                   fontSize: AppDimens.fontSizeSmall,
                   color: pc.dateText)),
         ),
-          if (isLong && !_hasBeenExpanded)
+          if (isLong && !_hasBeenExpanded && !_showActions)
             Positioned(
               top: AppDimens.expandIconTop,
               right: AppDimens.dotsPositionedRight +
@@ -527,7 +528,7 @@ class _PostCardState extends State<PostCard> {
                 ),
               ),
             ),
-          if (isLong)
+          if (isLong && !_showActions)
             Positioned(
               top: AppDimens.expandIconTop,
               right: AppDimens.dotsPositionedRight +
@@ -555,40 +556,166 @@ class _PostCardState extends State<PostCard> {
                 ),
               ),
             ),
+        // 操作菜单（替换原来两点按钮）
         Positioned(
           right: AppDimens.dotsPositionedRight,
-          top: AppDimens.dotsPositionedTop,
-          child: Container(
-            width: AppDimens.dotsBtnWidth,
-            height: AppDimens.dotsBtnHeight,
-            decoration: BoxDecoration(
-              color: pc.dotsButtonBg,
-              borderRadius:
-                  BorderRadius.circular(AppDimens.dotsBtnRadius),
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  top: AppDimens.dotsTopPadding,
-                  left: AppDimens.dotsLeftPadding,
-                  child: Text('·',
-                      style: const TextStyle(
-                          fontSize: AppDimens.dotsFontSize,
-                          fontWeight: FontWeight.bold)),
-                ),
-                Positioned(
-                  top: AppDimens.dotsTopPadding,
-                  right: AppDimens.dotsRightPadding,
-                  child: Text('·',
-                      style: const TextStyle(
-                          fontSize: AppDimens.dotsFontSize,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
+          top: AppDimens.actionMenuTopOffset,
+          child: _buildActionMenu(pc),
         ),
       ],
+    );
+  }
+
+  // ---- 操作菜单 ----
+
+  /// 构建操作菜单：两点按钮 + 左侧展开的操作按钮（收藏、评论、举报）
+  Widget _buildActionMenu(PostCardColors pc) {
+    final menuExpandedWidth = 3 * AppDimens.actionMenuBtnWidth +
+        2 * AppDimens.actionMenuBtnGap +
+        AppDimens.dotsBtnWidth +
+        AppDimens.actionMenuBtnGap;
+
+    return AnimatedContainer(
+      duration: Duration(milliseconds: AppDimens.actionMenuAnimMs),
+      curve: Curves.easeInOut,
+      width: _showActions ? menuExpandedWidth : AppDimens.dotsBtnWidth,
+      height: AppDimens.actionMenuBtnHeight,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: _showActions ? pc.actionMenuBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppDimens.actionMenuBtnRadius),
+      ),
+      child: Stack(
+        children: [
+          // 操作按钮（左侧展开）
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: AnimatedOpacity(
+              duration: Duration(milliseconds: AppDimens.actionMenuAnimMs),
+              opacity: _showActions ? 1.0 : 0.0,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _actionBtn('收藏', Icons.bookmark_outline, pc,
+                      _onFavorite),
+                  SizedBox(width: AppDimens.actionMenuBtnGap),
+                  _actionBtn('评论', Icons.mode_comment_outlined, pc,
+                      _onComment),
+                  SizedBox(width: AppDimens.actionMenuBtnGap),
+                  _actionBtn('举报', Icons.flag_outlined, pc,
+                      _onReport),
+                ],
+              ),
+            ),
+          ),
+          // 两点 / 关闭按钮（右侧固定）
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: _showActions ? _closeButton(pc) : _dotsButton(pc),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dotsButton(PostCardColors pc) {
+    return GestureDetector(
+      onTap: () => setState(() => _showActions = true),
+      child: Container(
+        width: AppDimens.dotsBtnWidth,
+        height: AppDimens.actionMenuBtnHeight,
+        decoration: BoxDecoration(
+          color: pc.dotsButtonBg,
+          borderRadius: BorderRadius.circular(AppDimens.dotsBtnRadius),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('·',
+                style: const TextStyle(
+                    fontSize: AppDimens.dotsFontSize,
+                    fontWeight: FontWeight.bold,
+                    height: 0.8)),
+            Text('·',
+                style: const TextStyle(
+                    fontSize: AppDimens.dotsFontSize,
+                    fontWeight: FontWeight.bold,
+                    height: 0.8)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _closeButton(PostCardColors pc) {
+    return GestureDetector(
+      onTap: () => setState(() => _showActions = false),
+      child: Container(
+        width: AppDimens.dotsBtnWidth,
+        height: AppDimens.actionMenuBtnHeight,
+        decoration: BoxDecoration(
+          color: pc.dotsButtonBg,
+          borderRadius: BorderRadius.circular(AppDimens.dotsBtnRadius),
+        ),
+        child: Center(
+          child: Icon(Icons.close, size: 14, color: pc.actionBtnText),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionBtn(String label, IconData icon, PostCardColors pc,
+      VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: AppDimens.actionMenuBtnWidth,
+        height: AppDimens.actionMenuBtnHeight,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppDimens.actionMenuBtnRadius),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: pc.actionBtnText),
+            SizedBox(width: 2),
+            Text(label,
+                style: TextStyle(
+                  fontSize: AppDimens.actionMenuBtnFontSize,
+                  color: pc.actionBtnText,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- 菜单操作处理 ----
+
+  void _onFavorite() {
+    setState(() => _showActions = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('收藏功能即将上线'), duration: Duration(seconds: 1)),
+    );
+  }
+
+  void _onComment() {
+    setState(() => _showActions = false);
+    // TODO: 跳转到评论发表页
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('评论功能即将上线'), duration: Duration(seconds: 1)),
+    );
+  }
+
+  void _onReport() {
+    setState(() => _showActions = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('举报功能即将上线'), duration: Duration(seconds: 1)),
     );
   }
 }
@@ -619,10 +746,10 @@ class _TitleAuthorRow extends StatelessWidget {
         color: pc.atSymbol,
         fontStyle: FontStyle.italic);
 
-    // 测量标题和作者宽度
+    // 测量标题和作者宽度（标题最多2行）
     final tp = TextPainter(
         text: TextSpan(text: post.title, style: titleStyle),
-        maxLines: 1,
+        maxLines: 2,
         textDirection: TextDirection.ltr)..layout();
     final ap = TextPainter(
         text: TextSpan(text: '@${post.author}', style: authorStyle),
@@ -637,14 +764,14 @@ class _TitleAuthorRow extends StatelessWidget {
       constraints:
           BoxConstraints(maxWidth: AppDimens.titleAuthorMaxWidth),
       child: post.author.isEmpty
-          ? Text(post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle)
+          ? Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle)
           : titleW + authorW <= AppDimens.titleAuthorMaxWidth
               // 不超宽：都 inline，不换行
               ? Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(post.title, style: titleStyle),
+                    Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
                     SizedBox(width: AppDimens.paddingLg),
                     Text('@', style: atStyle),
                     SizedBox(width: AppDimens.authorAtGap),
@@ -669,7 +796,7 @@ class _TitleAuthorRow extends StatelessWidget {
                       children: [
                         Flexible(
                           flex: (titleW / totalW * avail).round().clamp(1, 999),
-                          child: Text(post.title, softWrap: true, style: titleStyle),
+                          child: Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, softWrap: true, style: titleStyle),
                         ),
                         SizedBox(width: gap),
                         Flexible(
@@ -696,10 +823,10 @@ class _TitleAuthorRow extends StatelessWidget {
                                 maxWidth: AppDimens.titleAuthorMaxWidth -
                                     authorW -
                                     gap),
-                            child: Text(post.title, style: titleStyle),
+                            child: Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
                           )
                         else
-                          Text(post.title, style: titleStyle),
+                          Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
                         SizedBox(width: gap),
                         if (!titleLong)
                           ConstrainedBox(

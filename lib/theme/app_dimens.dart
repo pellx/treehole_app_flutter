@@ -9,6 +9,102 @@ class AppDimens {
   static const double paddingLg = 4;
   static const double paddingXl = 24;
 
+  // ---- 主页发布入口（右下角）----
+  static const double postCreateButtonSize = 52; // 按钮宽高
+  static const double postCreateButtonRight = 20; // 距右边距
+  static const double postCreateButtonBottom = 20; // 距底边距
+  static const double postCreateButtonRadius = 26; // 按钮圆角
+  static const double postCreateButtonIconSize = 28; // 图标大小
+
+  // ---- 发布页整页 ----
+  static const double postCreatePagePadding = 12; // 整页左右边距（控制输入区和按钮行距屏幕距离）
+  static const double postCreateSectionGap = 12; // 各部分间距
+  static const double postCreateSubmitMarginRight = 20; // 发布按钮距右边距
+  static const int postCreateErrorDismissMs = 3000; // 错误提示自动消失时长（毫秒）
+  static const int postCreateToastDismissMs = 500; // 署名切换提示消失时长（毫秒）
+
+  // ---- 第一部分：椭圆输入区 ----
+  static const double postCreateInputRadius = 8;
+  static const double postCreateInputBorderWidth = 0;
+  static const double postCreateInputPaddingH = 10;
+  static const double postCreateInputPaddingV = 6;
+  static const double postCreateDividerThickness = 1;
+  static const double postCreateDividerIndent = 2;
+  static const double postCreateTitleMinHeight = 48;
+  static const double postCreateContentMinHeight = 120;
+  static const double postCreateContentMaxHeight = 200;
+
+  // ---- Floating label（标题）----
+  static const double postCreateLabelFontSizeLarge = 16;
+  static const double postCreateLabelFontSizeSmall = 12;
+  static const double postCreateLabelRestDx = 0;
+  static const double postCreateLabelRestDy = 15;
+  static const double postCreateLabelFloatDx = 0;
+  static const double postCreateLabelFloatDy = -8;
+  static const int postCreateLabelAnimMs = 170;
+
+  // ---- Floating label（内容）----
+  static const double postCreateContentLabelFontSizeLarge = 16;
+  static const double postCreateContentLabelFontSizeSmall = 12;
+  static const double postCreateContentLabelRestDx = 0;
+  static const double postCreateContentLabelRestDy = -32;
+  static const double postCreateContentLabelFloatDx = 0;
+  static const double postCreateContentLabelFloatDy = -8;
+  static const int postCreateContentLabelAnimMs = 170;
+
+  // ---- 第二部分：按钮行 ----
+  static const double postCreateButtonRowPaddingH = 16; // 按钮行距屏幕左右距离（可单独控制）
+  static const double postCreateActionRowGap = 4; // 按钮之间水平间距
+  static const double postCreatePreviewGap = 8; // 预览区与按钮行间距
+  static const double postCreatePreviewThumbSize = 77; // 预览缩略图大小
+  static const double postCreatePreviewDividerHeight = 1; // 预览区下方横线高度
+
+  // 上传 / 清除按钮（统一样式）
+  static const double postCreateActionButtonSize = 35; // 上传 & 清除按钮宽高（正方形）
+  static const double postCreateActionButtonRadius = 8; // 上传 & 清除按钮圆角
+  static const double postCreateActionButtonIconSize = 20; // 上传 & 清除按钮图标大小
+  static const double postCreateActionButtonBorderWidth = 1.8; // 上传 & 清除按钮描边粗细
+
+  // 展开按钮（样式与上传/清除一致）
+  static const double postCreateExpandButtonSize = 35; // 展开按钮宽高
+  static const double postCreateExpandButtonRadius = 8; // 展开按钮圆角
+  static const double postCreateExpandButtonBorderWidth = 1.8; // 展开按钮描边粗细
+  static const double postCreateExpandButtonIconSize = 20; // 展开图标大小
+  static const int postCreateExpandThresholdChars = 80; // 展开按钮出现阈值（字符数）
+
+  // 署名按钮（图标样式，启用/未启用两态）
+
+  // ---- 署名切换按钮（旧自定义开关，已弃用）----
+  static const double postCreateAuthorSwitchWidth = 54;
+  static const double postCreateAuthorSwitchHeight = 30;
+  static const double postCreateAuthorSwitchRadius = 999;
+  static const double postCreateAuthorSwitchPadding = 3;
+  static const double postCreateAuthorSwitchThumbSize = 24;
+  static const double postCreateAuthorSwitchIconSize = 14;
+
+  // ---- 第三部分：发布按钮 ----
+  static const double postCreateSubmitHeight = 28; // 按钮高度
+  static const double postCreateSubmitRadius = 8; // 按钮圆角
+  static const double postCreateSubmitHPadding = 11; // 按钮水平内边距
+  static const double postCreateSubmitFontSize = 14; // 按钮文字大小
+
+  // ---- 内容展开覆盖层 ----
+  static const double postCreateContentExpandedTopGap = -40; // 完全展开后顶部保留高度
+  static const double postCreateContentExpandedPadding = 12; // 展开卡片内部边距
+  static const double postCreateContentExpandedRadius = 8; // 展开卡片圆角
+  static const double postCreateContentExpandedTextHPadding = 4; // 展开后文本左右内边距
+  static const double postCreateContentExpandedTextTopStart =
+      19; // 展开/收起时文本距顶部起始/终点值
+  static const double postCreateContentExpandedTextLeftStart =
+      10; // 文本距左边起始值（展开起点/收起终点，匹配原位）
+  static const double postCreateContentExpandedTextLeftEnd =
+      12; // 文本距左边终点值（展开终点/收起起点）
+  static const double postCreateContentOverlayOpacity = 0.8; // 展开时遮罩最大透明度
+  static const double postCreateContentCollapseWidthSwitchT =
+      0.15; // 收起到此进度后切回原文本宽度
+  static const int postCreateContentExpandAnimMs = 300; // 展开/收起动画时长
+  static const double postCreateContentCollapseIconSize = 28; // 收起图标大小
+
   // ---- 帖子卡片 ----
   static const double cardHPadding = 7;
   static const double cardContentLeft = 7;
@@ -77,7 +173,7 @@ class AppDimens {
   // ---- 内容文字 ----
   static const double contentLineHeight = 1.5;
 
-  // ---- 两个点按钮 ----
+  // ---- 两个点按钮（操作菜单触发器）----
   static const double dotsBtnWidth = 26;
   static const double dotsBtnHeight = 15;
   static const double dotsBtnRadius = 4;
@@ -91,6 +187,15 @@ class AppDimens {
   static const double commentBgOpacity = 0.09; // 回复区域背景透明度
   static const double dotsPositionedRight = 1;
   static const double dotsPositionedTop = 2;
+
+  // ---- 帖子操作菜单（从两点按钮左侧展开）----
+  static const double actionMenuBtnWidth = 44;   // 操作按钮宽度
+  static const double actionMenuBtnHeight = 26;  // 操作按钮高度
+  static const double actionMenuBtnRadius = 4;   // 操作按钮圆角
+  static const double actionMenuBtnGap = 4;      // 按钮间距
+  static const double actionMenuBtnFontSize = 12; // 按钮文字大小
+  static const double actionMenuTopOffset = -4;  // 菜单垂直偏移（对齐两点按钮）
+  static const int actionMenuAnimMs = 200;       // 展开/收起动画时长(ms)
 
   // ---- 时间行 ----
   static const double dateRowTopSpacing = 2;
@@ -107,12 +212,9 @@ class AppDimens {
   static const double loadingGifThumbSize = 24;
 
   // ---- 下拉刷新 ----
-  static const int refreshIndicatorColor = 0xFF0EAB00; // 刷新圆圈颜色（同贴子ID）
-  static const int refreshIndicatorBackgroundColor = 0xFFFFFFFF; // 刷新背景色（纯白）
   static const double refreshIndicatorDisplacement = 2.0; // 下拉位移（0=不推内容）
   static const double drawerEdgeDragWidth = 50.0; // 左滑唤出抽屉灵敏度
   static const int drawerAnimMs = 300; // 抽屉动画时长(ms)
-  static const int drawerHeaderBgColor = 0xFFE8F5E9; // 抽屉头部色块背景
   static const double drawerAvatarSize = 56; // 抽屉头像大小
   static const double drawerHeaderPaddingLeft = 16; // 头部左间距
   static const double drawerHeaderPaddingRight = 16; // 头部右间距
@@ -126,23 +228,10 @@ class AppDimens {
   static const double settingsItemHeight = 60; // 设置项行高
   static const double settingsArrowRightMargin = 17; // 箭头距右侧距离
   static const double settingsArrowSize = 21; // 箭头图标大小
-  static const double settingsColorSwatchSize = 22; // 颜色展示色块大小
 
-  static const double colorPickerSliderHeight = 230; // 选色器滑杆高度
-  static const double colorPickerSliderWidth = 45; // 选色器滑杆宽度
-  static const double colorPickerSliderGap = 0; // 两滑杆间距
-  static const double colorPickerAreaGap = 5; // 色域与滑杆间距
 
-  static const double colorPickerSVSize = 220;                   // 渐变色域大小(正方形边长)
 
   // ---- 图片查看器操作栏 ----
-  static const int overlayActionBarBgColor =
-      0xE6212121; // 操作栏背景色（grey[900] 90% 不透明）
-  static const int overlayIconColor = 0xFFFFFFFF; // 操作栏按钮图标色（纯白）
-  static const int overlayPageDotColor = 0xFFFFFFFF; // 页码指示器颜色（纯白）
-  static const double overlayPageDotActiveOpacity = 0.9; // 当前页不透明度
-  static const double overlayPageDotInactiveOpacity = 0.4; // 非当前页不透明度
-  static const double overlaySaveToastBgOpacity = 0.0; // 保存提示弹窗背景透明度
 
   // ---- 图片查看器动画 ----
   static const int imageExpandMs = 250; // 打开/关闭伸缩动画时长
@@ -201,4 +290,8 @@ class AppDimens {
   static const double pageIndicatorInactiveOpacity = 0.4; // 非当前页透明度
   static const double pageIndicatorBottomMargin = 40; // 距底部距离
   static const int pageIndicatorFadeMs = 80; // 页码指示器消失动画时长
+
+  // ---- 图片查看器页码点透明度（image_overlay.dart 引用名）----
+  static const double overlayPageDotActiveOpacity = 0.9;
+  static const double overlayPageDotInactiveOpacity = 0.4;
 }

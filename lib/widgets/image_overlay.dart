@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import '../models/post.dart';
 import '../services/storage.dart';
 import '../theme/app_dimens.dart';
+import '../theme/app_colors.dart';
 import 'page_physics.dart';
 
 class ImageOverlay extends StatefulWidget {
@@ -234,6 +235,7 @@ class _ImageOverlayState extends State<ImageOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).extension<AppColors>()!;
     final screenSize = MediaQuery.of(context).size;
     final fullRect = Rect.fromLTWH(0, 0, screenSize.width, screenSize.height);
     final startR = _fromRect();
@@ -291,7 +293,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                       height: AppDimens.pageIndicatorDotSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Color(AppDimens.overlayPageDotColor).withValues(
+                        color: colors.common.overlayPageDot.withValues(
                           alpha: active
                               ? AppDimens.overlayPageDotActiveOpacity
                               : AppDimens.overlayPageDotInactiveOpacity,
@@ -315,7 +317,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                     child: Container(
                       height: AppDimens.actionBarHeight,
                       decoration: BoxDecoration(
-                        color: Color(AppDimens.overlayActionBarBgColor),
+                        color: colors.common.overlayActionBarBg,
                         borderRadius: BorderRadius.circular(AppDimens.actionBarRadius),
                       ),
                       child: Row(
@@ -327,13 +329,13 @@ class _ImageOverlayState extends State<ImageOverlay>
                                 ? SizedBox(
                                     width: AppDimens.actionBarBtnSize,
                                     height: AppDimens.actionBarBtnSize,
-                                    child: const CircularProgressIndicator(strokeWidth: 2, color: Color(AppDimens.overlayIconColor)))
-                                : Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: Color(AppDimens.overlayIconColor)),
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: colors.common.overlayIcon))
+                                : Icon(Icons.download, size: AppDimens.actionBarBtnSize, color: colors.common.overlayIcon),
                             onPressed: _saveImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
                           IconButton(
-                            icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: Color(AppDimens.overlayIconColor)),
+                            icon: Icon(Icons.share, size: AppDimens.actionBarBtnSize, color: colors.common.overlayIcon),
                             onPressed: _shareImage,
                           ),
                           SizedBox(width: AppDimens.actionBarBtnGap),
@@ -359,9 +361,9 @@ class _ImageOverlayState extends State<ImageOverlay>
                         color: Colors.black.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(AppDimens.saveToastRadius),
                       ),
-                      child: const Text(
+                      child: Text(
                         '已保存至相册',
-                        style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: Color(AppDimens.overlayIconColor)),
+                        style: TextStyle(fontSize: AppDimens.saveToastFontSize, color: colors.common.overlayIcon),
                       ),
                     ),
                   ),

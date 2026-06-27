@@ -18,6 +18,7 @@ dependencies:
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
   image_picker: ^1.1.0
+  file_picker: ^10.0.0
   flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
@@ -43,3 +44,4 @@ flutter_launcher_icons:
   image_path: "assets/icon.png"
   adaptive_icon_background: "#121212"
   adaptive_icon_foreground: "assets/icon.png"
+

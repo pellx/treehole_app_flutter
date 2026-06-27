@@ -108,6 +108,10 @@ class PostStorage {
     return _postBox.keys.cast<int>().map((id) => getPost(id)!).where((p) => true).toList();
   }
 
+  static Future<void> deletePost(int id) async {
+    await _postBox.delete(id);
+  }
+
   // ---- 缩略图 ----
 
   static ThumbnailData? getThumbnail(String fileName) {
@@ -193,5 +197,17 @@ class PostStorage {
 
   static Future<void> clearCustomColors() async {
     await _customColorsBox.delete('colors');
+  }
+
+  // ---- 用户名 ----
+
+  static String getUserName() {
+    final raw = _customColorsBox.get('user_name');
+    if (raw == null) return '匿名用户';
+    return raw as String;
+  }
+
+  static Future<void> saveUserName(String name) async {
+    await _customColorsBox.put('user_name', name);
   }
 }
