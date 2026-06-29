@@ -4,6 +4,7 @@ import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
+import '../models/version_info.dart';
 import '../services/api.dart';
 
 class PostStorage {
@@ -13,6 +14,7 @@ class PostStorage {
   static late Box _thumbBox;
   static late Box _commentBox; // 回复 Hive 缓存
   static late Box _customColorsBox; // 自定义颜色缓存
+  static late Box _versionBox; // 版本历史缓存
 
   static Future<void> init() async {
     _idBox = await Hive.openBox('id_list');
@@ -20,6 +22,7 @@ class PostStorage {
     _thumbBox = await Hive.openBox('thumbnails');
     _commentBox = await Hive.openBox('comments');
     _customColorsBox = await Hive.openBox('custom_colors');
+    _versionBox = await Hive.openBox('versions');
   }
 
   // ---- ID 列表 ----
@@ -183,6 +186,24 @@ class PostStorage {
     return ids.map((id) => getComment(id)).whereType<Comment>().toList();
   }
 
+  // ---- 评论草稿 ----
+
+  static String? getCommentDraft(int postId) {
+    return _commentBox.get('draft_$postId') as String?;
+  }
+
+  static Future<void> saveCommentDraft(int postId, String text) async {
+    if (text.isEmpty) {
+      await _commentBox.delete('draft_$postId');
+    } else {
+      await _commentBox.put('draft_$postId', text);
+    }
+  }
+
+  static Future<void> clearCommentDraft(int postId) async {
+    await _commentBox.delete('draft_$postId');
+  }
+
   // ---- 自定义颜色 ----
 
   static Map<String, int> getCustomColors() {
@@ -209,5 +230,32 @@ class PostStorage {
 
   static Future<void> saveUserName(String name) async {
     await _customColorsBox.put('user_name', name);
+  }
+
+  // ---- 版本历史 ----
+
+  static List<VersionInfo> getCachedVersions() {
+    final raw = _versionBox.get('list');
+    if (raw == null) return [];
+    final list = raw as List;
+    return list.map((j) => VersionInfo.fromJson(Map<String, dynamic>.from(j as Map))).toList();
+  }
+
+  static Future<void> saveVersions(List<VersionInfo> versions) async {
+    await _versionBox.put('list', versions.map((v) => v.toJson()).toList());
+  }
+
+  static VersionInfo? getLatestCachedVersion() {
+    final versions = getCachedVersions();
+    return versions.isNotEmpty ? versions.first : null;
+  }
+
+  static Future<void> saveLatestVersion(VersionInfo version) async {
+    final existing = getCachedVersions();
+    final ids = existing.map((v) => v.id).toSet();
+    if (!ids.contains(version.id)) {
+      existing.insert(0, version);
+      await saveVersions(existing);
+    }
   }
 }

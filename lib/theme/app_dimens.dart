@@ -188,14 +188,21 @@ class AppDimens {
   static const double dotsPositionedRight = 1;
   static const double dotsPositionedTop = 2;
 
-  // ---- 帖子操作菜单（从两点按钮左侧展开）----
-  static const double actionMenuBtnWidth = 44;   // 操作按钮宽度
-  static const double actionMenuBtnHeight = 26;  // 操作按钮高度
-  static const double actionMenuBtnRadius = 4;   // 操作按钮圆角
-  static const double actionMenuBtnGap = 4;      // 按钮间距
-  static const double actionMenuBtnFontSize = 12; // 按钮文字大小
-  static const double actionMenuTopOffset = -4;  // 菜单垂直偏移（对齐两点按钮）
-  static const int actionMenuAnimMs = 200;       // 展开/收起动画时长(ms)
+  // ---- 操作浮层（从两点按钮上方弹出）----
+  static const double actionMenuBtnWidth = 50;               // 操作图标容器宽度
+  static const double actionMenuBtnHeight = 30;              // 操作图标容器高度
+  static const double actionMenuBtnGap = 4;                  // 图标间距
+  static const double actionMenuBtnRadius = 4;               // 图标圆角
+  static const double actionMenuIconSize = 18;               // 图标大小（宽=高）
+  static const double actionMenuIconSizeFavorite = 14;       // 收藏图标
+  static const double actionMenuIconSizeComment = 15;        // 评论图标
+  static const double actionMenuIconSizeReport = 16;         // 举报图标
+  static const double actionMenuBoxHeight = 24;        // 方框高度
+  static const double actionMenuBoxTopOffset = -1;     // 方框顶部相对按钮顶部偏移
+  static const double actionMenuBoxRightOffset = -28;    // 方框右边缘相对按钮右边缘偏移
+  static const double actionMenuShadowBlur = 6;        // 阴影模糊半径
+  static const double actionMenuShadowOpacity = 1;  // 阴影透明度
+  static const double actionMenuShadowOffsetY = 2;     // 阴影Y偏移
 
   // ---- 时间行 ----
   static const double dateRowTopSpacing = 2;
@@ -283,6 +290,24 @@ class AppDimens {
   static const double commentRemainFontSize = 12; // 剩余回复数字号
   static const double commentRemainTopOffset = 0; // 剩余回复数竖直偏移
   static const double commentRemainBtnGap = 6; // +N 与 [-] 间距
+  static const double commentScrollBottomOffset = 63; // 有评论时，滚动定位评论区底部距视口底部偏移
+  static const double dateRowScrollBottomOffset = 56;  // 无评论时，滚动定位日期行底部距视口底部偏移
+
+  // ---- 评论输入栏 ----
+  static const double commentInputHeight = 40; // 输入栏最小高度
+  static const double commentInputMaxHeight = 120; // 输入栏最大高度（超出后滚动）
+  static const double commentInputRadius = 8; // 输入框圆角
+  static const double commentInputPaddingH = 12; // 输入框水平内边距
+  static const double commentInputFontSize = 14; // 输入字号
+  static const double commentInputAuthorBtnSize = 35; // 署名按钮宽高
+  static const double commentInputAuthorBtnRadius = 8; // 署名按钮圆角
+  static const double commentInputAuthorBtnBorderWidth = 1.8; // 署名按钮描边
+  static const double commentInputAuthorBtnIconSize = 20; // 署名按钮图标大小
+  static const double commentInputBtnGap = 8; // 输入框与按钮间距
+  static const double commentInputSectionMarginTop = 8; // 输入栏距上方间距
+  static const double commentInputSectionMarginBottom = 8; // 输入栏距下方评论区间距
+  static const double commentInputAuthorHintOffset = 16; // 署名提示距输入栏高度
+  static const int commentInputAuthorHintMs = 1500; // 署名提示显示时长(ms)
 
   static const double pageIndicatorDotSize = 6; // 圆点大小
   static const double pageIndicatorDotGap = 8; // 圆点间距

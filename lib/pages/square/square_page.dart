@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -17,6 +18,8 @@ import '../../widgets/post_card.dart';
 import '../post/post_create_page.dart';
 import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
+import '../settings/version_page.dart';
+import '../../models/version_info.dart';
 
 class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
@@ -36,6 +39,8 @@ class _SquarePageState extends State<SquarePage> {
   final Set<int> _postsNeedCommentRefresh = {};  // 需要刷新回复的帖子 ID
   Uint8List? _avatarBytes;                          // 抽屉头像字节
   bool _postButtonVisible = true;                   // 发布按钮显隐
+  bool _commentOverlayActive = false;                // 评论浮层活跃时禁止滚动唤出
+  Duration _postButtonAnimDuration = const Duration(milliseconds: 300);
   late final TextEditingController _nameController;
   final FocusNode _nameFocus = FocusNode();
   bool _editingName = false;
@@ -139,6 +144,31 @@ class _SquarePageState extends State<SquarePage> {
         _loading = false;
         _error = '加载失败，请检查网络';
       });
+    }
+
+    // 3. 后台检查版本更新（不阻塞加载）
+    _checkVersion();
+  }
+
+  Future<void> _checkVersion() async {
+    final latest = await ApiService.getLatestVersion();
+    if (latest == null || !mounted) return;
+    // 缓存
+    await PostStorage.saveLatestVersion(latest);
+    // 比较版本
+    if (latest.versionNumber != VersionInfo.currentVersion && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('发现新版本 v${latest.versionNumber}'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () {
+              navigateToSettingsPage(context, '更新日志', const VersionPage());
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 
@@ -430,13 +460,16 @@ class _SquarePageState extends State<SquarePage> {
                     _drawerTile(Icons.person_outline, '用户（没做）'),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
-                    _drawerTile(Icons.system_update_outlined, '更新（没做）'),
+                    _drawerTile(Icons.system_update_outlined, '更新日志', onTap: () {
+                      Navigator.pop(context);
+                      navigateToSettingsPage(context, '更新日志', const VersionPage());
+                    }),
                   ],
                 ),
               ),
               Padding(
                 padding: EdgeInsets.only(bottom: 16),
-                child: Text('版本 1.0.0', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
+                child: Text('版本 ${VersionInfo.currentVersion}', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
               ),
             ],
           ),
@@ -464,9 +497,11 @@ class _SquarePageState extends State<SquarePage> {
                           if (n is ScrollUpdateNotification) {
                             final delta = n.scrollDelta ?? 0;
                             if (delta.abs() > 5) {
-                              final hide = delta > 0;
-                              if (_postButtonVisible != !hide) {
-                                setState(() => _postButtonVisible = !hide);
+                              if (!_commentOverlayActive) {
+                                final hide = delta > 0;
+                                if (_postButtonVisible != !hide) {
+                                  setState(() => _postButtonVisible = !hide);
+                                }
                               }
                             }
                           }
@@ -488,7 +523,23 @@ class _SquarePageState extends State<SquarePage> {
                               ),
                               sliver: SliverList(
                                 delegate: SliverChildListDelegate(
-                                  _posts.map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? [], onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id))).toList(),
+                                  _posts.map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? [], onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id), onCommentCreated: (cmt) {
+                                    setState(() {
+                                      _comments[p.id] ??= [];
+                                      _comments[p.id] = [..._comments[p.id]!, cmt];
+                                    });
+                                  }, onCommentOverlayChanged: (visible) {
+     setState(() {
+       _commentOverlayActive = visible;
+       if (visible) {
+         _postButtonAnimDuration = Duration.zero;
+         _postButtonVisible = false;
+       } else {
+         _postButtonAnimDuration = const Duration(milliseconds: 300);
+         _postButtonVisible = true;
+       }
+     });
+   })).toList(),
                                 ),
                               ),
                             ),
@@ -496,7 +547,7 @@ class _SquarePageState extends State<SquarePage> {
                         ),
                       ),
             AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
+              duration: _postButtonAnimDuration,
               curve: Curves.easeOut,
               right: _postButtonVisible
                   ? AppDimens.postCreateButtonRight

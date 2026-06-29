@@ -71,6 +71,13 @@ class PostCardColors {
   final Color commentBg;
   final Color commentIcon;
   final Color commentDateSeparatorLine;
+  final Color commentInputBarBg;          // 评论输入栏外背景
+  final Color commentInputFieldBg;        // 评论输入框背景
+  final Color commentSendActiveBg;      // 评论发送按钮-激活背景
+  final Color commentSendActiveIcon;    // 评论发送按钮-激活图标
+  final Color commentSendInactiveBg;    // 评论发送按钮-未激活背景
+  final Color commentSendInactiveBorder;// 评论发送按钮-未激活描边
+  final Color commentSendInactiveIcon;  // 评论发送按钮-未激活图标
   final Color expandIconBlue;
   final Color expandIconGray;
   final Color dotsButtonBg;
@@ -96,6 +103,13 @@ class PostCardColors {
     required this.commentBg,
     required this.commentIcon,
     required this.commentDateSeparatorLine,
+    required this.commentInputBarBg,
+    required this.commentInputFieldBg,
+    required this.commentSendActiveBg,
+    required this.commentSendActiveIcon,
+    required this.commentSendInactiveBg,
+    required this.commentSendInactiveBorder,
+    required this.commentSendInactiveIcon,
     required this.expandIconBlue,
     required this.expandIconGray,
     required this.dotsButtonBg,
@@ -149,6 +163,10 @@ class PostCreateColors {
   final Color authorActiveFill;
   final Color authorActiveIcon;
 
+  // ---- 底部提示文字 ----
+  final Color bottomHintText;
+  final Color errorText;    // 错误提示颜色
+
   // ---- 发布按钮 ----
   final Color submitBg;
   final Color submitText;
@@ -181,6 +199,8 @@ class PostCreateColors {
     required this.authorBorder,
     required this.authorActiveFill,
     required this.authorActiveIcon,
+    required this.bottomHintText,
+    required this.errorText,
     required this.submitBg,
     required this.submitText,
     required this.buttonBg,
@@ -300,11 +320,18 @@ static const postCardLight = PostCardColors(
   commentBg:              Color(0x17747474),
   commentIcon:            Color(0xFF747474),
   commentDateSeparatorLine: Color(0x4D747474),
+  commentInputBarBg:        Color(0xFFF5F5F5),
+  commentInputFieldBg:      Color(0xFFFFFFFF),
+  commentSendActiveBg:      Color(0xFF00CC62),
+  commentSendActiveIcon:    Color(0xFFFFFFFF),
+  commentSendInactiveBg:    Color(0xFFFFFFFF),
+  commentSendInactiveBorder:Color(0x6C999999),
+  commentSendInactiveIcon:  Color(0xA8999999),
   expandIconBlue:         Color(0xFF3B82F6),
   expandIconGray:         Color(0x21747474),
   dotsButtonBg:           Color(0x17747474),
-  actionMenuBg:           Color(0x17747474),
-  actionBtnText:          Color(0xFF333333),
+  actionMenuBg:           Color(0xFF3B3B3B),
+  actionBtnText:          Color(0xFFEEEEEE),
   idTint:                 Color(0x810EAB00),
   idErrorFallback:        Color(0xFFF44336),
 );
@@ -317,21 +344,28 @@ static const postCardDark = PostCardColors(
   dateText:               Color(0xFF8B8B8B),
   remainCount:            Color(0x70999999),
   authorName:             Color(0xE378B0FF),
-  atSymbol:               Color(0xB57AFF85),
+  atSymbol:               Color(0xCC87FF91),
   attachmentText:         Color(0xFF616BFF),
   commentContent:         Color(0xFFd3d3d3),
   commentAuthor:          Color(0xE378B0FF),
   commentDate:            Color(0xFF8B8B8B),
   commentRemain:          Color(0xA5999999),
   commentBg:              Color(0xFF282828),
-  commentIcon:            Color(0xA5999999),
+  commentIcon:            Color(0xA5999999),  
   commentDateSeparatorLine: Color(0x4D5F5D60),
+  commentInputBarBg:        Color(0xFF1A1A1A),
+  commentInputFieldBg:      Color(0xFF282828),
+  commentSendActiveBg:      Color(0xFF12B460),
+  commentSendActiveIcon:    Color(0xFFEFEFEF),
+  commentSendInactiveBg:    Color(0xFF2A2A2A),
+  commentSendInactiveBorder:Color(0x39AEAEAE),
+  commentSendInactiveIcon:  Color(0xFF8B8B8B),
   expandIconBlue:         Color(0xFF326CCA),
   expandIconGray:         Color(0xFF3C3C3C),
   dotsButtonBg:           Color(0xFF3C3C3C),
-  actionMenuBg:           Color(0xFF3C3C3C),
-  actionBtnText:          Color(0xFFd3d3d3),
-  idTint:                 Color(0xFF509E49),
+  actionMenuBg:           Color(0xFF3B3B3B),
+  actionBtnText:          Color(0xFFEEEEEE),
+  idTint:                 Color(0xBC307828),
   idErrorFallback:        Color(0xFFF44336),
 );
 
@@ -357,6 +391,8 @@ static const postCreateLight = PostCreateColors(
   authorBorder:           Color(0xFF626262),
   authorActiveFill:       Color(0xFF00CC62),
   authorActiveIcon:       Color(0xFFFFFFFF),
+  bottomHintText:         Color(0xDD000000),
+  errorText:              Color(0xFFFF0000),
   submitBg:               Color(0xFF00CC62),
   submitText:             Color(0xFFFFFFFF),
   buttonBg:               Color(0xFF2CAEFF),
@@ -368,27 +404,29 @@ static const postCreateLight = PostCreateColors(
 static const postCreateDark = PostCreateColors(
   pageBg:                 Color(0xFF1A1A1A),
   fieldBg:                Color(0xFF2A2A2A),
-  divider:                Color(0xFF3A3A3A),
+  divider:                Color(0xFF404040),
   topBarBg:               Color(0xFF1B2E1F),
   titleLabelRest:         Color(0xB1FFFFFF),
   titleLabelFloat:        Color(0xFFAAAAAA),
   contentLabelRest:       Color(0xB1FFFFFF),
   contentLabelFloat:      Color(0xFFAAAAAA),
   previewDivider:         Color(0xFF3A3A3A),
-  uploadBtnBorder:        Color(0xFF67BDFF),
-  uploadBtnIcon:          Color(0xFF1D81CD),
-  deleteBtnBorder:        Color(0xFFCC6A6A),
-  deleteBtnIcon:          Color(0xFFDF2323),
-  expandBtnBorder:        Color(0xFF67BDFF),
-  expandBtnIcon:          Color(0xFF1D81CD),
+  uploadBtnBorder:        Color(0xFF286B9E),
+  uploadBtnIcon:          Color(0xFF57B5FD),
+  deleteBtnBorder:        Color(0xFF8B2F2F),
+  deleteBtnIcon:          Color(0xFFFB3E3E),  
+  expandBtnBorder:        Color(0xFF2874AE),
+  expandBtnIcon:          Color(0xFF57B5FD),
   authorIcon:             Color(0xFFAAAAAA),
   authorBorder:           Color(0xFFAAAAAA),
-  authorActiveFill:       Color(0xFF00CC62),
-  authorActiveIcon:       Color(0xFFFFFFFF),
-  submitBg:               Color(0xFF00CC62),
-  submitText:             Color(0xFFFFFFFF),
-  buttonBg:               Color(0xFF2693FF),
-  buttonIcon:             Color(0xFFFFFFFF),
+  authorActiveFill:       Color(0xFF12B460),
+  authorActiveIcon:       Color(0xFFEFEFEF),
+  bottomHintText:         Color(0xCCFFFFFF),
+  errorText:              Color(0xFFFF0400),
+  submitBg:               Color(0xFF12B460),
+  submitText:             Color(0xFFEFEFEF),
+  buttonBg:               Color(0xFF2B84DC),
+  buttonIcon:             Color(0xFFDEDEDE),
   contentOverlay:         Color(0xFF000000),
   contentCollapseIcon:    Color(0xFFAAAAAA),
 );

@@ -9,6 +9,7 @@ import '../models/comment.dart';
 import '../models/post.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
+import '../models/version_info.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
@@ -18,6 +19,7 @@ class ApiService {
   static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
   static const _originalBase = 'https://www.leisure.xin:33433/upload';
   static const _uploadBase = 'https://tree.leisure.xin/node/file-processor/upload';
+  static const _versionBase = 'https://tree.leisure.xin/node/versions';
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
@@ -137,6 +139,38 @@ class ApiService {
     }
   }
 
+  static Future<Comment?> createComment({
+    required int postId,
+    required String content,
+    String? author,
+    int? toId,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'postId': postId,
+        'content': content,
+      };
+      if (author != null && author.isNotEmpty) body['author'] = author;
+      if (toId != null) body['toId'] = toId;
+      final res = await http
+          .post(
+            Uri.parse(_commentBase),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] createComment status=${res.statusCode} body=${res.body}');
+        lastError = _parseErrorMessage(res.body);
+        return null;
+      }
+      return Comment.fromJson(jsonDecode(res.body));
+    } catch (e) {
+      debugPrint('[ApiService] createComment error: $e');
+      return null;
+    }
+  }
+
   /// 从 API 错误响应中提取 message 字段
   static String _parseErrorMessage(String body) {
     try {
@@ -144,6 +178,37 @@ class ApiService {
       return data['message'] as String? ?? '操作失败';
     } catch (_) {
       return '操作失败';
+    }
+  }
+
+  // ---- 版本更新 ----
+
+  static Future<VersionInfo?> getLatestVersion({String platform = 'android'}) async {
+    try {
+      final res = await http.get(Uri.parse('$_versionBase/latest?platform=$platform')).timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] getLatestVersion status=${res.statusCode}');
+        return null;
+      }
+      return VersionInfo.fromJson(jsonDecode(res.body));
+    } catch (e) {
+      debugPrint('[ApiService] getLatestVersion error: $e');
+      return null;
+    }
+  }
+
+  static Future<List<VersionInfo>> getAllVersions({String platform = 'android'}) async {
+    try {
+      final res = await http.get(Uri.parse('$_versionBase?platform=$platform')).timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] getAllVersions status=${res.statusCode}');
+        return [];
+      }
+      final list = jsonDecode(res.body) as List;
+      return list.map((j) => VersionInfo.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (e) {
+      debugPrint('[ApiService] getAllVersions error: $e');
+      return [];
     }
   }
 

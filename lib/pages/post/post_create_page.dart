@@ -243,7 +243,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
     });
     _errorTimer?.cancel();
     final msg = _hasAuthor ? '开启署名' : '关闭署名';
-    if (mounted) setState(() { _errorMessage = msg; _errorColor = Colors.black; });
+    if (mounted) setState(() { _errorMessage = msg; _errorColor = Theme.of(context).extension<AppColors>()!.postCreate.bottomHintText; });
     _errorTimer = Timer(Duration(milliseconds: AppDimens.postCreateToastDismissMs), () {
       if (mounted) setState(() { _errorMessage = null; _errorColor = null; });
     });
@@ -540,7 +540,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       child: Text(
         _errorMessage!,
         style: TextStyle(
-          color: _errorColor ?? Theme.of(context).colorScheme.error,
+          color: _errorColor ?? colors.postCreate.errorText,
           fontSize: 14,
         ),
       ),

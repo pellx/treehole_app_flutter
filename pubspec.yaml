@@ -38,6 +38,7 @@ flutter:
     - assets/loading.gif
     - assets/404.png
     - assets/420px-Transparent_Akkarin.jpg
+    - assets/icons/game-pack/
 
 flutter_launcher_icons:
   android: true
