@@ -647,7 +647,9 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
             .clamp(0.0, double.infinity)
             .toDouble();
 
-    return Container(
+    return GestureDetector(
+      onTap: () => PostStorage.isRegistered() ? _contentFocus.requestFocus() : Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage())),
+      child: Container(
       key: key,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -728,6 +730,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
           ),
         );
       },
+    ),
     ),
     );
   }
