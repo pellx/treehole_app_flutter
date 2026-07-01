@@ -611,8 +611,9 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                 child: Text(PostStorage.isRegistered() ? '标题' : '请注册'),
               ),
             ),
-            // TextField：始终存在，动画上下移动
-            AnimatedPositioned(
+            // TextField：只在已注册时渲染
+            if (PostStorage.isRegistered())
+              AnimatedPositioned(
               duration: Duration(milliseconds: animMs),
               curve: curve,
               left: 0,
@@ -697,7 +698,8 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                   child: Text(PostStorage.isRegistered() ? '内容' : '目前未绑定账号'),
                 ),
               ),
-              AnimatedPositioned(
+              if (PostStorage.isRegistered())
+                AnimatedPositioned(
                 duration: Duration(milliseconds: animMs),
                 curve: curve,
                 left: 0,
