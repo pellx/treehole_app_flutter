@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/storage.dart';
 import '../services/api.dart';
+import '../pages/account/account_page.dart';
 import 'dart:typed_data';
 import 'image_overlay.dart';
 
@@ -580,48 +581,83 @@ class _PostCardState extends State<PostCard> {
                           minHeight: AppDimens.commentInputHeight,
                           maxHeight: AppDimens.commentInputMaxHeight,
                         ),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: pc.commentInputFieldBg,
-                            borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
-                          ),
-                          child: TextField(
-                              key: _commentTextFieldKey,
-                              controller: _commentController,
-                            focusNode: _commentFocusNode,
-                            autofocus: true,
-                            minLines: 1,
-                            maxLines: null,
-                            keyboardType: TextInputType.multiline,
-                            textAlignVertical: _commentMultiLine
-                                ? TextAlignVertical.top
-                                : TextAlignVertical.center,
-                            style: TextStyle(
-                              fontSize: AppDimens.commentInputFontSize,
-                              color: pc.commentContent,
-                              height: 1.4,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: '输入评论...',
-                              hintStyle: TextStyle(
-                                fontSize: AppDimens.commentInputFontSize,
-                                color: pc.commentDate,
-                                height: 1.4,
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: pc.commentInputFieldBg,
+                                borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
                               ),
-                              contentPadding: _commentMultiLine
-                                  ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
-                                  : EdgeInsets.fromLTRB(
-                                      AppDimens.commentInputPaddingH,
-                                      10,
-                                      AppDimens.commentInputPaddingH,
-                                      10,
-                                    ),
-                              border: InputBorder.none,
-                              isDense: true,
+                              child: TextField(
+                                  key: _commentTextFieldKey,
+                                  controller: _commentController,
+                                focusNode: _commentFocusNode,
+                                autofocus: true,
+                                minLines: 1,
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textAlignVertical: _commentMultiLine
+                                    ? TextAlignVertical.top
+                                    : TextAlignVertical.center,
+                                style: TextStyle(
+                                  fontSize: AppDimens.commentInputFontSize,
+                                  color: pc.commentContent,
+                                  height: 1.4,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: '输入评论...',
+                                  hintStyle: TextStyle(
+                                    fontSize: AppDimens.commentInputFontSize,
+                                    color: pc.commentDate,
+                                    height: 1.4,
+                                  ),
+                                  contentPadding: _commentMultiLine
+                                      ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
+                                      : EdgeInsets.fromLTRB(
+                                          AppDimens.commentInputPaddingH,
+                                          10,
+                                          AppDimens.commentInputPaddingH,
+                                          10,
+                                        ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _submitComment(),
+                              ),
                             ),
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _submitComment(),
-                          ),
+                            if (!PostStorage.isRegistered())
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: pc.commentInputFieldBg,
+                                      borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
+                                    ),
+                                    alignment: Alignment.centerLeft,
+                                    padding: _commentMultiLine
+                                        ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
+                                        : EdgeInsets.fromLTRB(
+                                            AppDimens.commentInputPaddingH,
+                                            10,
+                                            AppDimens.commentInputPaddingH,
+                                            10,
+                                          ),
+                                    child: Text(
+                                      '目前未绑定账号，请注册',
+                                      style: TextStyle(
+                                        fontSize: AppDimens.commentInputFontSize,
+                                        color: pc.commentDate,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),

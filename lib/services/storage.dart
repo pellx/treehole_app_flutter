@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,9 +13,10 @@ class PostStorage {
   static late Box _idBox;
   static late Box _postBox;
   static late Box _thumbBox;
-  static late Box _commentBox; // 回复 Hive 缓存
-  static late Box _customColorsBox; // 自定义颜色缓存
-  static late Box _versionBox; // 版本历史缓存
+  static late Box _commentBox;
+  static late Box _customColorsBox;
+  static late Box _versionBox;
+  static late Box _accountBox;
 
   static Future<void> init() async {
     _idBox = await Hive.openBox('id_list');
@@ -23,6 +25,25 @@ class PostStorage {
     _commentBox = await Hive.openBox('comments');
     _customColorsBox = await Hive.openBox('custom_colors');
     _versionBox = await Hive.openBox('versions');
+    _accountBox = await Hive.openBox('account');
+  }
+
+  // ---- 账号 ----
+
+  static String? getLocalToken() {
+    return _accountBox.get('local_token') as String?;
+  }
+
+  static Future<void> saveLocalToken(String token) async {
+    await _accountBox.put('local_token', token);
+  }
+
+  static bool isRegistered() {
+    return _accountBox.get('registered', defaultValue: false) as bool;
+  }
+
+  static Future<void> setRegistered(bool value) async {
+    await _accountBox.put('registered', value);
   }
 
   // ---- ID 列表 ----
@@ -120,7 +141,6 @@ class PostStorage {
   static ThumbnailData? getThumbnail(String fileName) {
     final raw = _thumbBox.get('thumb_$fileName');
     if (raw == null) return null;
-    // 兼容旧格式（Uint8List）和新格式（Map）
     if (raw is Uint8List) {
       return ThumbnailData(bytes: raw, width: 0, height: 0);
     }

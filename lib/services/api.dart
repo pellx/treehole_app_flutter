@@ -77,10 +77,11 @@ class ApiService {
     return (w, h);
   }
 
-  static Future<UploadResult?> uploadFile(PostUploadType type, File file) async {
+  static Future<UploadResult?> uploadFile(PostUploadType type, File file, {String? clientToken}) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
       request.fields['type'] = type.apiValue;
+      if (clientToken != null) request.fields['client_token'] = clientToken;
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
       final streamed = await request.send().timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
@@ -144,6 +145,7 @@ class ApiService {
     required String content,
     String? author,
     int? toId,
+    String? clientToken,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -152,6 +154,7 @@ class ApiService {
       };
       if (author != null && author.isNotEmpty) body['author'] = author;
       if (toId != null) body['toId'] = toId;
+      if (clientToken != null) body['client_token'] = clientToken;
       final res = await http
           .post(
             Uri.parse(_commentBase),
@@ -209,6 +212,46 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] getAllVersions error: $e');
       return [];
+    }
+  }
+
+  // ---- 账号注册 ----
+
+  static const _userBase = 'https://tree.leisure.xin/node/user';
+
+  static Future<bool> register({
+    required String clientToken,
+    required String deviceId,
+    required String platform,
+    required String deviceModel,
+    required String osVersion,
+    String? brand,
+    String? manufacturer,
+    bool isPhysicalDevice = true,
+    List<String>? supportedAbis,
+  }) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_userBase/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'client_token': clientToken,
+              'device_id': deviceId,
+              'platform': platform,
+              'device_model': deviceModel,
+              'os_version': osVersion,
+              'brand': brand,
+              'manufacturer': manufacturer,
+              'is_physical_device': isPhysicalDevice,
+              'supported_abis': supportedAbis,
+            }),
+          )
+          .timeout(_timeout);
+      return _isHttpSuccess(res.statusCode);
+    } catch (e) {
+      debugPrint('[ApiService] register error: $e');
+      return false;
     }
   }
 

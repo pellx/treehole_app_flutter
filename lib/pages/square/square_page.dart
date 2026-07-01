@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
@@ -19,6 +20,7 @@ import '../post/post_create_page.dart';
 import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
 import '../settings/version_page.dart';
+import '../settings/version_detail_page.dart';
 import '../../models/version_info.dart';
 
 class SquarePage extends StatefulWidget {
@@ -44,6 +46,7 @@ class _SquarePageState extends State<SquarePage> {
   late final TextEditingController _nameController;
   final FocusNode _nameFocus = FocusNode();
   bool _editingName = false;
+  bool _updateAvailable = false;                     // 有新版本可更新
 
   Future<File> _avatarSavePath() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -153,22 +156,9 @@ class _SquarePageState extends State<SquarePage> {
   Future<void> _checkVersion() async {
     final latest = await ApiService.getLatestVersion();
     if (latest == null || !mounted) return;
-    // 缓存
     await PostStorage.saveLatestVersion(latest);
-    // 比较版本
     if (latest.versionNumber != VersionInfo.currentVersion && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('发现新版本 v${latest.versionNumber}'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () {
-              navigateToSettingsPage(context, '更新日志', const VersionPage());
-            },
-          ),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      setState(() => _updateAvailable = true);
     }
   }
 
@@ -396,7 +386,7 @@ class _SquarePageState extends State<SquarePage> {
         if (!didPop) ImageOverlay.closeCurrent();
       },
       child: Scaffold(
-      drawerEdgeDragWidth: MediaQuery.of(context).size.width / 4,
+      drawerEdgeDragWidth: MediaQuery.of(context).size.width / 3,
       drawer: Builder(builder: (ctx) {
         final colors = Theme.of(ctx).extension<AppColors>()!;
         return Drawer(
@@ -430,23 +420,34 @@ class _SquarePageState extends State<SquarePage> {
                     ),
                     SizedBox(width: AppDimens.drawerAvatarTextGap),
                     Expanded(
-                      child: _editingName
-                          ? TextField(
-                              controller: _nameController,
-                              focusNode: _nameFocus,
-                              autofocus: true,
-                              style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                              onSubmitted: (_) => _saveName(),
-                            )
-                          : GestureDetector(
-                              onTap: () => setState(() => _editingName = true),
-                              child: Text(PostStorage.getUserName(), style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _editingName
+                              ? TextField(
+                                  controller: _nameController,
+                                  focusNode: _nameFocus,
+                                  autofocus: true,
+                                  style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onSubmitted: (_) => _saveName(),
+                                )
+                              : GestureDetector(
+                                  onTap: () => setState(() => _editingName = true),
+                                  child: Text(PostStorage.getUserName(), style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
+                                ),
+                          if (!PostStorage.isRegistered())
+                            Text(
+                              '目前未注册账号',
+                              style: TextStyle(fontSize: 11, color: colors.common.trailingIcon),
                             ),
+                        ],
+                      ),
                     ),
                     Icon(Icons.chevron_right, color: colors.common.trailingIcon),
                   ],
@@ -460,16 +461,46 @@ class _SquarePageState extends State<SquarePage> {
                     _drawerTile(Icons.person_outline, '用户（没做）'),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
-                    _drawerTile(Icons.system_update_outlined, '更新日志', onTap: () {
+                    _drawerTile(Icons.system_update_outlined, '更新', onTap: () {
                       Navigator.pop(context);
-                      navigateToSettingsPage(context, '更新日志', const VersionPage());
+                      navigateToSettingsPage(context, '更新', const VersionPage());
                     }),
                   ],
                 ),
               ),
-              Padding(
+              GestureDetector(
+                onTap: () {
+                  final latest = PostStorage.getLatestCachedVersion();
+                  if (latest != null) {
+                    Navigator.push(context, PageRouteBuilder(
+                      pageBuilder: (_, __, ___) => VersionDetailPage(version: latest),
+                      transitionsBuilder: (_, animation, __, child) => SlideTransition(
+                        position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+                        child: child,
+                      ),
+                      transitionDuration: const Duration(milliseconds: 300),
+                    ));
+                  }
+                },
+                child: Padding(
                 padding: EdgeInsets.only(bottom: 16),
-                child: Text('版本 ${VersionInfo.currentVersion}', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('版本 ${VersionInfo.currentVersion}', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
+                    if (_updateAvailable) ...[
+                      const SizedBox(width: 4),
+                      SvgPicture.asset(
+                        'assets/icons/game-pack/front.svg',
+                        width: AppDimens.updateArrowSize,
+                        height: AppDimens.updateArrowSize,
+                        colorFilter: ColorFilter.mode(colors.common.updateArrow, BlendMode.srcIn),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               ),
             ],
           ),
