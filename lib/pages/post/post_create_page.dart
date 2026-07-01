@@ -15,6 +15,7 @@ import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/moderation_feedback.dart';
+import '../account/account_page.dart';
 
 class PostCreatePage extends StatefulWidget {
   const PostCreatePage({super.key});
@@ -585,7 +586,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
     final animMs = AppDimens.postCreateLabelAnimMs;
     final curve = Curves.easeOut;
     return GestureDetector(
-      onTap: () => _titleFocus.requestFocus(),
+      onTap: () => PostStorage.isRegistered() ? _titleFocus.requestFocus() : Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage())),
       child: Container(
         height: AppDimens.postCreateTitleMinHeight,
         padding: EdgeInsets.symmetric(horizontal: AppDimens.postCreateInputPaddingH),
@@ -607,7 +608,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                   fontSize: float ? AppDimens.postCreateLabelFontSizeSmall : AppDimens.postCreateLabelFontSizeLarge,
                   color: float ? colors.postCreate.titleLabelFloat : colors.postCreate.titleLabelRest,
                 ),
-                child: const Text('标题'),
+                child: Text(PostStorage.isRegistered() ? '标题' : '请注册'),
               ),
             ),
             // TextField：始终存在，动画上下移动
@@ -691,7 +692,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                         ? colors.postCreate.contentLabelFloat
                         : colors.postCreate.contentLabelRest,
                   ),
-                  child: const Text('内容'),
+                  child: Text(PostStorage.isRegistered() ? '内容' : '目前未绑定账号'),
                 ),
               ),
               AnimatedPositioned(
@@ -843,16 +844,18 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
   // ---- 第二部分：按钮行 ----
 
   Widget _buttonRow(AppColors colors, bool hasFiles, bool needsExpand) {
+    final registered = PostStorage.isRegistered();
     return Row(
       children: [
-        _iconOnlyButton(
-          icon: Icons.upload_file,
-          onTap: _uploading ? null : _pickFiles,
-          iconColor: colors.postCreate.uploadBtnIcon,
-          fillColor: colors.postCreate.fieldBg,
-          borderColor: colors.postCreate.uploadBtnBorder,
-        ),
-        SizedBox(width: AppDimens.postCreateActionRowGap),
+        if (registered)
+          _iconOnlyButton(
+            icon: Icons.upload_file,
+            onTap: _uploading ? null : _pickFiles,
+            iconColor: colors.postCreate.uploadBtnIcon,
+            fillColor: colors.postCreate.fieldBg,
+            borderColor: colors.postCreate.uploadBtnBorder,
+          ),
+        if (registered) SizedBox(width: AppDimens.postCreateActionRowGap),
         if (hasFiles)
           _iconOnlyButton(
             icon: Icons.delete_outline,
