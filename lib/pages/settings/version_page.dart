@@ -5,6 +5,8 @@ import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/version_card.dart';
+import 'version_detail_page.dart';
 
 class VersionPage extends StatefulWidget {
   const VersionPage({super.key});
@@ -25,7 +27,6 @@ class _VersionPageState extends State<VersionPage> {
   }
 
   Future<void> _load() async {
-    // 先显示缓存
     final cached = PostStorage.getCachedVersions();
     if (cached.isNotEmpty && mounted) {
       setState(() {
@@ -33,33 +34,14 @@ class _VersionPageState extends State<VersionPage> {
         _loading = false;
       });
     }
-
-    // 再从 API 拉最新
     final remote = await ApiService.getAllVersions();
     if (mounted) {
       if (remote.isNotEmpty) {
         await PostStorage.saveVersions(remote);
-        setState(() {
-          _versions = remote;
-          _loading = false;
-          _error = null;
-        });
+        setState(() { _versions = remote; _loading = false; _error = null; });
       } else if (cached.isEmpty) {
-        setState(() {
-          _loading = false;
-          _error = '加载失败，请检查网络';
-        });
+        setState(() { _loading = false; _error = '加载失败'; });
       }
-    }
-  }
-
-  String _formatDate(String raw) {
-    if (raw.isEmpty) return '';
-    try {
-      final dt = DateTime.parse(raw);
-      return '${dt.year}.${dt.month.toString().padLeft(2, '0')}.${dt.day.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw;
     }
   }
 
@@ -67,88 +49,30 @@ class _VersionPageState extends State<VersionPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text('更新日志'),
-        backgroundColor: colors.common.surface,
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(child: Text(_error!, style: TextStyle(color: colors.common.trailingIcon)));
+    }
+    if (_versions.isEmpty) {
+      return Center(child: Text('暂无版本记录', style: TextStyle(color: colors.common.trailingIcon)));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimens.cardHPadding, vertical: 12),
+      itemCount: _versions.length,
+      itemBuilder: (_, i) => VersionCard(
+        version: _versions[i],
+        isLatest: i == 0,
+        onTap: () => Navigator.push(context, PageRouteBuilder(
+          pageBuilder: (_, __, ___) => VersionDetailPage(version: _versions[i]),
+          transitionsBuilder: (_, animation, __, child) => SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+            child: child,
+          ),
+          transitionDuration: const Duration(milliseconds: 300),
+        )),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_error!, style: TextStyle(color: colors.common.onSurface)),
-                      const SizedBox(height: 12),
-                      TextButton(onPressed: _load, child: const Text('重试')),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: AppDimens.cardHPadding, vertical: 12),
-                  itemCount: _versions.length,
-                  itemBuilder: (_, i) {
-                    final v = _versions[i];
-                    final isLatest = i == 0;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: colors.common.surface,
-                        borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
-                        border: isLatest
-                            ? Border.all(color: colors.common.green, width: 1.5)
-                            : null,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  'v${v.versionNumber}',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: colors.common.onSurface,
-                                  ),
-                                ),
-                                if (isLatest) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: colors.common.green,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text('最新', style: TextStyle(fontSize: 11, color: Colors.white)),
-                                  ),
-                                ],
-                                const Spacer(),
-                                Text(
-                                  _formatDate(v.releaseDate),
-                                  style: TextStyle(fontSize: 12, color: colors.common.trailingIcon),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              v.changelog,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colors.common.onSurface,
-                                height: 1.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
     );
   }
 }

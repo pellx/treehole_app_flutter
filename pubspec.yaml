@@ -1,7 +1,7 @@
 name: treehole
 description: 树通 - 学生的匿名论坛
 publish_to: 'none'
-version: 1.0.0+1
+version: 0.4.0+1
 
 environment:
   sdk: ^3.8.0
@@ -20,6 +20,9 @@ dependencies:
   image_picker: ^1.1.0
   file_picker: ^10.0.0
   flutter_colorpicker: ^1.1.0
+  url_launcher: ^6.3.1
+  device_info_plus: ^11.3.3
+  open_filex: ^4.5.0
 
 dev_dependencies:
   flutter_test:

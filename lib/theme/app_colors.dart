@@ -25,6 +25,7 @@ class CommonColors {
   final Color overlayActionBarBg;
   final Color overlayIcon;
   final Color overlayPageDot;
+  final Color updateArrow;
 
   const CommonColors({
     required this.background,
@@ -48,6 +49,7 @@ class CommonColors {
     required this.overlayActionBarBg,
     required this.overlayIcon,
     required this.overlayPageDot,
+    required this.updateArrow,
   });
 }
 
@@ -71,18 +73,18 @@ class PostCardColors {
   final Color commentBg;
   final Color commentIcon;
   final Color commentDateSeparatorLine;
-  final Color commentInputBarBg;          // 评论输入栏外背景
-  final Color commentInputFieldBg;        // 评论输入框背景
-  final Color commentSendActiveBg;      // 评论发送按钮-激活背景
-  final Color commentSendActiveIcon;    // 评论发送按钮-激活图标
-  final Color commentSendInactiveBg;    // 评论发送按钮-未激活背景
-  final Color commentSendInactiveBorder;// 评论发送按钮-未激活描边
-  final Color commentSendInactiveIcon;  // 评论发送按钮-未激活图标
+  final Color commentInputBarBg;
+  final Color commentInputFieldBg;
+  final Color commentSendActiveBg;
+  final Color commentSendActiveIcon;
+  final Color commentSendInactiveBg;
+  final Color commentSendInactiveBorder;
+  final Color commentSendInactiveIcon;
   final Color expandIconBlue;
   final Color expandIconGray;
   final Color dotsButtonBg;
-  final Color actionMenuBg;      // 操作菜单背景
-  final Color actionBtnText;     // 操作按钮文字
+  final Color actionMenuBg;
+  final Color actionBtnText;
   final Color idTint;
   final Color idErrorFallback;
 
@@ -124,58 +126,31 @@ class PostCardColors {
 //  PostCreateColors — 发布页专属颜色
 // ============================================================
 class PostCreateColors {
-  // ---- 页面背景 ----
   final Color pageBg;
   final Color fieldBg;
   final Color divider;
-
-  // ---- 顶部栏 ----
   final Color topBarBg;
-
-  // ---- Floating label（标题）----
   final Color titleLabelRest;
   final Color titleLabelFloat;
-
-  // ---- Floating label（内容）----
   final Color contentLabelRest;
   final Color contentLabelFloat;
-
-  // ---- 预览区 ----
   final Color previewDivider;
-
-  // ---- 上传按钮 ----
   final Color uploadBtnBorder;
   final Color uploadBtnIcon;
-
-  // ---- 删除按钮 ----
   final Color deleteBtnBorder;
   final Color deleteBtnIcon;
-
-  // ---- 展开按钮 ----
   final Color expandBtnBorder;
   final Color expandBtnIcon;
-
-  // ---- 署名按钮（未启用）----
   final Color authorIcon;
   final Color authorBorder;
-
-  // ---- 署名按钮（启用）----
   final Color authorActiveFill;
   final Color authorActiveIcon;
-
-  // ---- 底部提示文字 ----
   final Color bottomHintText;
-  final Color errorText;    // 错误提示颜色
-
-  // ---- 发布按钮 ----
+  final Color errorText;
   final Color submitBg;
   final Color submitText;
-
-  // ---- 右下角入口按钮 ----
   final Color buttonBg;
   final Color buttonIcon;
-
-  // ---- 内容展开覆盖层 ----
   final Color contentOverlay;
   final Color contentCollapseIcon;
 
@@ -211,17 +186,42 @@ class PostCreateColors {
 }
 
 // ============================================================
-//  AppColors — 主题扩展（聚合以上三类颜色，注册到 MaterialApp）
+//  VersionCardColors — 版本卡片专属颜色
+// ============================================================
+class VersionCardColors {
+  final Color version;
+  final Color badgeBg;
+  final Color badgeText;
+  final Color boxBg;
+  final Color title;
+  final Color log;
+  final Color latestBorder;
+
+  const VersionCardColors({
+    required this.version,
+    required this.badgeBg,
+    required this.badgeText,
+    required this.boxBg,
+    required this.title,
+    required this.log,
+    required this.latestBorder,
+  });
+}
+
+// ============================================================
+//  AppColors — 主题扩展
 // ============================================================
 class AppColors extends ThemeExtension<AppColors> {
   final CommonColors common;
   final PostCardColors postCard;
   final PostCreateColors postCreate;
+  final VersionCardColors versionCard;
 
   const AppColors({
     required this.common,
     required this.postCard,
     required this.postCreate,
+    required this.versionCard,
   });
 
   @override
@@ -229,11 +229,13 @@ class AppColors extends ThemeExtension<AppColors> {
     CommonColors? common,
     PostCardColors? postCard,
     PostCreateColors? postCreate,
+    VersionCardColors? versionCard,
   }) {
     return AppColors(
       common: common ?? this.common,
       postCard: postCard ?? this.postCard,
       postCreate: postCreate ?? this.postCreate,
+      versionCard: versionCard ?? this.versionCard,
     );
   }
 
@@ -244,6 +246,7 @@ class AppColors extends ThemeExtension<AppColors> {
       common: t < 0.5 ? common : other.common,
       postCard: t < 0.5 ? postCard : other.postCard,
       postCreate: t < 0.5 ? postCreate : other.postCreate,
+      versionCard: t < 0.5 ? versionCard : other.versionCard,
     );
   }
 
@@ -275,6 +278,7 @@ static const commonLight = CommonColors(
   overlayActionBarBg:     Color(0xE6212121),
   overlayIcon:            Color(0xFFFFFFFF),
   overlayPageDot:         Color(0xFFFFFFFF),
+  updateArrow:            Color(0xFF92C8FF),
 );
 
 static const commonDark = CommonColors(
@@ -299,6 +303,7 @@ static const commonDark = CommonColors(
   overlayActionBarBg:     Color(0xE6212121),
   overlayIcon:            Color(0xFFFFFFFF),
   overlayPageDot:         Color(0xFFFFFFFF),
+  updateArrow:            Color(0xFF235180),
 );
 
 // ---- PostCardColors ----
@@ -351,7 +356,7 @@ static const postCardDark = PostCardColors(
   commentDate:            Color(0xFF8B8B8B),
   commentRemain:          Color(0xA5999999),
   commentBg:              Color(0xFF282828),
-  commentIcon:            Color(0xA5999999),  
+  commentIcon:            Color(0xA5999999),
   commentDateSeparatorLine: Color(0x4D5F5D60),
   commentInputBarBg:        Color(0xFF1A1A1A),
   commentInputFieldBg:      Color(0xFF282828),
@@ -414,7 +419,7 @@ static const postCreateDark = PostCreateColors(
   uploadBtnBorder:        Color(0xFF286B9E),
   uploadBtnIcon:          Color(0xFF57B5FD),
   deleteBtnBorder:        Color(0xFF8B2F2F),
-  deleteBtnIcon:          Color(0xFFFB3E3E),  
+  deleteBtnIcon:          Color(0xFFFB3E3E),
   expandBtnBorder:        Color(0xFF2874AE),
   expandBtnIcon:          Color(0xFF57B5FD),
   authorIcon:             Color(0xFFAAAAAA),
@@ -431,17 +436,41 @@ static const postCreateDark = PostCreateColors(
   contentCollapseIcon:    Color(0xFFAAAAAA),
 );
 
+// ---- VersionCardColors ----
+
+static const versionCardLight = VersionCardColors(
+  version:                Color(0xFF000000),
+  badgeBg:                Color(0xFF3EB147),
+  badgeText:              Color(0xFFFFFFFF),
+  boxBg:                  Color(0xFFFFFFFF),
+  title:                  Color(0xFF000000),
+  log:                    Color(0xFF444444),
+  latestBorder:           Color(0xAF4AB655),
+);
+
+static const versionCardDark = VersionCardColors(
+  version:                Color(0xFFFFFFFF),
+  badgeBg:                Color(0xA953FF61),
+  badgeText:              Color(0xFFFFFFFF),
+  boxBg:                  Color(0xFF2C2C2C),
+  title:                  Color(0xFFFFFFFF),
+  log:                    Color(0xFFD9D9D9),
+  latestBorder:           Color(0x6C7AB47F),
+);
+
 // ---- AppColors ----
 
   static const light = AppColors(
     common: commonLight,
     postCard: postCardLight,
     postCreate: postCreateLight,
+    versionCard: versionCardLight,
   );
 
   static const dark = AppColors(
     common: commonDark,
     postCard: postCardDark,
     postCreate: postCreateDark,
+    versionCard: versionCardDark,
   );
 }
