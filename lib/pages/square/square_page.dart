@@ -21,6 +21,8 @@ import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
 import '../settings/version_page.dart';
 import '../settings/version_detail_page.dart';
+import '../account/register_page.dart';
+import '../account/user_page.dart';
 import '../../models/version_info.dart';
 
 class SquarePage extends StatefulWidget {
@@ -43,9 +45,6 @@ class _SquarePageState extends State<SquarePage> {
   bool _postButtonVisible = true;                   // 发布按钮显隐
   bool _commentOverlayActive = false;                // 评论浮层活跃时禁止滚动唤出
   Duration _postButtonAnimDuration = const Duration(milliseconds: 300);
-  late final TextEditingController _nameController;
-  final FocusNode _nameFocus = FocusNode();
-  bool _editingName = false;
   bool _updateAvailable = false;                     // 有新版本可更新
 
   Future<File> _avatarSavePath() async {
@@ -83,29 +82,13 @@ class _SquarePageState extends State<SquarePage> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: PostStorage.getUserName());
-    _nameFocus.addListener(() {
-      if (!_nameFocus.hasFocus && _editingName) {
-        _saveName();
-      }
-    });
     _loadAvatar();
     _initLoad();
     ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
   }
 
-  void _saveName() {
-    final name = _nameController.text.trim();
-    final saved = name.isEmpty ? '匿名用户' : name;
-    _nameController.text = saved;
-    PostStorage.saveUserName(saved);
-    if (mounted) setState(() => _editingName = false);
-  }
-
   @override
   void dispose() {
-    _nameController.dispose();
-    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -395,19 +378,26 @@ class _SquarePageState extends State<SquarePage> {
         child: SafeArea(
           child: Column(
             children: [
-              Container(
-                color: colors.common.drawerHeaderBg,
-                padding: EdgeInsets.only(
-                  left: AppDimens.drawerHeaderPaddingLeft,
-                  right: AppDimens.drawerHeaderPaddingRight,
-                  top: AppDimens.drawerHeaderPaddingTop,
-                  bottom: AppDimens.drawerHeaderPaddingBottom,
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: _pickAvatar,
-                      child: _avatarBytes != null
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  if (PostStorage.isRegistered()) {
+                    Navigator.of(context).push(bottomUpRoute(const UserPage()));
+                  } else {
+                    Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+                  }
+                },
+                child: Container(
+                  color: colors.common.drawerHeaderBg,
+                  padding: EdgeInsets.only(
+                    left: AppDimens.drawerHeaderPaddingLeft,
+                    right: AppDimens.drawerHeaderPaddingRight,
+                    top: AppDimens.drawerHeaderPaddingTop,
+                    bottom: AppDimens.drawerHeaderPaddingBottom,
+                  ),
+                  child: Row(
+                    children: [
+                      _avatarBytes != null
                           ? CircleAvatar(
                               radius: AppDimens.drawerAvatarSize / 2,
                               backgroundImage: MemoryImage(_avatarBytes!),
@@ -417,40 +407,27 @@ class _SquarePageState extends State<SquarePage> {
                               backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
                               backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
                             ),
-                    ),
-                    SizedBox(width: AppDimens.drawerAvatarTextGap),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _editingName
-                              ? TextField(
-                                  controller: _nameController,
-                                  focusNode: _nameFocus,
-                                  autofocus: true,
-                                  style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
-                                  decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  onSubmitted: (_) => _saveName(),
-                                )
-                              : GestureDetector(
-                                  onTap: () => setState(() => _editingName = true),
-                                  child: Text(PostStorage.getUserName(), style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
-                                ),
-                          if (!PostStorage.isRegistered())
+                      SizedBox(width: AppDimens.drawerAvatarTextGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Text(
-                              '目前未注册账号',
-                              style: TextStyle(fontSize: 11, color: colors.common.trailingIcon),
+                              PostStorage.getDisplayName() ?? PostStorage.getUserName(),
+                              style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
                             ),
-                        ],
+                            if (!PostStorage.isRegistered())
+                              Text(
+                                '目前未注册账号',
+                                style: TextStyle(fontSize: 11, color: colors.common.trailingIcon),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Icon(Icons.chevron_right, color: colors.common.trailingIcon),
-                  ],
+                      Icon(Icons.chevron_right, color: colors.common.trailingIcon),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
@@ -458,7 +435,14 @@ class _SquarePageState extends State<SquarePage> {
                   padding: EdgeInsets.zero,
                   children: [
                     _drawerTile(Icons.home_outlined, '主页（没做）'),
-                    _drawerTile(Icons.person_outline, '用户（没做）'),
+                    _drawerTile(Icons.person_outline, '用户', onTap: () {
+                      Navigator.pop(context);
+                      if (PostStorage.isRegistered()) {
+                        Navigator.of(context).push(bottomUpRoute(const UserPage()));
+                      } else {
+                        Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+                      }
+                    }),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
                     _drawerTile(Icons.system_update_outlined, '更新', onTap: () {

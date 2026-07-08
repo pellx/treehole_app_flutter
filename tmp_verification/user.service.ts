@@ -8,11 +8,13 @@ import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { UserEntity } from './entities/user.entity';
-import { DeviceEntity } from '../device/entities/device.entity';
-import { UserDeviceBindingEntity } from '../device/entities/user-device-binding.entity';
-import { SessionEntity } from '../device/entities/session.entity';
-import { UserIdentifierHistoryEntity } from '../device/entities/user-identifier-history.entity';
-import { RateLimitLogEntity } from '../device/entities/rate-limit-log.entity';
+import { DeviceEntity } from './entities/device.entity';
+import { UserDeviceBindingEntity } from './entities/user-device-binding.entity';
+import { SessionEntity } from './entities/session.entity';
+import { UserIdentifierHistoryEntity } from './entities/user-identifier-history.entity';
+import { RateLimitLogEntity } from './entities/rate-limit-log.entity';
+import { VerificationService } from './verification/verification.service';
+import { PoWStrategy } from './verification/pow.strategy';
 
 const SESSION_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const MAX_USER_DEVICES = 4;
@@ -35,12 +37,33 @@ export class UserService {
     private readonly historyRepo: Repository<UserIdentifierHistoryEntity>,
     @InjectRepository(RateLimitLogEntity)
     private readonly rateLimitRepo: Repository<RateLimitLogEntity>,
+    private readonly verificationService: VerificationService,
+    private readonly powStrategy: PoWStrategy,
   ) {}
 
-  async initDevice(dto: { device_finger_print?: any }): Promise<{
+  async getPoWChallenge() {
+    return this.powStrategy.createChallenge();
+  }
+
+  async initDevice(dto: {
+    device_finger_print: any;
+    verification_turnstile: string;
+    verification_pow: string;
+  }): Promise<{
     device_id: number;
     device_secret: string;
   }> {
+    // Turnstile 验证
+    const turnstileResult = await this.verificationService.verify('turnstile', dto.verification_turnstile);
+    if (!turnstileResult.success) {
+      throw new BadRequestException(turnstileResult.message ?? 'Turnstile 验证失败');
+    }
+    // PoW 验证
+    const powResult = await this.verificationService.verify('pow', dto.verification_pow);
+    if (!powResult.success) {
+      throw new BadRequestException(powResult.message ?? 'PoW 验证失败');
+    }
+
     const deviceSecret = this.generateDeviceSecret();
     const deviceSecretHash = await bcrypt.hash(deviceSecret, 10);
 
@@ -124,10 +147,12 @@ export class UserService {
       where: { session_id: sessionId },
     });
     if (!session) throw new UnauthorizedException('SESSION_INVALID');
-    if (new Date() > session.expires_at) throw new UnauthorizedException('SESSION_EXPIRED');
+    if (new Date() > session.expires_at)
+      throw new UnauthorizedException('SESSION_EXPIRED');
 
     const hash = createHash('sha256').update(sessionSecret).digest('hex');
-    if (hash !== session.session_secret_hash) throw new UnauthorizedException('SESSION_INVALID');
+    if (hash !== session.session_secret_hash)
+      throw new UnauthorizedException('SESSION_INVALID');
 
     return session.user_id;
   }
@@ -163,28 +188,38 @@ export class UserService {
   // 子流程
   // ============================================================
 
-  private async verifyDeviceSecret(deviceSecret: string): Promise<DeviceEntity> {
+  private async verifyDeviceSecret(
+    deviceSecret: string,
+  ): Promise<DeviceEntity> {
     const devices = await this.deviceRepo.find();
     for (const device of devices) {
-      const match = await bcrypt.compare(deviceSecret, device.device_secret_hash);
+      const match = await bcrypt.compare(
+        deviceSecret,
+        device.device_secret_hash,
+      );
       if (match) return device;
     }
     throw new UnauthorizedException('DEVICE_SECRET_INVALID');
   }
 
-  private async bindUserToDevice(userId: number, deviceId: number): Promise<void> {
+  private async bindUserToDevice(
+    userId: number,
+    deviceId: number,
+  ): Promise<void> {
     await this.authorizeNewBinding(userId, deviceId);
 
     await this.bindingRepo.manager.transaction(async (manager) => {
       const userCount = await manager.count(UserDeviceBindingEntity, {
         where: { user_id: userId, status: 'active' },
       });
-      if (userCount >= MAX_USER_DEVICES) throw new BadRequestException('用户绑定设备数已达上限');
+      if (userCount >= MAX_USER_DEVICES)
+        throw new BadRequestException('用户绑定设备数已达上限');
 
       const deviceCount = await manager.count(UserDeviceBindingEntity, {
         where: { device_id: deviceId, status: 'active' },
       });
-      if (deviceCount >= MAX_DEVICE_USERS) throw new BadRequestException('设备绑定用户数已达上限');
+      if (deviceCount >= MAX_DEVICE_USERS)
+        throw new BadRequestException('设备绑定用户数已达上限');
 
       await manager.insert(UserDeviceBindingEntity, {
         user_id: userId,
@@ -194,7 +229,10 @@ export class UserService {
     });
   }
 
-  private async authorizeNewBinding(userId: number, deviceId: number): Promise<void> {
+  private async authorizeNewBinding(
+    userId: number,
+    deviceId: number,
+  ): Promise<void> {
     return;
   }
 
@@ -206,7 +244,9 @@ export class UserService {
     await this.checkRateLimit('device', String(deviceId));
 
     const sessionSecret = this.generateSessionSecret();
-    const sessionSecretHash = createHash('sha256').update(sessionSecret).digest('hex');
+    const sessionSecretHash = createHash('sha256')
+      .update(sessionSecret)
+      .digest('hex');
 
     const result = await this.sessionRepo.insert({
       session_secret_hash: sessionSecretHash,
@@ -216,8 +256,16 @@ export class UserService {
     });
 
     await this.rateLimitRepo.insert([
-      { subject_type: 'user', subject_id: String(userId), action: 'session_application' },
-      { subject_type: 'device', subject_id: String(deviceId), action: 'session_application' },
+      {
+        subject_type: 'user',
+        subject_id: String(userId),
+        action: 'session_application',
+      },
+      {
+        subject_type: 'device',
+        subject_id: String(deviceId),
+        action: 'session_application',
+      },
     ]);
 
     return {
@@ -226,7 +274,10 @@ export class UserService {
     };
   }
 
-  private async checkRateLimit(subjectType: string, subjectId: string): Promise<void> {
+  private async checkRateLimit(
+    subjectType: string,
+    subjectId: string,
+  ): Promise<void> {
     const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
     const [result] = await this.rateLimitRepo.manager.query(
       `SELECT COUNT(*) as cnt FROM rate_limit_log
@@ -234,7 +285,8 @@ export class UserService {
        AND created_at > ?`,
       [subjectType, subjectId, windowStart],
     );
-    if (result?.cnt >= RATE_LIMIT_COUNT) throw new BadRequestException('RATE_LIMITED');
+    if (result?.cnt >= RATE_LIMIT_COUNT)
+      throw new BadRequestException('RATE_LIMITED');
   }
 
   private generateExternalToken(): string {

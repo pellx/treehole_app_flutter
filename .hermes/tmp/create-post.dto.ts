@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, MaxLength, ArrayMaxSize, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, ValidateNested, MaxLength, ArrayMaxSize, IsIn, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UploadItemDto {
@@ -37,7 +37,11 @@ export class CreatePostDto {
     @Type(() => UploadItemDto)
     uploaded: UploadItemDto[] = [];
 
+    @IsInt()
+    @Type(() => Number)
+    session_id: number;
+
     @IsNotEmpty()
     @IsString()
-    client_token: string;
+    session_secret: string;
 }

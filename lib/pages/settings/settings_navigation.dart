@@ -56,6 +56,18 @@ Route<T> topDownRoute<T>(Widget page) {
   );
 }
 
+Route<T> bottomUpRoute<T>(Widget page) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (_, __, ___) => page,
+    transitionsBuilder: (_, animation, __, child) => SlideTransition(
+      position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+          .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+      child: child,
+    ),
+    transitionDuration: Duration(milliseconds: AppDimens.drawerAnimMs),
+  );
+}
+
 void navigateToSettingsPage(BuildContext context, String title, Widget body) {
   Navigator.of(context).push(PageRouteBuilder(
     pageBuilder: (_, __, ___) {

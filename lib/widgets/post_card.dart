@@ -8,7 +8,8 @@ import '../theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/storage.dart';
 import '../services/api.dart';
-import '../pages/account/account_page.dart';
+import '../pages/account/register_page.dart';
+import '../pages/settings/settings_navigation.dart';
 import 'dart:typed_data';
 import 'image_overlay.dart';
 
@@ -630,7 +631,7 @@ class _PostCardState extends State<PostCard> {
                               Positioned.fill(
                                 child: GestureDetector(
                                   onTap: () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
+                                    Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
                                   },
                                   child: Container(
                                     decoration: BoxDecoration(

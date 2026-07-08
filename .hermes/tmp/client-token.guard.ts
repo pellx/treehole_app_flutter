@@ -12,21 +12,26 @@ export class ClientTokenGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const body = request.body || {};
+    const body = request.body;
 
-    const clientToken = body.client_token;
-    if (!clientToken) {
-      throw new UnauthorizedException('Missing client_token');
+    const localTokenHash = body?.local_token_hash;
+    const externalToken = body?.external_token;
+    const deviceId = body?.device_id;
+
+    if (!localTokenHash || !externalToken || !deviceId) {
+      throw new UnauthorizedException('MISSING_AUTH_FIELDS');
     }
 
-    const deviceId = body.device_id;
-    const osVersion = body.os_version;
-
-    const userToken = await this.userService.validate(
-      clientToken,
-      deviceId,
-      osVersion,
-    );
+    const userToken = await this.userService.validate({
+      local_token_hash: localTokenHash,
+      external_token: externalToken,
+      device_id: deviceId,
+      platform: body?.platform ?? 'unknown',
+      device_model: body?.device_model ?? 'unknown',
+      os_version: body?.os_version ?? '0',
+      brand: body?.brand,
+      manufacturer: body?.manufacturer,
+    });
 
     request.user_token = userToken;
     return true;

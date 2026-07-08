@@ -30,12 +30,64 @@ class PostStorage {
 
   // ---- 账号 ----
 
-  static String? getLocalToken() {
-    return _accountBox.get('local_token') as String?;
+  static String? getDeviceSecret() {
+    return _accountBox.get('device_secret') as String?;
   }
 
-  static Future<void> saveLocalToken(String token) async {
-    await _accountBox.put('local_token', token);
+  static Future<void> saveDeviceSecret(String secret) async {
+    await _accountBox.put('device_secret', secret);
+  }
+
+  static int? getDeviceId() {
+    return _accountBox.get('device_id') as int?;
+  }
+
+  static Future<void> saveDeviceId(int id) async {
+    await _accountBox.put('device_id', id);
+  }
+
+  static String? getFingerprintHash() {
+    return _accountBox.get('fingerprint_hash') as String?;
+  }
+
+  static Future<void> saveFingerprintHash(String hash) async {
+    await _accountBox.put('fingerprint_hash', hash);
+  }
+
+  static String? getUserExternalToken() {
+    return _accountBox.get('user_external_token') as String?;
+  }
+
+  static Future<void> saveUserExternalToken(String token) async {
+    await _accountBox.put('user_external_token', token);
+  }
+
+  static String? getSessionSecret() {
+    return _accountBox.get('session_secret') as String?;
+  }
+
+  static Future<void> saveSessionSecret(String secret) async {
+    await _accountBox.put('session_secret', secret);
+  }
+
+  static int? getSessionId() {
+    return _accountBox.get('session_id') as int?;
+  }
+
+  static Future<void> saveSessionId(int id) async {
+    await _accountBox.put('session_id', id);
+  }
+
+  static String? getDisplayName() {
+    return _accountBox.get('display_name') as String?;
+  }
+
+  static Future<void> saveDisplayName(String name) async {
+    await _accountBox.put('display_name', name);
+  }
+
+  static int getUserCount() {
+    return (_accountBox.get('user_external_token') != null) ? 1 : 0;
   }
 
   static bool isRegistered() {
@@ -44,6 +96,10 @@ class PostStorage {
 
   static Future<void> setRegistered(bool value) async {
     await _accountBox.put('registered', value);
+  }
+
+  static Future<void> clearAccount() async {
+    await _accountBox.clear();
   }
 
   // ---- ID 列表 ----

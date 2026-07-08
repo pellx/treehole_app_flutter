@@ -1,51 +1,38 @@
-import { Controller, Post, Body } from '@nestjs/common';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray } from 'class-validator';
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { UserService } from './user.service';
-
-class RegisterDto {
-  @IsString()
-  @IsNotEmpty()
-  client_token: string;
-
-  @IsString()
-  @IsNotEmpty()
-  device_id: string;
-
-  @IsString()
-  @IsNotEmpty()
-  platform: string;
-
-  @IsString()
-  @IsNotEmpty()
-  device_model: string;
-
-  @IsString()
-  @IsNotEmpty()
-  os_version: string;
-
-  @IsOptional()
-  @IsString()
-  brand?: string;
-
-  @IsOptional()
-  @IsString()
-  manufacturer?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  is_physical_device?: boolean;
-
-  @IsOptional()
-  @IsArray()
-  supported_abis?: string[];
-}
+import { InitDeviceDto, RegisterDto, LoginDto, UnbindDto } from './dto';
 
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  @Post('init-device')
+  @HttpCode(HttpStatus.CREATED)
+  async initDevice(@Body() dto: InitDeviceDto) {
+    return this.userService.initDevice(dto);
+  }
+
   @Post('register')
+  @HttpCode(HttpStatus.CREATED)
   async register(@Body() dto: RegisterDto) {
     return this.userService.register(dto);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() dto: LoginDto) {
+    return this.userService.login(dto);
+  }
+
+  @Post('request-unbind')
+  async requestUnbind(@Body() dto: UnbindDto) {
+    await this.userService.requestUnbind(dto.user_id, dto.device_id);
+    return { status: 'pending' };
+  }
+
+  @Post('confirm-unbind')
+  async confirmUnbind(@Body() dto: UnbindDto) {
+    await this.userService.confirmUnbind(dto.user_id, dto.device_id);
+    return { status: 'unbound' };
   }
 }

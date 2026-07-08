@@ -1,4 +1,5 @@
-import { IsString, IsIn, IsOptional, IsNotEmpty } from 'class-validator';
+import { IsString, IsIn, IsOptional, IsNotEmpty, IsInt } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UploadFileDto {
   @IsOptional()
@@ -6,7 +7,11 @@ export class UploadFileDto {
   @IsIn(['image', 'attachment'])
   type?: string;
 
+  @IsInt()
+  @Type(() => Number)
+  session_id: number;
+
   @IsNotEmpty()
   @IsString()
-  client_token: string;
+  session_secret: string;
 }

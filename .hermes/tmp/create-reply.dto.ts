@@ -1,4 +1,5 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MaxLength, IsInt } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateReplyDto {
     @IsNotEmpty()
@@ -14,7 +15,11 @@ export class CreateReplyDto {
     @MaxLength(100)
     author?: string;
 
+    @IsInt()
+    @Type(() => Number)
+    session_id: number;
+
     @IsNotEmpty()
     @IsString()
-    client_token: string;
+    session_secret: string;
 }

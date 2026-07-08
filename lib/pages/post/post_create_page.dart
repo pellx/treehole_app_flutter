@@ -15,7 +15,8 @@ import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/moderation_feedback.dart';
-import '../account/account_page.dart';
+import '../account/register_page.dart';
+import '../settings/settings_navigation.dart';
 
 class PostCreatePage extends StatefulWidget {
   const PostCreatePage({super.key});
@@ -265,6 +266,8 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       content: _contentController.text,
       author: _hasAuthor ? _userName : '',
       uploaded: _uploaded,
+      sessionId: PostStorage.getSessionId() ?? 0,
+      sessionSecret: PostStorage.getSessionSecret() ?? '',
     );
 
     final post = await ApiService.createPost(draft);
@@ -586,7 +589,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
     final animMs = AppDimens.postCreateLabelAnimMs;
     final curve = Curves.easeOut;
     return GestureDetector(
-      onTap: () => PostStorage.isRegistered() ? _titleFocus.requestFocus() : Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage())),
+      onTap: () => PostStorage.isRegistered() ? _titleFocus.requestFocus() : Navigator.of(context).push(bottomUpRoute(const RegisterPage())),
       child: Container(
         height: AppDimens.postCreateTitleMinHeight,
         padding: EdgeInsets.symmetric(horizontal: AppDimens.postCreateInputPaddingH),
@@ -649,7 +652,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
             .toDouble();
 
     return GestureDetector(
-      onTap: () => PostStorage.isRegistered() ? _contentFocus.requestFocus() : Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage())),
+      onTap: () => PostStorage.isRegistered() ? _contentFocus.requestFocus() : Navigator.of(context).push(bottomUpRoute(const RegisterPage())),
       child: Container(
       key: key,
       child: LayoutBuilder(

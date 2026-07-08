@@ -6,12 +6,57 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/comment.dart';
+import '../models/device_fingerprint.dart';
 import '../models/post.dart';
+import 'pow.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
 import '../models/version_info.dart';
+import 'storage.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
+
+enum RegistrationFailureType {
+  networkError,
+  deviceAlreadyRegistered,
+  unknown,
+}
+
+class RegistrationResult {
+  final bool success;
+  final String? sessionSecret;
+  final int? sessionId;
+  final String? userExternalToken;
+  final RegistrationFailureType? failureType;
+
+  const RegistrationResult._({
+    required this.success,
+    this.sessionSecret,
+    this.sessionId,
+    this.userExternalToken,
+    this.failureType,
+  });
+
+  factory RegistrationResult.ok(String sessionSecret, int sessionId, String userExternalToken) =>
+      RegistrationResult._(success: true, sessionSecret: sessionSecret, sessionId: sessionId, userExternalToken: userExternalToken);
+
+  factory RegistrationResult.failure(RegistrationFailureType type) =>
+      RegistrationResult._(success: false, failureType: type);
+}
+
+class InitDeviceResult {
+  final bool success;
+  final int? deviceId;
+  final String? deviceSecret;
+  final String? fingerprintHash;
+
+  const InitDeviceResult._({required this.success, this.deviceId, this.deviceSecret, this.fingerprintHash});
+
+  factory InitDeviceResult.ok(int deviceId, String deviceSecret, String fingerprintHash) =>
+      InitDeviceResult._(success: true, deviceId: deviceId, deviceSecret: deviceSecret, fingerprintHash: fingerprintHash);
+
+  factory InitDeviceResult.failure() => const InitDeviceResult._(success: false);
+}
 
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
@@ -77,11 +122,12 @@ class ApiService {
     return (w, h);
   }
 
-  static Future<UploadResult?> uploadFile(PostUploadType type, File file, {String? clientToken}) async {
+  static Future<UploadResult?> uploadFile(PostUploadType type, File file) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
       request.fields['type'] = type.apiValue;
-      if (clientToken != null) request.fields['client_token'] = clientToken;
+      request.fields['session_id'] = (PostStorage.getSessionId() ?? 0).toString();
+      request.fields['session_secret'] = PostStorage.getSessionSecret() ?? '';
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
       final streamed = await request.send().timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
@@ -145,16 +191,16 @@ class ApiService {
     required String content,
     String? author,
     int? toId,
-    String? clientToken,
   }) async {
     try {
       final body = <String, dynamic>{
         'postId': postId,
         'content': content,
+        'session_id': PostStorage.getSessionId() ?? 0,
+        'session_secret': PostStorage.getSessionSecret() ?? '',
       };
       if (author != null && author.isNotEmpty) body['author'] = author;
       if (toId != null) body['toId'] = toId;
-      if (clientToken != null) body['client_token'] = clientToken;
       final res = await http
           .post(
             Uri.parse(_commentBase),
@@ -219,39 +265,151 @@ class ApiService {
 
   static const _userBase = 'https://tree.leisure.xin/node/user';
 
-  static Future<bool> register({
-    required String clientToken,
-    required String deviceId,
-    required String platform,
-    required String deviceModel,
-    required String osVersion,
-    String? brand,
-    String? manufacturer,
-    bool isPhysicalDevice = true,
-    List<String>? supportedAbis,
+  static Future<InitDeviceResult> initDevice({
+    required String turnstileToken,
+    required String powChallengeId,
+    required int powNonce,
+    required DeviceFingerprint deviceFingerPrint,
+    required String uniqueToken,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'verification_turnstile': turnstileToken,
+        'verification_pow': {
+          'challenge_id': powChallengeId,
+          'nonce': powNonce,
+        },
+        'device_finger_print': deviceFingerPrint.toJson(),
+        'unique_token': uniqueToken,
+      };
+      final res = await http
+          .post(Uri.parse('$_userBase/init-device'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(body))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final deviceId = data['device_id'] as int?;
+        final deviceSecret = data['device_secret'] as String?;
+        final fingerprintHash = data['fingerprint_hash'] as String?;
+        if (deviceId != null && deviceSecret != null && fingerprintHash != null) {
+          return InitDeviceResult.ok(deviceId, deviceSecret, fingerprintHash);
+        }
+        debugPrint('[ApiService] initDevice parsed but missing fields: ${res.body}');
+      } else {
+        debugPrint('[ApiService] initDevice status=${res.statusCode} body=${res.body}');
+      }
+      return InitDeviceResult.failure();
+    } catch (e) {
+      debugPrint('[ApiService] initDevice error: $e');
+      return InitDeviceResult.failure();
+    }
+  }
+
+  /// 获取 PoW hashcash challenge
+  static Future<PoWChallenge?> getPoWChallenge() async {
+    try {
+      final res = await http.get(Uri.parse('$_userBase/pow-challenge')).timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] getPoWChallenge status=${res.statusCode}');
+        return null;
+      }
+      return PoWChallenge.fromJson(jsonDecode(res.body));
+    } catch (e) {
+      debugPrint('[ApiService] getPoWChallenge error: $e');
+      return null;
+    }
+  }
+
+  static Future<RegistrationResult> register({
+    required String deviceSecret,
+    required String uniqueToken,
+    required String fingerprintHash,
   }) async {
     try {
       final res = await http
-          .post(
-            Uri.parse('$_userBase/register'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'client_token': clientToken,
-              'device_id': deviceId,
-              'platform': platform,
-              'device_model': deviceModel,
-              'os_version': osVersion,
-              'brand': brand,
-              'manufacturer': manufacturer,
-              'is_physical_device': isPhysicalDevice,
-              'supported_abis': supportedAbis,
-            }),
-          )
+          .post(Uri.parse('$_userBase/register'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'device_secret': deviceSecret,
+                'unique_token': uniqueToken,
+                'fingerprint_hash': fingerprintHash,
+              }))
           .timeout(_timeout);
-      return _isHttpSuccess(res.statusCode);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return RegistrationResult.ok(
+          data['session_secret'] as String,
+          data['session_id'] as int,
+          data['user_external_token'] as String,
+        );
+      }
+      if (res.statusCode == 401) return RegistrationResult.failure(RegistrationFailureType.deviceAlreadyRegistered);
+      return RegistrationResult.failure(RegistrationFailureType.unknown);
     } catch (e) {
       debugPrint('[ApiService] register error: $e');
-      return false;
+      return RegistrationResult.failure(RegistrationFailureType.networkError);
+    }
+  }
+
+  static Future<RegistrationResult> login({
+    required String deviceSecret,
+    required int deviceId,
+    required String userExternalToken,
+    required Map<String, dynamic> deviceFingerPrint,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/login'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'device_secret': deviceSecret,
+                'device_id': deviceId,
+                'user_external_token': userExternalToken,
+                'device_finger_print': deviceFingerPrint,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return RegistrationResult.ok(
+          data['session_secret'] as String,
+          data['session_id'] as int,
+          userExternalToken,
+        );
+      }
+      if (res.statusCode == 401) return RegistrationResult.failure(RegistrationFailureType.deviceAlreadyRegistered);
+      return RegistrationResult.failure(RegistrationFailureType.unknown);
+    } catch (e) {
+      debugPrint('[ApiService] login error: $e');
+      return RegistrationResult.failure(RegistrationFailureType.networkError);
+    }
+  }
+
+  /// 用户改名（5 天冷却期）
+  static Future<String?> rename({
+    required String userExternalToken,
+    required String newName,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/rename'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_external_token': userExternalToken,
+                'new_name': newName,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data['user_display_id'] as String?;
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] rename status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] rename error: $e');
+      lastError = '网络连接失败';
+      return null;
     }
   }
 
