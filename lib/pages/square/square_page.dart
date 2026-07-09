@@ -18,8 +18,6 @@ import '../../widgets/post_card.dart';
 import '../post/post_create_page.dart';
 import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
-import '../settings/version_page.dart';
-import '../../models/version_info.dart';
 
 class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
@@ -144,31 +142,6 @@ class _SquarePageState extends State<SquarePage> {
         _loading = false;
         _error = '加载失败，请检查网络';
       });
-    }
-
-    // 3. 后台检查版本更新（不阻塞加载）
-    _checkVersion();
-  }
-
-  Future<void> _checkVersion() async {
-    final latest = await ApiService.getLatestVersion();
-    if (latest == null || !mounted) return;
-    // 缓存
-    await PostStorage.saveLatestVersion(latest);
-    // 比较版本
-    if (latest.versionNumber != VersionInfo.currentVersion && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('发现新版本 v${latest.versionNumber}'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () {
-              navigateToSettingsPage(context, '更新日志', const VersionPage());
-            },
-          ),
-          duration: const Duration(seconds: 5),
-        ),
-      );
     }
   }
 
@@ -460,16 +433,8 @@ class _SquarePageState extends State<SquarePage> {
                     _drawerTile(Icons.person_outline, '用户（没做）'),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
-                    _drawerTile(Icons.system_update_outlined, '更新日志', onTap: () {
-                      Navigator.pop(context);
-                      navigateToSettingsPage(context, '更新日志', const VersionPage());
-                    }),
                   ],
                 ),
-              ),
-              Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Text('版本 ${VersionInfo.currentVersion}', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
               ),
             ],
           ),
