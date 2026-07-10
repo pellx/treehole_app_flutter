@@ -70,7 +70,7 @@ app.*.map.json
 
 # Hive local storage (generated at runtime)
 *.hive
-*.lock
+*.hive.lock
 
 # Font extraction data
 /data/
