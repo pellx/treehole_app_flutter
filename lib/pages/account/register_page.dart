@@ -10,7 +10,7 @@ import '../../models/device_fingerprint.dart';
 import '../../services/device_fingerprint.dart';
 import '../../services/pow.dart';
 import '../../services/turnstile_service.dart';
-import '../../services/unique_token.dart';
+import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 
@@ -71,8 +71,7 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
-      final hasSecret = PostStorage.getDeviceSecret()?.isNotEmpty == true
-          && PostStorage.getFingerprintHash()?.isNotEmpty == true;
+      final hasSecret = await DeviceCredentialStore.hasDeviceCredentials();
 
       if (!hasSecret) {
         // ── 并行启动所有任务，但独立 await 以便 PoW 算完立即显示 ──
@@ -85,7 +84,7 @@ class _RegisterPageState extends State<RegisterPage> {
         final turnstileFuture = TurnstileService.instance.getToken();
         final challengeFuture = ApiService.getPoWChallenge();
         final fingerprintFuture = DeviceFingerprintService.collect();
-        final uniqueTokenFuture = UniqueTokenService.getOrCreate();
+        final uniqueTokenFuture = DeviceCredentialStore.getOrCreateUniqueToken();
 
         // PoW：先拿 challenge，再本地求解，算完立即显示成功
         debugPrint('[Register] Fetching PoW challenge...');
@@ -144,19 +143,19 @@ class _RegisterPageState extends State<RegisterPage> {
           setState(() => _error = '设备初始化失败');
           return;
         }
-        await PostStorage.saveDeviceSecret(init.deviceSecret!);
-        await PostStorage.saveDeviceId(init.deviceId!);
-        await PostStorage.saveFingerprintHash(init.fingerprintHash!);
+        await DeviceCredentialStore.saveDeviceSecret(init.deviceSecret!);
+        await DeviceCredentialStore.saveDeviceId(init.deviceId!);
+        await DeviceCredentialStore.saveFingerprintHash(init.fingerprintHash!);
         debugPrint('[Register] Device secret, ID, and fingerprint_hash saved');
       }
 
-      final deviceSecret = PostStorage.getDeviceSecret()!;
-      final fingerprintHash = PostStorage.getFingerprintHash()!;
-      final uniqueToken = await UniqueTokenService.getOrCreate();
+      final deviceId = (await DeviceCredentialStore.getDeviceId())!;
+      final deviceSecret = (await DeviceCredentialStore.getDeviceSecret())!;
+      final fingerprintHash = (await DeviceCredentialStore.getFingerprintHash())!;
       debugPrint('[Register] Calling register with fingerprintHash=${fingerprintHash.substring(0, 16)}...');
       final result = await ApiService.register(
+        deviceId: deviceId,
         deviceSecret: deviceSecret,
-        uniqueToken: uniqueToken,
         fingerprintHash: fingerprintHash,
       );
       debugPrint('[Register] register result: success=${result.success}, failureType=${result.failureType}, mounted=$mounted');
@@ -251,7 +250,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 tooltip: '清除本地存储',
                 onPressed: () async {
                   await PostStorage.clearAccount();
-                  await UniqueTokenService.clear();
+                  await DeviceCredentialStore.clearAll();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('已清除本地存储'), duration: Duration(seconds: 1)),

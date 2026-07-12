@@ -29,30 +29,7 @@ class PostStorage {
   }
 
   // ---- 账号 ----
-
-  static String? getDeviceSecret() {
-    return _accountBox.get('device_secret') as String?;
-  }
-
-  static Future<void> saveDeviceSecret(String secret) async {
-    await _accountBox.put('device_secret', secret);
-  }
-
-  static int? getDeviceId() {
-    return _accountBox.get('device_id') as int?;
-  }
-
-  static Future<void> saveDeviceId(int id) async {
-    await _accountBox.put('device_id', id);
-  }
-
-  static String? getFingerprintHash() {
-    return _accountBox.get('fingerprint_hash') as String?;
-  }
-
-  static Future<void> saveFingerprintHash(String hash) async {
-    await _accountBox.put('fingerprint_hash', hash);
-  }
+  // 设备凭证 (device_id, device_secret, fingerprint_hash) 已迁移到 DeviceCredentialStore (安全存储)
 
   static String? getUserExternalToken() {
     return _accountBox.get('user_external_token') as String?;

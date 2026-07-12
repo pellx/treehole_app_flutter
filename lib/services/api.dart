@@ -322,8 +322,8 @@ class ApiService {
   }
 
   static Future<RegistrationResult> register({
+    required int deviceId,
     required String deviceSecret,
-    required String uniqueToken,
     required String fingerprintHash,
   }) async {
     try {
@@ -331,8 +331,8 @@ class ApiService {
           .post(Uri.parse('$_userBase/register'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
+                'device_id': deviceId,
                 'device_secret': deviceSecret,
-                'unique_token': uniqueToken,
                 'fingerprint_hash': fingerprintHash,
               }))
           .timeout(_timeout);
@@ -353,20 +353,20 @@ class ApiService {
   }
 
   static Future<RegistrationResult> login({
-    required String deviceSecret,
     required int deviceId,
+    required String deviceSecret,
     required String userExternalToken,
-    required Map<String, dynamic> deviceFingerPrint,
+    required String fingerprintHash,
   }) async {
     try {
       final res = await http
           .post(Uri.parse('$_userBase/login'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
-                'device_secret': deviceSecret,
                 'device_id': deviceId,
+                'device_secret': deviceSecret,
                 'user_external_token': userExternalToken,
-                'device_finger_print': deviceFingerPrint,
+                'fingerprint_hash': fingerprintHash,
               }))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
@@ -374,7 +374,7 @@ class ApiService {
         return RegistrationResult.ok(
           data['session_secret'] as String,
           data['session_id'] as int,
-          userExternalToken,
+          data['user_external_token'] as String? ?? userExternalToken,
         );
       }
       if (res.statusCode == 401) return RegistrationResult.failure(RegistrationFailureType.deviceAlreadyRegistered);
@@ -382,6 +382,31 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] login error: $e');
       return RegistrationResult.failure(RegistrationFailureType.networkError);
+    }
+  }
+
+  /// 检查 session 是否仍然有效
+  static Future<bool> checkSession({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .get(
+            Uri.parse('$_userBase/check-session').replace(queryParameters: {
+              'session_id': sessionId.toString(),
+              'session_secret': sessionSecret,
+            }),
+          )
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data['valid'] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[ApiService] checkSession error: $e');
+      return false;
     }
   }
 
