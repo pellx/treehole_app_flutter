@@ -12,6 +12,7 @@ import '../../widgets/image_overlay.dart';
 import '../../models/upload_result.dart';
 import '../../services/api.dart';
 import '../../services/storage.dart';
+import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/moderation_feedback.dart';
@@ -261,13 +262,16 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
 
     setState(() { _submitting = true; _errorMessage = null; });
 
+    final sessionId = await DeviceCredentialStore.getSessionId() ?? 0;
+    final sessionSecret = await DeviceCredentialStore.getSessionSecret() ?? '';
+
     final draft = PostDraft(
       title: title,
       content: _contentController.text,
       author: _hasAuthor ? _userName : '',
       uploaded: _uploaded,
-      sessionId: PostStorage.getSessionId() ?? 0,
-      sessionSecret: PostStorage.getSessionSecret() ?? '',
+      sessionId: sessionId,
+      sessionSecret: sessionSecret,
     );
 
     final post = await ApiService.createPost(draft);

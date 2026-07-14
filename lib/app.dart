@@ -34,11 +34,8 @@ class TreeholeAppState extends State<TreeholeApp> {
 
   /// 启动时检测 session 有效性，失效则尝试自动重新登录
   Future<void> _ensureSession() async {
-    // 未注册 → 跳过
-    if (!PostStorage.isRegistered()) return;
-
-    final sessionId = PostStorage.getSessionId();
-    final sessionSecret = PostStorage.getSessionSecret();
+    final sessionId = await DeviceCredentialStore.getSessionId();
+    final sessionSecret = await DeviceCredentialStore.getSessionSecret();
 
     // 有 session → 先检查是否仍有效
     if (sessionId != null && sessionSecret != null) {
@@ -57,7 +54,7 @@ class TreeholeAppState extends State<TreeholeApp> {
 
     final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
     final deviceId = await DeviceCredentialStore.getDeviceId();
-    final userExternalToken = PostStorage.getUserExternalToken();
+    final userExternalToken = await DeviceCredentialStore.getUserExternalToken();
     final fingerprintHash = await DeviceCredentialStore.getFingerprintHash();
 
     if (deviceSecret == null || deviceId == null ||
@@ -77,10 +74,10 @@ class TreeholeAppState extends State<TreeholeApp> {
 
     if (result.success) {
       debugPrint('[App] 自动登录成功，session 已更新');
-      await PostStorage.saveSessionId(result.sessionId!);
-      await PostStorage.saveSessionSecret(result.sessionSecret!);
+      await DeviceCredentialStore.saveSessionId(result.sessionId!);
+      await DeviceCredentialStore.saveSessionSecret(result.sessionSecret!);
       if (result.userExternalToken != null && result.userExternalToken!.isNotEmpty) {
-        await PostStorage.saveUserExternalToken(result.userExternalToken!);
+        await DeviceCredentialStore.saveUserExternalToken(result.userExternalToken!);
       }
     } else {
       debugPrint('[App] 自动登录失败: ${result.failureType}');

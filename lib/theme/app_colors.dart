@@ -208,6 +208,40 @@ class VersionCardColors {
   });
 }
 
+// ---- RegisterColors ----
+
+class RegisterColors {
+  final Color loadingIndicator;
+  final Color buttonBg;
+  final Color buttonText;
+  final Color buttonBorderColor;
+  final Color disabledButtonBg;
+  final Color disabledButtonText;
+  final Color disabledButtonBorderColor;
+  final Color errorText;
+  final Color stepCompleted;
+  final Color pageBg;
+  final Color ellipseBg;
+  final Color registeredTextColor;
+  final Color loginRecoverColor;
+
+  const RegisterColors({
+    required this.loadingIndicator,
+    required this.buttonBg,
+    required this.buttonText,
+    required this.buttonBorderColor,
+    required this.disabledButtonBg,
+    required this.disabledButtonText,
+    required this.disabledButtonBorderColor,
+    required this.errorText,
+    required this.stepCompleted,
+    required this.pageBg,
+    required this.ellipseBg,
+    required this.registeredTextColor,
+    required this.loginRecoverColor,
+  });
+}
+
 // ============================================================
 //  AppColors — 主题扩展
 // ============================================================
@@ -216,12 +250,14 @@ class AppColors extends ThemeExtension<AppColors> {
   final PostCardColors postCard;
   final PostCreateColors postCreate;
   final VersionCardColors versionCard;
+  final RegisterColors register;
 
   const AppColors({
     required this.common,
     required this.postCard,
     required this.postCreate,
     required this.versionCard,
+    required this.register,
   });
 
   @override
@@ -230,12 +266,14 @@ class AppColors extends ThemeExtension<AppColors> {
     PostCardColors? postCard,
     PostCreateColors? postCreate,
     VersionCardColors? versionCard,
+    RegisterColors? register,
   }) {
     return AppColors(
       common: common ?? this.common,
       postCard: postCard ?? this.postCard,
       postCreate: postCreate ?? this.postCreate,
       versionCard: versionCard ?? this.versionCard,
+      register: register ?? this.register,
     );
   }
 
@@ -247,6 +285,7 @@ class AppColors extends ThemeExtension<AppColors> {
       postCard: t < 0.5 ? postCard : other.postCard,
       postCreate: t < 0.5 ? postCreate : other.postCreate,
       versionCard: t < 0.5 ? versionCard : other.versionCard,
+      register: t < 0.5 ? register : other.register,
     );
   }
 
@@ -458,19 +497,53 @@ static const versionCardDark = VersionCardColors(
   latestBorder:           Color(0x6C7AB47F),
 );
 
-// ---- AppColors ----
+// ---- RegisterColors ----
 
-  static const light = AppColors(
-    common: commonLight,
-    postCard: postCardLight,
-    postCreate: postCreateLight,
-    versionCard: versionCardLight,
-  );
+static const registerLight = RegisterColors(
+  loadingIndicator: Color(0xFF3EB147),
+  buttonBg:         Color(0xFF5EED6F),
+  buttonText:       Color(0xFFFFFFFF),
+  buttonBorderColor: Color(0xFF45D151),
+  disabledButtonBg:         Color(0x53D5D5D5),
+  disabledButtonText:       Color(0x539E9E9E),
+  disabledButtonBorderColor: Color(0x53BDBDBD),
+  errorText:        Color(0xFFE57373),
+  stepCompleted:    Color(0xFF9E9E9E),
+  pageBg:           Color(0xFFD5F2D7),
+  ellipseBg:        Color(0xFFFFFFFF),
+  registeredTextColor: Color(0xCC000000),
+  loginRecoverColor: Color(0xFF64B5F6),
+);
+  
+static const registerDark = RegisterColors(
+  loadingIndicator: Color(0xDF31E840),
+  buttonBg:         Color(0xFF1A7E26),
+  buttonText:       Color(0xFFFFFFFF),
+  buttonBorderColor: Color(0xFF43A64B),
+  disabledButtonBg:         Color(0x883A3A3A),
+  disabledButtonText:       Color(0x88757575),
+  disabledButtonBorderColor: Color(0x884A4A4A),
+  errorText:        Color(0xFFEF9A9A),
+  stepCompleted:    Color(0xFFBDBDBD),
+  pageBg:           Color(0xFF1B2E1F),
+  ellipseBg:        Color(0xFF2C3E2F),
+  registeredTextColor: Color(0xCCC0C0C0),
+  loginRecoverColor: Color(0xFF90CAF9),
+);
 
-  static const dark = AppColors(
-    common: commonDark,
-    postCard: postCardDark,
-    postCreate: postCreateDark,
-    versionCard: versionCardDark,
-  );
+static const light = AppColors(
+  common: commonLight,
+  postCard: postCardLight,
+  postCreate: postCreateLight,
+  versionCard: versionCardLight,
+  register: registerLight,
+);
+
+static const dark = AppColors(
+  common: commonDark,
+  postCard: postCardDark,
+  postCreate: postCreateDark,
+  versionCard: versionCardDark,
+  register: registerDark,
+);
 }

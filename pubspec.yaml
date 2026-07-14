@@ -38,6 +38,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
+    - assets/mu/
     - assets/numbers/
     - assets/expand_icon.svg
     - assets/plus.svg

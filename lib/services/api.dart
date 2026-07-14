@@ -13,6 +13,7 @@ import '../models/post_draft.dart';
 import '../models/upload_result.dart';
 import '../models/version_info.dart';
 import 'storage.dart';
+import 'device_credential_store.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
@@ -44,18 +45,12 @@ class RegistrationResult {
       RegistrationResult._(success: false, failureType: type);
 }
 
-class InitDeviceResult {
-  final bool success;
-  final int? deviceId;
-  final String? deviceSecret;
-  final String? fingerprintHash;
+/// POST /user/register 返回的凭证
+class RegisterResult {
+  final String userExternalToken;
+  final String deviceSecret;
 
-  const InitDeviceResult._({required this.success, this.deviceId, this.deviceSecret, this.fingerprintHash});
-
-  factory InitDeviceResult.ok(int deviceId, String deviceSecret, String fingerprintHash) =>
-      InitDeviceResult._(success: true, deviceId: deviceId, deviceSecret: deviceSecret, fingerprintHash: fingerprintHash);
-
-  factory InitDeviceResult.failure() => const InitDeviceResult._(success: false);
+  const RegisterResult({required this.userExternalToken, required this.deviceSecret});
 }
 
 class ApiService {
@@ -124,10 +119,12 @@ class ApiService {
 
   static Future<UploadResult?> uploadFile(PostUploadType type, File file) async {
     try {
+      final sessionId = await DeviceCredentialStore.getSessionId() ?? 0;
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret() ?? '';
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
       request.fields['type'] = type.apiValue;
-      request.fields['session_id'] = (PostStorage.getSessionId() ?? 0).toString();
-      request.fields['session_secret'] = PostStorage.getSessionSecret() ?? '';
+      request.fields['session_id'] = sessionId.toString();
+      request.fields['session_secret'] = sessionSecret;
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
       final streamed = await request.send().timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
@@ -193,11 +190,13 @@ class ApiService {
     int? toId,
   }) async {
     try {
+      final sessionId = await DeviceCredentialStore.getSessionId() ?? 0;
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret() ?? '';
       final body = <String, dynamic>{
         'postId': postId,
         'content': content,
-        'session_id': PostStorage.getSessionId() ?? 0,
-        'session_secret': PostStorage.getSessionSecret() ?? '',
+        'session_id': sessionId,
+        'session_secret': sessionSecret,
       };
       if (author != null && author.isNotEmpty) body['author'] = author;
       if (toId != null) body['toId'] = toId;
@@ -265,44 +264,59 @@ class ApiService {
 
   static const _userBase = 'https://tree.leisure.xin/node/user';
 
-  static Future<InitDeviceResult> initDevice({
-    required String turnstileToken,
-    required String powChallengeId,
-    required int powNonce,
+  /// POST /user/check — 纯查询，不消耗 Turnstile/PoW，返回该指纹是否已注册
+  static Future<bool?> check({
     required DeviceFingerprint deviceFingerPrint,
-    required String uniqueToken,
   }) async {
     try {
-      final body = <String, dynamic>{
-        'verification_turnstile': turnstileToken,
-        'verification_pow': {
-          'challenge_id': powChallengeId,
-          'nonce': powNonce,
-        },
-        'device_finger_print': deviceFingerPrint.toJson(),
-        'unique_token': uniqueToken,
-      };
       final res = await http
-          .post(Uri.parse('$_userBase/init-device'),
+          .post(Uri.parse('$_userBase/check'),
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(body))
+              body: jsonEncode({
+                'device_finger_print': deviceFingerPrint.toJson(),
+              }))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final deviceId = data['device_id'] as int?;
-        final deviceSecret = data['device_secret'] as String?;
-        final fingerprintHash = data['fingerprint_hash'] as String?;
-        if (deviceId != null && deviceSecret != null && fingerprintHash != null) {
-          return InitDeviceResult.ok(deviceId, deviceSecret, fingerprintHash);
-        }
-        debugPrint('[ApiService] initDevice parsed but missing fields: ${res.body}');
-      } else {
-        debugPrint('[ApiService] initDevice status=${res.statusCode} body=${res.body}');
+        return data['registered'] as bool? ?? false;
       }
-      return InitDeviceResult.failure();
+      debugPrint('[ApiService] check status=${res.statusCode} body=${res.body}');
+      return null;
     } catch (e) {
-      debugPrint('[ApiService] initDevice error: $e');
-      return InitDeviceResult.failure();
+      debugPrint('[ApiService] check error: $e');
+      return null;
+    }
+  }
+
+  /// POST /user/register — 为新设备创建用户，返回 user_external_token + device_secret
+  static Future<RegisterResult?> register({
+    required String userDisplayId,
+    required DeviceFingerprint deviceFingerPrint,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/register'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_display_id': userDisplayId,
+                'device_finger_print': deviceFingerPrint.toJson(),
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final token = data['user_external_token'] as String?;
+        final secret = data['device_secret'] as String?;
+        if (token != null && secret != null) {
+          return RegisterResult(userExternalToken: token, deviceSecret: secret);
+        }
+        debugPrint('[ApiService] register missing fields: ${res.body}');
+      } else {
+        debugPrint('[ApiService] register status=${res.statusCode} body=${res.body}');
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] register error: $e');
+      return null;
     }
   }
 
@@ -318,37 +332,6 @@ class ApiService {
     } catch (e) {
       debugPrint('[ApiService] getPoWChallenge error: $e');
       return null;
-    }
-  }
-
-  static Future<RegistrationResult> register({
-    required int deviceId,
-    required String deviceSecret,
-    required String fingerprintHash,
-  }) async {
-    try {
-      final res = await http
-          .post(Uri.parse('$_userBase/register'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'device_id': deviceId,
-                'device_secret': deviceSecret,
-                'fingerprint_hash': fingerprintHash,
-              }))
-          .timeout(_timeout);
-      if (_isHttpSuccess(res.statusCode)) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return RegistrationResult.ok(
-          data['session_secret'] as String,
-          data['session_id'] as int,
-          data['user_external_token'] as String,
-        );
-      }
-      if (res.statusCode == 401) return RegistrationResult.failure(RegistrationFailureType.deviceAlreadyRegistered);
-      return RegistrationResult.failure(RegistrationFailureType.unknown);
-    } catch (e) {
-      debugPrint('[ApiService] register error: $e');
-      return RegistrationResult.failure(RegistrationFailureType.networkError);
     }
   }
 

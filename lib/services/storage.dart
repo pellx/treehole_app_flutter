@@ -29,31 +29,8 @@ class PostStorage {
   }
 
   // ---- 账号 ----
-  // 设备凭证 (device_id, device_secret, fingerprint_hash) 已迁移到 DeviceCredentialStore (安全存储)
-
-  static String? getUserExternalToken() {
-    return _accountBox.get('user_external_token') as String?;
-  }
-
-  static Future<void> saveUserExternalToken(String token) async {
-    await _accountBox.put('user_external_token', token);
-  }
-
-  static String? getSessionSecret() {
-    return _accountBox.get('session_secret') as String?;
-  }
-
-  static Future<void> saveSessionSecret(String secret) async {
-    await _accountBox.put('session_secret', secret);
-  }
-
-  static int? getSessionId() {
-    return _accountBox.get('session_id') as int?;
-  }
-
-  static Future<void> saveSessionId(int id) async {
-    await _accountBox.put('session_id', id);
-  }
+  // 设备凭证、用户凭证、会话凭证已迁移到 DeviceCredentialStore (安全存储)
+  // 此处仅保留非敏感的 UI 状态
 
   static String? getDisplayName() {
     return _accountBox.get('display_name') as String?;
@@ -61,10 +38,6 @@ class PostStorage {
 
   static Future<void> saveDisplayName(String name) async {
     await _accountBox.put('display_name', name);
-  }
-
-  static int getUserCount() {
-    return (_accountBox.get('user_external_token') != null) ? 1 : 0;
   }
 
   static bool isRegistered() {

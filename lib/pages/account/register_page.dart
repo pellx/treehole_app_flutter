@@ -3,18 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../config/local.dart';
-import '../../services/api.dart';
-import '../../services/storage.dart';
 import '../../models/device_fingerprint.dart';
+import '../../services/api.dart';
+import '../../services/device_credential_store.dart';
 import '../../services/device_fingerprint.dart';
 import '../../services/pow.dart';
+import '../../services/storage.dart';
 import '../../services/turnstile_service.dart';
-import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
-import '../../theme/app_dimens.dart';
+import '../../theme/app_dimens_register.dart';
 
-/// 验证步骤状态
 enum _StepStatus { pending, loading, completed, failed }
 
 class RegisterPage extends StatefulWidget {
@@ -25,23 +23,25 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
-  final _controller = PageController();
-  int _currentPage = 0;
-  bool _registering = false;
+  String _phase = 'checking'; // checking | registered | failed | unregistered | registering | naming | login | done
   String? _error;
 
-  // 注册成功后进入取名阶段
-  bool _registered = false;
+  DeviceFingerprint? _fingerprint;
+
   final _nameController = TextEditingController();
-  bool _renaming = false;
+  final _tokenController = TextEditingController();
+  bool _submitting = false;
   String? _renameError;
 
-  // 三个验证步骤的状态
+  WebViewController? _webViewController;
+
   _StepStatus _turnstileStatus = _StepStatus.pending;
   _StepStatus _powStatus = _StepStatus.pending;
 
-  // Turnstile WebView
-  WebViewController? _webViewController;
+  // 预取验证结果（页面加载时后台开始，点击注册时直接使用）
+  String? _preTurnstileToken;
+  int? _prePowNonce;
+  PoWChallenge? _prePowChallenge;
 
   @override
   void initState() {
@@ -50,6 +50,87 @@ class _RegisterPageState extends State<RegisterPage> {
     _nameController.addListener(() {
       if (mounted) setState(() {});
     });
+    _tokenController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _check();
+    _preFetchVerification();
+  }
+
+  ({String path, double width, double height, double vOffset, double hOffset}) get _phaseImageConfig {
+    switch (_phase) {
+      case 'checking':
+      case 'registering':
+        return (
+          path: 'assets/mu/mu-think.png',
+          width: RegisterDimens.thinkWidth,
+          height: RegisterDimens.thinkHeight,
+          vOffset: RegisterDimens.thinkVOffset,
+          hOffset: RegisterDimens.thinkHOffset,
+        );
+      case 'unregistered':
+        return (
+          path: 'assets/mu/mu-true.png',
+          width: RegisterDimens.trueWidth,
+          height: RegisterDimens.trueHeight,
+          vOffset: RegisterDimens.trueVOffset,
+          hOffset: RegisterDimens.trueHOffset,
+        );
+      case 'registered':
+      case 'failed':
+        return (
+          path: 'assets/mu/mu-flase.png',
+          width: RegisterDimens.flaseWidth,
+          height: RegisterDimens.flaseHeight,
+          vOffset: RegisterDimens.flaseVOffset,
+          hOffset: RegisterDimens.flaseHOffset,
+        );
+      case 'naming':
+        return (
+          path: 'assets/mu/mu-flower.png',
+          width: RegisterDimens.flowerWidth,
+          height: RegisterDimens.flowerHeight,
+          vOffset: RegisterDimens.flowerVOffset,
+          hOffset: RegisterDimens.flowerHOffset,
+        );
+      case 'login':
+        return (
+          path: 'assets/mu/mu-login.png',
+          width: RegisterDimens.loginImageWidth,
+          height: RegisterDimens.loginImageHeight,
+          vOffset: RegisterDimens.loginImageVOffset,
+          hOffset: RegisterDimens.loginImageHOffset,
+        );
+      default:
+        return (
+          path: 'assets/mu/mu-think.png',
+          width: RegisterDimens.thinkWidth,
+          height: RegisterDimens.thinkHeight,
+          vOffset: RegisterDimens.thinkVOffset,
+          hOffset: RegisterDimens.thinkHOffset,
+        );
+    }
+  }
+
+  String get _phaseTitle {
+    switch (_phase) {
+      case 'checking':
+        return '让我康康';
+      case 'unregistered':
+        return '您的设备可进行注册';
+      case 'registered':
+        return '设备环境无法注册';
+      case 'failed':
+        return '测试未通过';
+      case 'registering':
+        return '通过一些测试';
+      case 'naming':
+        return '注册成功！取个名字吧';
+      case 'login':
+        return '请粘贴用户令牌';
+      default:
+        return '';
+    }
   }
 
   Future<void> _initTurnstile() async {
@@ -62,129 +143,133 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _register() async {
-    setState(() {
-      _registering = true;
-      _error = null;
-      _turnstileStatus = _StepStatus.loading;
-      _powStatus = _StepStatus.pending;
-    });
-
+  Future<void> _check() async {
+    setState(() { _phase = 'checking'; _error = null; });
+    final stopwatch = Stopwatch()..start();
     try {
-      final hasSecret = await DeviceCredentialStore.hasDeviceCredentials();
+      final fp = await DeviceFingerprintService.collect();
+      if (!mounted) return;
+      _fingerprint = fp;
+      final registered = await ApiService.check(deviceFingerPrint: fp);
+      if (!mounted) return;
 
-      if (!hasSecret) {
-        // ── 并行启动所有任务，但独立 await 以便 PoW 算完立即显示 ──
-        setState(() {
-          _turnstileStatus = _StepStatus.loading;
-          _powStatus = _StepStatus.loading;
-        });
-
-        // 同时启动所有独立任务（不 await，让它们并行跑）
-        final turnstileFuture = TurnstileService.instance.getToken();
-        final challengeFuture = ApiService.getPoWChallenge();
-        final fingerprintFuture = DeviceFingerprintService.collect();
-        final uniqueTokenFuture = DeviceCredentialStore.getOrCreateUniqueToken();
-
-        // PoW：先拿 challenge，再本地求解，算完立即显示成功
-        debugPrint('[Register] Fetching PoW challenge...');
-        final challenge = await challengeFuture;
-        if (challenge == null) {
-          debugPrint('[Register] PoW challenge fetch failed');
-          setState(() => _powStatus = _StepStatus.failed);
-          setState(() => _error = '获取验证挑战失败');
-          return;
-        }
-        debugPrint('[Register] Solving PoW (difficulty=${challenge.difficulty})...');
-        final nonce = await PoWService.solve(challenge);
-        if (nonce == null || !mounted) {
-          debugPrint('[Register] PoW solve failed (nonce=$nonce, mounted=$mounted)');
-          setState(() => _powStatus = _StepStatus.failed);
-          setState(() => _error = '安全验证超时，请重试');
-          return;
-        }
-        debugPrint('[Register] PoW solved: nonce=$nonce');
-        setState(() => _powStatus = _StepStatus.completed);
-
-        // Turnstile
-        debugPrint('[Register] Waiting for Turnstile token...');
-        final turnstileToken = await turnstileFuture;
+      // 至少显示 1300ms 的检测中状态
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 1300) {
+        await Future.delayed(Duration(milliseconds: 1300 - elapsed));
         if (!mounted) return;
-        if (turnstileToken == null) {
-          debugPrint('[Register] Turnstile token is null');
-          setState(() => _turnstileStatus = _StepStatus.failed);
-          setState(() => _error = 'Turnstile 验证失败');
-          return;
-        }
-        debugPrint('[Register] Turnstile token obtained (${turnstileToken.length} chars)');
-        setState(() => _turnstileStatus = _StepStatus.completed);
-
-        // 指纹 & unique_token
-        final fingerPrint = await fingerprintFuture;
-        final uniqueToken = await uniqueTokenFuture;
-        if (!mounted) return;
-        if (fingerPrint == null) {
-          setState(() => _error = '设备信息采集失败');
-          return;
-        }
-
-        // ── 所有验证通过，完成设备初始化 ──
-        debugPrint('[Register] Calling initDevice...');
-        final init = await ApiService.initDevice(
-          deviceFingerPrint: fingerPrint,
-          turnstileToken: turnstileToken,
-          powChallengeId: challenge.challengeId,
-          powNonce: nonce,
-          uniqueToken: uniqueToken,
-        );
-        debugPrint('[Register] initDevice result: success=${init.success}, deviceId=${init.deviceId}, hasSecret=${init.deviceSecret != null}, mounted=$mounted');
-        if (!init.success || !mounted) {
-          debugPrint('[Register] initDevice failed or unmounted, success=${init.success} mounted=$mounted');
-          setState(() => _error = '设备初始化失败');
-          return;
-        }
-        await DeviceCredentialStore.saveDeviceSecret(init.deviceSecret!);
-        await DeviceCredentialStore.saveDeviceId(init.deviceId!);
-        await DeviceCredentialStore.saveFingerprintHash(init.fingerprintHash!);
-        debugPrint('[Register] Device secret, ID, and fingerprint_hash saved');
       }
 
-      final deviceId = (await DeviceCredentialStore.getDeviceId())!;
-      final deviceSecret = (await DeviceCredentialStore.getDeviceSecret())!;
-      final fingerprintHash = (await DeviceCredentialStore.getFingerprintHash())!;
-      debugPrint('[Register] Calling register with fingerprintHash=${fingerprintHash.substring(0, 16)}...');
-      final result = await ApiService.register(
-        deviceId: deviceId,
-        deviceSecret: deviceSecret,
-        fingerprintHash: fingerprintHash,
-      );
-      debugPrint('[Register] register result: success=${result.success}, failureType=${result.failureType}, mounted=$mounted');
+      if (registered == null) {
+        setState(() => _phase = 'failed');
+        return;
+      }
+      setState(() => _phase = registered ? 'registered' : 'unregistered');
+    } catch (e) {
+      if (mounted) setState(() => _phase = 'failed');
+    }
+  }
 
-      if (!mounted) {
-        debugPrint('[Register] Widget unmounted after register, aborting');
+  /// 后台预取 PoW 和 Turnstile 验证，缩短点击注册后的等待时间
+  void _preFetchVerification() {
+    // PoW
+    ApiService.getPoWChallenge().then((challenge) async {
+      if (challenge == null || !mounted) return;
+      _prePowChallenge = challenge;
+      final nonce = await PoWService.solve(challenge);
+      if (mounted && nonce != null) _prePowNonce = nonce;
+    });
+    // Turnstile
+    TurnstileService.instance.getToken().then((token) {
+      if (mounted && token != null) _preTurnstileToken = token;
+    });
+  }
+
+  /// 重置页面状态，重新检测
+  void _reset() {
+    _nameController.clear();
+    _tokenController.clear();
+    _preTurnstileToken = null;
+    _prePowNonce = null;
+    _prePowChallenge = null;
+    setState(() {
+      _phase = 'checking';
+      _error = null;
+      _submitting = false;
+      _renameError = null;
+      _turnstileStatus = _StepStatus.pending;
+      _powStatus = _StepStatus.pending;
+    });
+    _check();
+  }
+
+  Future<void> _startRegister() async {
+    try {
+      final fp = _fingerprint;
+      if (fp == null) {
+        setState(() => _phase = 'failed');
         return;
       }
 
-      if (result.success) {
-        debugPrint('[Register] Success! Saving session data...');
-        await PostStorage.saveUserExternalToken(result.userExternalToken!);
-        await PostStorage.saveSessionSecret(result.sessionSecret!);
-        await PostStorage.saveSessionId(result.sessionId!);
-        await PostStorage.setRegistered(true);
-        debugPrint('[Register] All data saved, entering naming phase');
-        setState(() => _registered = true);
-      } else {
-        final msg = switch (result.failureType) {
-          RegistrationFailureType.networkError => '网络连接失败',
-          RegistrationFailureType.deviceAlreadyRegistered => '该设备已注册',
-          RegistrationFailureType.unknown || null => '注册失败，请重试',
-        };
-        setState(() => _error = msg);
+      // 优先使用预取结果
+      final hasPrePow = _prePowNonce != null && _prePowChallenge != null;
+      final hasPreTurnstile = _preTurnstileToken != null;
+
+      if (hasPrePow && hasPreTurnstile) {
+        // 预取完成，直接跳到取名
+        setState(() {
+          _turnstileStatus = _StepStatus.completed;
+          _powStatus = _StepStatus.completed;
+          _phase = 'naming';
+        });
+        return;
       }
+
+      // 预取未完成，显示加载状态并等待
+      setState(() {
+        _phase = 'registering';
+        _error = null;
+        _turnstileStatus = hasPreTurnstile ? _StepStatus.completed : _StepStatus.loading;
+        _powStatus = hasPrePow ? _StepStatus.completed : _StepStatus.loading;
+      });
+
+      // PoW
+      int? nonce = _prePowNonce;
+      if (nonce == null) {
+        debugPrint('[Register] Fetching PoW challenge (not pre-fetched)...');
+        final challenge = await ApiService.getPoWChallenge();
+        if (challenge == null) {
+          setState(() { _powStatus = _StepStatus.failed; _phase = 'failed'; });
+          return;
+        }
+        nonce = await PoWService.solve(challenge);
+        if (nonce == null || !mounted) {
+          setState(() { _powStatus = _StepStatus.failed; _phase = 'failed'; });
+          return;
+        }
+        _prePowNonce = nonce;
+        _prePowChallenge = challenge;
+        setState(() => _powStatus = _StepStatus.completed);
+      }
+
+      // Turnstile
+      String? turnstileToken = _preTurnstileToken;
+      if (turnstileToken == null) {
+        debugPrint('[Register] Waiting for Turnstile token (not pre-fetched)...');
+        turnstileToken = await TurnstileService.instance.getToken();
+        if (!mounted) return;
+        if (turnstileToken == null) {
+          setState(() { _turnstileStatus = _StepStatus.failed; _phase = 'failed'; });
+          return;
+        }
+        _preTurnstileToken = turnstileToken;
+        setState(() => _turnstileStatus = _StepStatus.completed);
+      }
+
+      // 验证通过 → 进入取名阶段
+      setState(() => _phase = 'naming');
     } catch (e) {
       if (mounted) setState(() => _error = '注册失败：$e');
-    } finally {
-      if (mounted) setState(() => _registering = false);
     }
   }
 
@@ -192,42 +277,60 @@ class _RegisterPageState extends State<RegisterPage> {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
 
-    setState(() {
-      _renaming = true;
-      _renameError = null;
-    });
+    setState(() { _submitting = true; _renameError = null; });
 
     try {
-      final userToken = PostStorage.getUserExternalToken();
-      if (userToken == null) {
-        setState(() => _renameError = '会话异常，请重新登录');
+      final fp = _fingerprint;
+      if (fp == null) {
+        setState(() => _renameError = '设备指纹丢失，请重试');
         return;
       }
 
-      final result = await ApiService.rename(
-        userExternalToken: userToken,
-        newName: name,
+      final result = await ApiService.register(
+        userDisplayId: name,
+        deviceFingerPrint: fp,
       );
 
       if (!mounted) return;
 
-      if (result != null) {
-        await PostStorage.saveDisplayName(result);
-        Navigator.pop(context);
-      } else {
-        setState(() => _renameError = ApiService.lastError ?? '设置名字失败');
+      if (result == null) {
+        setState(() => _renameError = '注册失败，请重试');
+        return;
       }
+
+      await DeviceCredentialStore.saveUserExternalToken(result.userExternalToken);
+      await DeviceCredentialStore.saveDeviceSecret(result.deviceSecret);
+      await PostStorage.saveDisplayName(name);
+      await PostStorage.setRegistered(true);
+
+      setState(() => _phase = 'done');
+      Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _renameError = '网络异常：$e');
     } finally {
-      if (mounted) setState(() => _renaming = false);
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _confirmLogin() async {
+    final token = _tokenController.text.trim();
+    if (token.isEmpty) return;
+
+    setState(() { _submitting = true; });
+
+    try {
+      // TODO: 调用登录 API，传入 token
+    } catch (e) {
+      // TODO: 处理登录错误
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
     _nameController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
@@ -237,121 +340,240 @@ class _RegisterPageState extends State<RegisterPage> {
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      resizeToAvoidBottomInset: false,
+      backgroundColor: colors.register.pageBg,
       body: SafeArea(
+        bottom: false,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            Positioned(
-              right: 8,
-              top: 4,
-              child: IconButton(
-                icon: Icon(Icons.delete_forever, size: 20,
-                    color: onSurface.withValues(alpha: 0.3)),
-                tooltip: '清除本地存储',
-                onPressed: () async {
-                  await PostStorage.clearAccount();
-                  await DeviceCredentialStore.clearAll();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已清除本地存储'), duration: Duration(seconds: 1)),
-                    );
-                  }
-                },
-              ),
-            ),
-            // 隐藏的 WebView 用于 Turnstile 验证 — 必须在屏幕内才能加载外部脚本
-            // Opacity(0.01) 保持 WebView 引擎活跃且加载资源，但视觉上几乎不可见
-            // IgnorePointer 防止用户误触，PageView 在 Stack z-order 上覆盖它
-            Positioned(
-              left: 0,
-              top: 0,
-              width: 300,
-              height: 300,
-              child: IgnorePointer(
-                child: Opacity(
-                  opacity: 0.01,
-                  child: _webViewController != null
-                      ? WebViewWidget(controller: _webViewController!)
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ),
-            PageView(
-              controller: _controller,
-              scrollDirection: Axis.vertical,
-              onPageChanged: (i) => setState(() => _currentPage = i),
-              children: [
-                _buildPage(
-                  image: Image.asset('assets/mu-flower.png', width: 120, height: 120),
-                  title: '树通',
-                  subtitle: '匿名校园论坛',
-                  hint: '上滑了解更多',
-                  colors: colors,
-                  onSurface: onSurface,
-                ),
-                _buildPage(
-                  icon: Icons.lock_outline,
-                  title: '完全匿名',
-                  subtitle: '无需手机号、无需邮箱\n你的身份只有你自己知道',
-                  colors: colors,
-                  onSurface: onSurface,
-                ),
-                _buildPage(
-                  icon: _registered ? Icons.check_circle_outline : Icons.bolt_outlined,
-                  title: _registered ? '注册成功' : '即刻发言',
-                  subtitle: _registered
-                      ? '给自己取个名字吧\n这将是你在树通中的唯一标识'
-                      : '一键注册即可发帖评论\n参与校园讨论',
-                  colors: colors,
-                  onSurface: onSurface,
-                  trailing: _registered
-                      ? _buildNamingSection(colors, onSurface)
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildRegisterButton(colors),
-                            if (_turnstileStatus != _StepStatus.pending ||
-                                _powStatus != _StepStatus.pending) ...[
-                              const SizedBox(height: 24),
-                              _buildStepRow('Turnstile 检测', _turnstileStatus, colors, onSurface),
-                              const SizedBox(height: 8),
-                              _buildStepRow('PoW 检测', _powStatus, colors, onSurface),
-                            ],
-                            if (_error != null) ...[
-                              const SizedBox(height: 16),
-                              Text(
-                                _error!,
-                                style: const TextStyle(fontSize: 13, color: Color(0xFFE57373)),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ],
-                        ),
-                ),
-              ],
-            ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 20, bottom: 32),
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(3, (i) {
-                      final active = i == _currentPage;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        width: 8,
-                        height: active ? 24 : 8,
-                        decoration: BoxDecoration(
-                          color: active ? onSurface : colors.common.trailingIcon.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      );
-                    }),
+            // 白色椭圆背景 — 最底层
+            IgnorePointer(
+              child: Center(
+                child: OverflowBox(
+                  maxWidth: double.infinity,
+                  maxHeight: double.infinity,
+                  child: Transform.translate(
+                    offset: Offset(RegisterDimens.ellipseHOffset, RegisterDimens.ellipseVOffset),
+                    child: ClipOval(
+                      child: Container(
+                        width: RegisterDimens.ellipseWidth,
+                        height: RegisterDimens.ellipseHeight,
+                        color: colors.register.ellipseBg,
+                      ),
+                    ),
                   ),
                 ),
+              ),
+            ),
+            // 隐藏的 WebView 用于 Turnstile（暂移出树，排查触摸拦截）
+            // WebView 平台视图可能在 Android 层面拦截触摸事件
+            // TODO: 确认按钮可点击后恢复 WebView
+            // 悬浮图片 — 根据阶段显示不同图片（纯装饰，置于交互内容下方）
+            if (_phase != 'done')
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Transform.translate(
+                      offset: Offset(_phaseImageConfig.hOffset, _phaseImageConfig.vOffset),
+                      child: Image.asset(_phaseImageConfig.path,
+                          width: _phaseImageConfig.width,
+                          height: _phaseImageConfig.height),
+                    ),
+                  ),
+                ),
+              ),
+            // 阶段标题 — 每个阶段显示不同的大文本
+            if (_phase != 'done' && _phaseTitle.isNotEmpty)
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.phaseTitleTop,
+                child: Center(
+                  child: Text(_phaseTitle,
+                      style: TextStyle(
+                        fontSize: RegisterDimens.phaseTitleFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: onSurface,
+                      )),
+                ),
+              ),
+            // 已注册提示文字 — 独立 Positioned，可控制位置
+            if (_phase == 'registered')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.registeredTop,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    child: _buildRegistered(colors),
+                  ),
+                ),
+              ),
+            // 已注册 — 登录按钮
+            if (_phase == 'registered')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.registeredLoginButtonTop,
+                child: Center(
+                  child: Transform.translate(
+                    offset: Offset(RegisterDimens.registeredLoginButtonHOffset, RegisterDimens.registeredLoginButtonVOffset),
+                    child: SizedBox(
+                      width: RegisterDimens.registeredLoginButtonWidth,
+                      height: RegisterDimens.registeredLoginButtonHeight,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          setState(() => _phase = 'login');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.register.buttonBg,
+                          foregroundColor: colors.register.buttonText,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: RegisterDimens.registeredLoginButtonPaddingH,
+                            vertical: RegisterDimens.registeredLoginButtonPaddingV,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(RegisterDimens.registeredLoginButtonRadius),
+                            side: BorderSide(
+                              color: colors.register.buttonBorderColor,
+                              width: RegisterDimens.registeredLoginButtonBorderWidth,
+                            ),
+                          ),
+                        ),
+                        child: Text('登录',
+                            style: TextStyle(
+                              fontSize: RegisterDimens.registeredLoginButtonFontSize,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: RegisterDimens.registeredLoginButtonLetterSpacing,
+                            )),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // 已注册 — 联系我们按钮
+            if (_phase == 'registered')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.registeredContactButtonTop,
+                child: Center(
+                  child: Transform.translate(
+                    offset: Offset(RegisterDimens.registeredContactButtonHOffset, RegisterDimens.registeredContactButtonVOffset),
+                    child: SizedBox(
+                      width: RegisterDimens.registeredContactButtonWidth,
+                      height: RegisterDimens.registeredContactButtonHeight,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // TODO: 导航到联系我们页
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.register.buttonBg,
+                          foregroundColor: colors.register.buttonText,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: RegisterDimens.registeredContactButtonPaddingH,
+                            vertical: RegisterDimens.registeredContactButtonPaddingV,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(RegisterDimens.registeredContactButtonRadius),
+                            side: BorderSide(
+                              color: colors.register.buttonBorderColor,
+                              width: RegisterDimens.registeredContactButtonBorderWidth,
+                            ),
+                          ),
+                        ),
+                        child: Text('联系我们',
+                            style: TextStyle(
+                              fontSize: RegisterDimens.registeredContactButtonFontSize,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: RegisterDimens.registeredContactButtonLetterSpacing,
+                            )),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // 交互内容 — 按钮/输入框等
+            if (_phase == 'unregistered' && _error == null)
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.buttonTop,
+                child: Center(
+                  child: SizedBox(
+                    width: RegisterDimens.buttonWidth,
+                    height: RegisterDimens.buttonHeight,
+                    child: ElevatedButton(
+                      onPressed: _startRegister,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: colors.register.buttonBg,
+                        foregroundColor: colors.register.buttonText,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(RegisterDimens.buttonRadius),
+                          side: BorderSide(
+                            color: colors.register.buttonBorderColor,
+                            width: RegisterDimens.buttonBorderWidth,
+                          ),
+                        ),
+                      ),
+                      child: Text('注册',
+                          style: TextStyle(
+                            fontSize: RegisterDimens.buttonFontSize,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: RegisterDimens.buttonLetterSpacing,
+                          )),
+                    ),
+                  ),
+                ),
+              )
+            else if (_phase == 'registering')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.stepTop,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    child: _buildRegistering(colors, onSurface),
+                  ),
+                ),
+              )
+            else if (_phase == 'naming')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.namingInputTop,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    child: _buildNamingInput(colors, onSurface),
+                  ),
+                ),
+              )
+            else if (_phase == 'login')
+              Positioned(
+                left: 0, right: 0,
+                top: RegisterDimens.loginInputTop,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    child: _buildLoginInput(colors, onSurface),
+                  ),
+                ),
+              )
+            else
+              Positioned.fill(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    child: _buildPhase(colors, onSurface),
+                  ),
+                ),
+              ),
+            // 右上角重新加载按钮
+            Positioned(
+              right: 8, top: 4,
+              child: IconButton(
+                icon: Icon(Icons.refresh, size: 22,
+                    color: onSurface.withValues(alpha: 0.35)),
+                tooltip: '重新加载',
+                onPressed: _reset,
               ),
             ),
           ],
@@ -360,58 +582,322 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  Widget _buildPage({
-    IconData? icon,
-    Widget? image,
-    required String title,
-    required String subtitle,
-    String? hint,
-    Widget? trailing,
-    required AppColors colors,
-    required Color onSurface,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 2),
-          if (image != null)
-            image
-          else if (icon != null)
-            Icon(icon, size: 80, color: onSurface.withValues(alpha: 0.8)),
-          const SizedBox(height: 32),
-          Text(
-            title,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: onSurface),
-            textAlign: TextAlign.center,
+  Widget _buildPhase(AppColors colors, Color onSurface) {
+    switch (_phase) {
+      case 'checking':
+        return const SizedBox.shrink();
+      case 'registered':
+        return const SizedBox.shrink();
+      case 'failed':
+        return const SizedBox.shrink();
+      case 'unregistered':
+        return _error != null
+            ? _buildError(onSurface)
+            : _buildRegisterButton(colors);
+      case 'registering':
+        return _buildRegistering(colors, onSurface);
+      case 'naming':
+        return const SizedBox.shrink();
+      case 'login':
+        return const SizedBox.shrink();
+      case 'done':
+        return const SizedBox.shrink();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildError(Color onSurface) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(_error!,
+            style: TextStyle(
+              fontSize: RegisterDimens.errorFontSize,
+              color: onSurface.withValues(alpha: RegisterDimens.errorAlpha),
+            ),
+            textAlign: TextAlign.center),
+        const SizedBox(height: RegisterDimens.errorRetryGap),
+        TextButton(onPressed: _check, child: const Text('重试')),
+      ],
+    );
+  }
+
+  Widget _buildRegistered(AppColors colors) {
+    return Text(
+      '设备环境已被注册，请登录已有账户或联系我们进行注册',
+      style: TextStyle(
+        fontSize: RegisterDimens.registeredFontSize,
+        color: colors.register.registeredTextColor,
+        height: RegisterDimens.registeredLineHeight,
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  Widget _buildRegisterButton(AppColors colors) {
+    return Transform.translate(
+      offset: Offset(0, RegisterDimens.buttonVOffset),
+      child: SizedBox(
+        width: RegisterDimens.buttonWidth,
+        height: RegisterDimens.buttonHeight,
+        child: ElevatedButton(
+          onPressed: _startRegister,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colors.register.buttonBg,
+            foregroundColor: colors.register.buttonText,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(RegisterDimens.buttonRadius),
+              side: BorderSide(
+                color: colors.register.buttonBorderColor,
+                width: RegisterDimens.buttonBorderWidth,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            subtitle,
-            style: TextStyle(fontSize: 15, color: colors.common.trailingIcon, height: 1.5),
-            textAlign: TextAlign.center,
-          ),
-          if (trailing != null) ...[
-            const SizedBox(height: 40),
-            trailing,
-          ],
-          if (hint != null && trailing == null) ...[
-            const SizedBox(height: 60),
-            Text(hint, style: TextStyle(fontSize: 13, color: colors.common.trailingIcon.withValues(alpha: 0.5))),
-          ],
-          const Spacer(flex: 3),
-        ],
+          child: Text('注册',
+              style: TextStyle(
+                fontSize: RegisterDimens.buttonFontSize,
+                fontWeight: FontWeight.w500,
+                letterSpacing: RegisterDimens.buttonLetterSpacing,
+              )),
+        ),
       ),
     );
   }
 
-  /// 构建单个验证步骤行，根据状态显示不同图标和文本
+  Widget _buildRegistering(AppColors colors, Color onSurface) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildStepRow('Turnstile 检测', _turnstileStatus, colors, onSurface),
+        const SizedBox(height: RegisterDimens.stepGap),
+        _buildStepRow('PoW 检测', _powStatus, colors, onSurface),
+        if (_error != null) ...[
+          const SizedBox(height: RegisterDimens.stepErrorGap),
+          Text(_error!,
+              style: TextStyle(
+                fontSize: RegisterDimens.stepFontSize,
+                color: colors.register.errorText,
+              ),
+              textAlign: TextAlign.center),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNamingInput(AppColors colors, Color onSurface) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: RegisterDimens.namingInputWidth,
+          height: RegisterDimens.namingInputHeight,
+          child: TextField(
+            controller: _nameController,
+            autofocus: true,
+            maxLength: 100,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: RegisterDimens.namingInputFontSize,
+              color: onSurface,
+            ),
+            decoration: InputDecoration(
+              hintText: '请输入（每月可更改一次）',
+              hintStyle: TextStyle(
+                fontSize: RegisterDimens.namingHintFontSize,
+                color: onSurface.withValues(alpha: RegisterDimens.namingHintAlpha),
+              ),
+              counterText: '',
+              border: UnderlineInputBorder(
+                borderSide: BorderSide(color: onSurface, width: 1),
+              ),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: onSurface, width: 1),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: onSurface, width: 1),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: RegisterDimens.namingInputPaddingH,
+                vertical: RegisterDimens.namingInputPaddingV,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: RegisterDimens.namingButtonGap),
+        SizedBox(
+          width: RegisterDimens.namingConfirmButtonWidth,
+          height: RegisterDimens.namingConfirmButtonHeight,
+          child: ElevatedButton(
+            onPressed: (_submitting || _nameController.text.trim().isEmpty) ? null : _confirmName,
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.disabled)
+                    ? colors.register.disabledButtonBg
+                    : colors.register.buttonBg),
+              foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.disabled)
+                    ? colors.register.disabledButtonText
+                    : colors.register.buttonText),
+              shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(RegisterDimens.namingConfirmButtonRadius),
+                side: BorderSide(
+                  color: (_submitting || _nameController.text.trim().isEmpty)
+                      ? colors.register.disabledButtonBorderColor
+                      : colors.register.buttonBorderColor,
+                  width: RegisterDimens.namingConfirmButtonBorderWidth,
+                ),
+              )),
+              padding: WidgetStateProperty.all(EdgeInsets.symmetric(
+                horizontal: RegisterDimens.namingConfirmButtonPaddingH,
+                vertical: RegisterDimens.namingConfirmButtonPaddingV,
+              )),
+            ),
+            child: _submitting
+                ? SizedBox(
+                    width: RegisterDimens.namingButtonConfirmSize,
+                    height: RegisterDimens.namingButtonConfirmSize,
+                    child: CircularProgressIndicator(
+                      strokeWidth: RegisterDimens.namingButtonStrokeWidth,
+                      valueColor: AlwaysStoppedAnimation(colors.register.buttonText),
+                    ),
+                  )
+                : Text('确认',
+                    style: TextStyle(
+                      fontSize: RegisterDimens.namingConfirmButtonFontSize,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: RegisterDimens.namingConfirmButtonLetterSpacing,
+                    )),
+          ),
+        ),
+        if (_renameError != null) ...[
+          const SizedBox(height: RegisterDimens.namingErrorGap),
+          Text(_renameError!,
+              style: TextStyle(
+                fontSize: RegisterDimens.stepFontSize,
+                color: colors.register.errorText,
+              ),
+              textAlign: TextAlign.center),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLoginInput(AppColors colors, Color onSurface) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: RegisterDimens.loginInputWidth,
+              height: RegisterDimens.loginInputHeight,
+              child: TextField(
+                controller: _tokenController,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: RegisterDimens.loginInputFontSize,
+                  color: onSurface,
+                ),
+                decoration: InputDecoration(
+                  hintText: '请输入令牌',
+                  hintStyle: TextStyle(
+                    fontSize: RegisterDimens.loginHintFontSize,
+                    color: onSurface.withValues(alpha: RegisterDimens.loginHintAlpha),
+                  ),
+                  counterText: '',
+                  border: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: RegisterDimens.loginInputPaddingH,
+                    vertical: RegisterDimens.loginInputPaddingV,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: RegisterDimens.loginButtonGap),
+            SizedBox(
+              width: RegisterDimens.loginConfirmButtonWidth,
+              height: RegisterDimens.loginConfirmButtonHeight,
+              child: ElevatedButton(
+                onPressed: (_submitting || _tokenController.text.trim().isEmpty) ? null : _confirmLogin,
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.disabled)
+                        ? colors.register.disabledButtonBg
+                        : colors.register.buttonBg),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.disabled)
+                        ? colors.register.disabledButtonText
+                        : colors.register.buttonText),
+                  shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(RegisterDimens.loginConfirmButtonRadius),
+                    side: BorderSide(
+                      color: (_submitting || _tokenController.text.trim().isEmpty)
+                          ? colors.register.disabledButtonBorderColor
+                          : colors.register.buttonBorderColor,
+                      width: RegisterDimens.loginConfirmButtonBorderWidth,
+                    ),
+                  )),
+                  padding: WidgetStateProperty.all(EdgeInsets.symmetric(
+                    horizontal: RegisterDimens.loginConfirmButtonPaddingH,
+                    vertical: RegisterDimens.loginConfirmButtonPaddingV,
+                  )),
+                ),
+                child: _submitting
+                    ? SizedBox(
+                        width: RegisterDimens.loginButtonConfirmSize,
+                        height: RegisterDimens.loginButtonConfirmSize,
+                        child: CircularProgressIndicator(
+                          strokeWidth: RegisterDimens.loginButtonStrokeWidth,
+                          valueColor: AlwaysStoppedAnimation(colors.register.buttonText),
+                        ),
+                      )
+                    : Text('确认',
+                        style: TextStyle(
+                          fontSize: RegisterDimens.loginConfirmButtonFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: RegisterDimens.loginConfirmButtonLetterSpacing,
+                        )),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: RegisterDimens.loginRecoverGap),
+        GestureDetector(
+          onTap: () {
+            // TODO: 找回用户逻辑
+          },
+          child: Text(
+            '找回用户',
+            style: TextStyle(
+              fontSize: RegisterDimens.loginRecoverFontSize,
+              color: colors.register.loginRecoverColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStepRow(String label, _StepStatus status, AppColors colors, Color onSurface) {
+    final regColors = colors.register;
+
     final textColor = switch (status) {
-      _StepStatus.completed => colors.common.trailingIcon,
-      _StepStatus.failed => const Color(0xFFE57373),
-      _ => onSurface.withValues(alpha: 0.6),
+      _StepStatus.completed => regColors.stepCompleted,
+      _StepStatus.failed => regColors.errorText,
+      _ => onSurface.withValues(alpha: RegisterDimens.stepDefaultAlpha),
     };
 
     final statusText = switch (status) {
@@ -424,100 +910,34 @@ class _RegisterPageState extends State<RegisterPage> {
     Widget leading;
     switch (status) {
       case _StepStatus.pending:
-        leading = Icon(Icons.circle_outlined, size: 16, color: textColor.withValues(alpha: 0.4));
+        leading = Icon(Icons.circle_outlined,
+            size: RegisterDimens.stepIconSize,
+            color: textColor.withValues(alpha: RegisterDimens.stepPendingAlpha));
       case _StepStatus.loading:
-        leading = const SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        );
+        leading = SizedBox(
+            width: RegisterDimens.stepIconSize,
+            height: RegisterDimens.stepIconSize,
+            child: CircularProgressIndicator(
+              strokeWidth: RegisterDimens.stepLoadingStrokeWidth,
+              valueColor: AlwaysStoppedAnimation(regColors.loadingIndicator),
+            ));
       case _StepStatus.completed:
-        leading = Icon(Icons.check_circle, size: 16, color: colors.common.trailingIcon);
+        leading = Icon(Icons.check_circle,
+            size: RegisterDimens.stepIconSize,
+            color: regColors.stepCompleted);
       case _StepStatus.failed:
-        leading = const Icon(Icons.cancel, size: 16, color: Color(0xFFE57373));
+        leading = Icon(Icons.cancel,
+            size: RegisterDimens.stepIconSize,
+            color: regColors.errorText);
     }
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         leading,
-        const SizedBox(width: 10),
-        Text(
-          '$label$statusText',
-          style: TextStyle(fontSize: 13, color: textColor),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRegisterButton(AppColors colors) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: _registering ? null : _register,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: colors.postCreate.submitBg,
-          foregroundColor: colors.postCreate.submitText,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        child: _registering
-            ? const Text('注册中...', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500))
-            : const Text('一键注册', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-      ),
-    );
-  }
-
-  Widget _buildNamingSection(AppColors colors, Color onSurface) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          controller: _nameController,
-          autofocus: true,
-          maxLength: 100,
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18, color: onSurface),
-          decoration: InputDecoration(
-            hintText: '输入你的名字',
-            hintStyle: TextStyle(fontSize: 16, color: onSurface.withValues(alpha: 0.3)),
-            counterText: '',
-            filled: true,
-            fillColor: onSurface.withValues(alpha: 0.05),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: (_renaming || _nameController.text.trim().isEmpty) ? null : _confirmName,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: colors.postCreate.submitBg,
-              foregroundColor: colors.postCreate.submitText,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _renaming
-                ? const SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('确认', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-          ),
-        ),
-        if (_renameError != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            _renameError!,
-            style: const TextStyle(fontSize: 13, color: Color(0xFFE57373)),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        const SizedBox(width: RegisterDimens.stepIconGap),
+        Text('$label$statusText',
+            style: TextStyle(fontSize: RegisterDimens.stepFontSize, color: textColor)),
       ],
     );
   }

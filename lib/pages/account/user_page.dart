@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
 import '../../services/storage.dart';
+import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 
 class UserPage extends StatefulWidget {
@@ -17,6 +18,7 @@ class _UserPageState extends State<UserPage> {
   bool _editing = false;
   bool _saving = false;
   String? _error;
+  String _externalToken = '';
 
   @override
   void initState() {
@@ -25,6 +27,16 @@ class _UserPageState extends State<UserPage> {
     _nameController.addListener(() {
       if (mounted) setState(() {});
     });
+    _loadExternalToken();
+  }
+
+  Future<void> _loadExternalToken() async {
+    final token = await DeviceCredentialStore.getUserExternalToken();
+    if (mounted) {
+      setState(() {
+        _externalToken = token ?? '';
+      });
+    }
   }
 
   @override
@@ -43,7 +55,7 @@ class _UserPageState extends State<UserPage> {
     });
 
     try {
-      final userToken = PostStorage.getUserExternalToken();
+      final userToken = await DeviceCredentialStore.getUserExternalToken();
       if (userToken == null) {
         setState(() => _error = '会话异常');
         return;
@@ -75,7 +87,6 @@ class _UserPageState extends State<UserPage> {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final displayName = PostStorage.getDisplayName() ?? PostStorage.getUserName();
-    final externalToken = PostStorage.getUserExternalToken() ?? '';
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -179,10 +190,10 @@ class _UserPageState extends State<UserPage> {
             ],
             const SizedBox(height: 40),
             // 账户信息
-            _infoTile('用户标识', externalToken.length > 16
-                ? '${externalToken.substring(0, 16)}...'
-                : externalToken, onSurface, onTap: () {
-              Clipboard.setData(ClipboardData(text: externalToken));
+            _infoTile('用户标识', _externalToken.length > 16
+                ? '${_externalToken.substring(0, 16)}...'
+                : _externalToken, onSurface, onTap: () {
+              Clipboard.setData(ClipboardData(text: _externalToken));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('已复制用户标识'), duration: Duration(seconds: 1)),
               );
