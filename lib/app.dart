@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/square/square_page.dart';
-import 'services/api.dart';
-import 'services/storage.dart';
-import 'services/device_credential_store.dart';
+import 'services/session_service.dart';
 import 'theme/app_colors.dart';
 
 final GlobalKey<TreeholeAppState> appKey = GlobalKey<TreeholeAppState>();
@@ -32,56 +30,9 @@ class TreeholeAppState extends State<TreeholeApp> {
     _ensureSession();
   }
 
-  /// 启动时检测 session 有效性，失效则尝试自动重新登录
+  /// 启动时检测 session 有效性
   Future<void> _ensureSession() async {
-    final sessionId = await DeviceCredentialStore.getSessionId();
-    final sessionSecret = await DeviceCredentialStore.getSessionSecret();
-
-    // 有 session → 先检查是否仍有效
-    if (sessionId != null && sessionSecret != null) {
-      final valid = await ApiService.checkSession(
-        sessionId: sessionId,
-        sessionSecret: sessionSecret,
-      );
-      if (valid && mounted) {
-        debugPrint('[App] session 仍有效，继续使用');
-        return;
-      }
-    }
-
-    // session 无效或缺失 → 尝试用存储的凭证重新登录
-    debugPrint('[App] session 失效或缺失，尝试重新登录');
-
-    final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
-    final deviceId = await DeviceCredentialStore.getDeviceId();
-    final userExternalToken = await DeviceCredentialStore.getUserExternalToken();
-    final fingerprintHash = await DeviceCredentialStore.getFingerprintHash();
-
-    if (deviceSecret == null || deviceId == null ||
-        userExternalToken == null || fingerprintHash == null) {
-      debugPrint('[App] 缺少登录凭证，无法自动登录');
-      return;
-    }
-
-    final result = await ApiService.login(
-      deviceId: deviceId,
-      deviceSecret: deviceSecret,
-      userExternalToken: userExternalToken,
-      fingerprintHash: fingerprintHash,
-    );
-
-    if (!mounted) return;
-
-    if (result.success) {
-      debugPrint('[App] 自动登录成功，session 已更新');
-      await DeviceCredentialStore.saveSessionId(result.sessionId!);
-      await DeviceCredentialStore.saveSessionSecret(result.sessionSecret!);
-      if (result.userExternalToken != null && result.userExternalToken!.isNotEmpty) {
-        await DeviceCredentialStore.saveUserExternalToken(result.userExternalToken!);
-      }
-    } else {
-      debugPrint('[App] 自动登录失败: ${result.failureType}');
-    }
+    await SessionService.instance.ensureSession();
   }
 
   @override

@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/storage.dart';
 import '../services/api.dart';
+import '../services/session_service.dart';
 import '../pages/account/register_page.dart';
 import '../pages/settings/settings_navigation.dart';
 import 'dart:typed_data';
@@ -1074,6 +1075,8 @@ class _PostCardState extends State<PostCard> {
       _dismissCommentOverlay();
       return;
     }
+    // 确保有有效 session
+    SessionService.instance.ensureSession();
     final overlay = Overlay.of(context);
     _commentOverlay = OverlayEntry(
       builder: (_) => _buildCommentOverlay(),

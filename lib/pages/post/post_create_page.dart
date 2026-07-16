@@ -11,6 +11,7 @@ import '../../models/post_draft.dart';
 import '../../widgets/image_overlay.dart';
 import '../../models/upload_result.dart';
 import '../../services/api.dart';
+import '../../services/session_service.dart';
 import '../../services/storage.dart';
 import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
@@ -73,6 +74,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    SessionService.instance.ensureSession();
     _contentExpandCtrl = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: AppDimens.postCreateContentExpandAnimMs),

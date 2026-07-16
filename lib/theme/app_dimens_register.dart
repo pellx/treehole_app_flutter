@@ -104,7 +104,7 @@ class RegisterDimens {
   static const double loginImageHOffset = 6;
 
   // ── 取名阶段（naming）──
-  static const double namingInputTop = 380; // 输入框+按钮距顶部距离
+  static const double namingInputTop = 377; // 输入框+按钮距顶部距离
   static const double namingInputHeight = 20;
   static const double namingInputWidth = 200;
   static const double namingInputFontSize = 14;

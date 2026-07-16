@@ -17,40 +17,36 @@ import 'device_credential_store.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
-enum RegistrationFailureType {
-  networkError,
-  deviceAlreadyRegistered,
-  unknown,
-}
-
-class RegistrationResult {
-  final bool success;
-  final String? sessionSecret;
-  final int? sessionId;
-  final String? userExternalToken;
-  final RegistrationFailureType? failureType;
-
-  const RegistrationResult._({
-    required this.success,
-    this.sessionSecret,
-    this.sessionId,
-    this.userExternalToken,
-    this.failureType,
-  });
-
-  factory RegistrationResult.ok(String sessionSecret, int sessionId, String userExternalToken) =>
-      RegistrationResult._(success: true, sessionSecret: sessionSecret, sessionId: sessionId, userExternalToken: userExternalToken);
-
-  factory RegistrationResult.failure(RegistrationFailureType type) =>
-      RegistrationResult._(success: false, failureType: type);
-}
-
 /// POST /user/register 返回的凭证
 class RegisterResult {
-  final String userExternalToken;
+  final String userToken;
   final String deviceSecret;
 
-  const RegisterResult({required this.userExternalToken, required this.deviceSecret});
+  const RegisterResult({required this.userToken, required this.deviceSecret});
+}
+
+/// POST /user/session/create 返回的 session 凭证
+class SessionCreateResult {
+  final int sessionId;
+  final String sessionSecret;
+
+  const SessionCreateResult({required this.sessionId, required this.sessionSecret});
+}
+
+/// POST /user/session/validate 返回的校验结果
+class SessionValidateResult {
+  final bool valid;
+  final int? userId;
+
+  const SessionValidateResult({required this.valid, this.userId});
+}
+
+/// PoW 求解结果（challenge_id + nonce）
+class PoWResult {
+  final String challengeId;
+  final int nonce;
+
+  const PoWResult({required this.challengeId, required this.nonce});
 }
 
 class ApiService {
@@ -288,29 +284,41 @@ class ApiService {
     }
   }
 
-  /// POST /user/register — 为新设备创建用户，返回 user_external_token + device_secret
+  /// POST /user/register — 为新设备创建用户，返回 user_token + device_secret
   static Future<RegisterResult?> register({
     required String userDisplayId,
     required DeviceFingerprint deviceFingerPrint,
+    required String verificationTurnstile,
+    required PoWResult verificationPow,
   }) async {
     try {
+      final requestBody = {
+        'user_display_id': userDisplayId,
+        'device_finger_print': deviceFingerPrint.toJson(),
+        'verification_turnstile': verificationTurnstile,
+        'verification_pow': {
+          'challenge_id': verificationPow.challengeId,
+          'nonce': verificationPow.nonce,
+        },
+      };
+      debugPrint('[ApiService] register request: ${jsonEncode(requestBody)}');
       final res = await http
           .post(Uri.parse('$_userBase/register'),
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'user_display_id': userDisplayId,
-                'device_finger_print': deviceFingerPrint.toJson(),
-              }))
+              body: jsonEncode(requestBody))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] register success body=${res.body}');
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final token = data['user_external_token'] as String?;
+        final token = data['user_token'] as String?;
         final secret = data['device_secret'] as String?;
         if (token != null && secret != null) {
-          return RegisterResult(userExternalToken: token, deviceSecret: secret);
+          return RegisterResult(userToken: token, deviceSecret: secret);
         }
+        lastError = '响应缺少字段（token=$token, secret=$secret）';
         debugPrint('[ApiService] register missing fields: ${res.body}');
       } else {
+        lastError = _parseErrorMessage(res.body);
         debugPrint('[ApiService] register status=${res.statusCode} body=${res.body}');
       }
       return null;
@@ -335,67 +343,74 @@ class ApiService {
     }
   }
 
-  static Future<RegistrationResult> login({
-    required int deviceId,
+  /// POST /user/session/create — 申请 session
+  /// 需要注册时获得的 user_token + device_secret + fingerprint_hash
+  static Future<SessionCreateResult?> createSession({
+    required String userToken,
     required String deviceSecret,
-    required String userExternalToken,
     required String fingerprintHash,
   }) async {
     try {
       final res = await http
-          .post(Uri.parse('$_userBase/login'),
+          .post(Uri.parse('$_userBase/session/create'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
-                'device_id': deviceId,
+                'user_token': userToken,
                 'device_secret': deviceSecret,
-                'user_external_token': userExternalToken,
                 'fingerprint_hash': fingerprintHash,
               }))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return RegistrationResult.ok(
-          data['session_secret'] as String,
-          data['session_id'] as int,
-          data['user_external_token'] as String? ?? userExternalToken,
-        );
+        final sessionId = data['session_id'] as int?;
+        final sessionSecret = data['session_secret'] as String?;
+        if (sessionId != null && sessionSecret != null) {
+          return SessionCreateResult(sessionId: sessionId, sessionSecret: sessionSecret);
+        }
+        debugPrint('[ApiService] createSession missing fields: ${res.body}');
+        return null;
       }
-      if (res.statusCode == 401) return RegistrationResult.failure(RegistrationFailureType.deviceAlreadyRegistered);
-      return RegistrationResult.failure(RegistrationFailureType.unknown);
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] createSession status=${res.statusCode} body=${res.body}');
+      return null;
     } catch (e) {
-      debugPrint('[ApiService] login error: $e');
-      return RegistrationResult.failure(RegistrationFailureType.networkError);
+      debugPrint('[ApiService] createSession error: $e');
+      return null;
     }
   }
 
-  /// 检查 session 是否仍然有效
-  static Future<bool> checkSession({
+  /// POST /user/session/validate — 校验 session 是否有效
+  static Future<SessionValidateResult?> validateSession({
     required int sessionId,
     required String sessionSecret,
   }) async {
     try {
       final res = await http
-          .get(
-            Uri.parse('$_userBase/check-session').replace(queryParameters: {
-              'session_id': sessionId.toString(),
-              'session_secret': sessionSecret,
-            }),
-          )
+          .post(Uri.parse('$_userBase/session/validate'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        return data['valid'] == true;
+        return SessionValidateResult(
+          valid: data['valid'] == true,
+          userId: data['user_id'] as int?,
+        );
       }
-      return false;
+      debugPrint('[ApiService] validateSession status=${res.statusCode} body=${res.body}');
+      return null;
     } catch (e) {
-      debugPrint('[ApiService] checkSession error: $e');
-      return false;
+      debugPrint('[ApiService] validateSession error: $e');
+      return null;
     }
   }
 
   /// 用户改名（5 天冷却期）
   static Future<String?> rename({
-    required String userExternalToken,
+    required String userToken,
     required String newName,
   }) async {
     try {
@@ -403,7 +418,7 @@ class ApiService {
           .post(Uri.parse('$_userBase/rename'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
-                'user_external_token': userExternalToken,
+                'user_token': userToken,
                 'new_name': newName,
               }))
           .timeout(_timeout);

@@ -62,7 +62,7 @@ class _UserPageState extends State<UserPage> {
       }
 
       final result = await ApiService.rename(
-        userExternalToken: userToken,
+        userToken: userToken,
         newName: name,
       );
 

@@ -8,6 +8,7 @@ import '../../services/api.dart';
 import '../../services/device_credential_store.dart';
 import '../../services/device_fingerprint.dart';
 import '../../services/pow.dart';
+import '../../services/session_service.dart';
 import '../../services/storage.dart';
 import '../../services/turnstile_service.dart';
 import '../../theme/app_colors.dart';
@@ -286,22 +287,35 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
 
+      debugPrint('[Register] _confirmName: turnstile=${_preTurnstileToken != null ? "OK" : "NULL"}, '
+          'pow=${_prePowNonce != null ? "OK(${_prePowChallenge?.challengeId})" : "NULL"}');
+
       final result = await ApiService.register(
         userDisplayId: name,
         deviceFingerPrint: fp,
+        verificationTurnstile: _preTurnstileToken ?? '',
+        verificationPow: PoWResult(
+          challengeId: _prePowChallenge!.challengeId,
+          nonce: _prePowNonce!,
+        ),
       );
 
       if (!mounted) return;
 
       if (result == null) {
-        setState(() => _renameError = '注册失败，请重试');
+        final errMsg = ApiService.lastError ?? '未知错误';
+        debugPrint('[Register] register FAILED: lastError=$errMsg');
+        setState(() => _renameError = errMsg);
         return;
       }
 
-      await DeviceCredentialStore.saveUserExternalToken(result.userExternalToken);
+      await DeviceCredentialStore.saveUserExternalToken(result.userToken);
       await DeviceCredentialStore.saveDeviceSecret(result.deviceSecret);
       await PostStorage.saveDisplayName(name);
       await PostStorage.setRegistered(true);
+
+      // 注册成功后立即申请 session，避免回到主页时报 missing_session
+      await SessionService.instance.ensureSession();
 
       setState(() => _phase = 'done');
       Navigator.pop(context);
@@ -686,90 +700,95 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Widget _buildNamingInput(AppColors colors, Color onSurface) {
-    return Row(
+    return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: RegisterDimens.namingInputWidth,
-          height: RegisterDimens.namingInputHeight,
-          child: TextField(
-            controller: _nameController,
-            autofocus: true,
-            maxLength: 100,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: RegisterDimens.namingInputFontSize,
-              color: onSurface,
-            ),
-            decoration: InputDecoration(
-              hintText: '请输入（每月可更改一次）',
-              hintStyle: TextStyle(
-                fontSize: RegisterDimens.namingHintFontSize,
-                color: onSurface.withValues(alpha: RegisterDimens.namingHintAlpha),
-              ),
-              counterText: '',
-              border: UnderlineInputBorder(
-                borderSide: BorderSide(color: onSurface, width: 1),
-              ),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: onSurface, width: 1),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: onSurface, width: 1),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: RegisterDimens.namingInputPaddingH,
-                vertical: RegisterDimens.namingInputPaddingV,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(width: RegisterDimens.namingButtonGap),
-        SizedBox(
-          width: RegisterDimens.namingConfirmButtonWidth,
-          height: RegisterDimens.namingConfirmButtonHeight,
-          child: ElevatedButton(
-            onPressed: (_submitting || _nameController.text.trim().isEmpty) ? null : _confirmName,
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                states.contains(WidgetState.disabled)
-                    ? colors.register.disabledButtonBg
-                    : colors.register.buttonBg),
-              foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                states.contains(WidgetState.disabled)
-                    ? colors.register.disabledButtonText
-                    : colors.register.buttonText),
-              shape: WidgetStateProperty.all(RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(RegisterDimens.namingConfirmButtonRadius),
-                side: BorderSide(
-                  color: (_submitting || _nameController.text.trim().isEmpty)
-                      ? colors.register.disabledButtonBorderColor
-                      : colors.register.buttonBorderColor,
-                  width: RegisterDimens.namingConfirmButtonBorderWidth,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: RegisterDimens.namingInputWidth,
+              height: RegisterDimens.namingInputHeight,
+              child: TextField(
+                controller: _nameController,
+                autofocus: true,
+                maxLength: 100,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: RegisterDimens.namingInputFontSize,
+                  color: onSurface,
                 ),
-              )),
-              padding: WidgetStateProperty.all(EdgeInsets.symmetric(
-                horizontal: RegisterDimens.namingConfirmButtonPaddingH,
-                vertical: RegisterDimens.namingConfirmButtonPaddingV,
-              )),
+                decoration: InputDecoration(
+                  hintText: '请输入（每月可更改一次）',
+                  hintStyle: TextStyle(
+                    fontSize: RegisterDimens.namingHintFontSize,
+                    color: onSurface.withValues(alpha: RegisterDimens.namingHintAlpha),
+                  ),
+                  counterText: '',
+                  border: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: onSurface, width: 1),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: RegisterDimens.namingInputPaddingH,
+                    vertical: RegisterDimens.namingInputPaddingV,
+                  ),
+                ),
+              ),
             ),
-            child: _submitting
-                ? SizedBox(
-                    width: RegisterDimens.namingButtonConfirmSize,
-                    height: RegisterDimens.namingButtonConfirmSize,
-                    child: CircularProgressIndicator(
-                      strokeWidth: RegisterDimens.namingButtonStrokeWidth,
-                      valueColor: AlwaysStoppedAnimation(colors.register.buttonText),
+            SizedBox(width: RegisterDimens.namingButtonGap),
+            SizedBox(
+              width: RegisterDimens.namingConfirmButtonWidth,
+              height: RegisterDimens.namingConfirmButtonHeight,
+              child: ElevatedButton(
+                onPressed: (_submitting || _nameController.text.trim().isEmpty) ? null : _confirmName,
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.disabled)
+                        ? colors.register.disabledButtonBg
+                        : colors.register.buttonBg),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.disabled)
+                        ? colors.register.disabledButtonText
+                        : colors.register.buttonText),
+                  shape: WidgetStateProperty.all(RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(RegisterDimens.namingConfirmButtonRadius),
+                    side: BorderSide(
+                      color: (_submitting || _nameController.text.trim().isEmpty)
+                          ? colors.register.disabledButtonBorderColor
+                          : colors.register.buttonBorderColor,
+                      width: RegisterDimens.namingConfirmButtonBorderWidth,
                     ),
-                  )
-                : Text('确认',
-                    style: TextStyle(
-                      fontSize: RegisterDimens.namingConfirmButtonFontSize,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: RegisterDimens.namingConfirmButtonLetterSpacing,
-                    )),
-          ),
+                  )),
+                  padding: WidgetStateProperty.all(EdgeInsets.symmetric(
+                    horizontal: RegisterDimens.namingConfirmButtonPaddingH,
+                    vertical: RegisterDimens.namingConfirmButtonPaddingV,
+                  )),
+                ),
+                child: _submitting
+                    ? SizedBox(
+                        width: RegisterDimens.namingButtonConfirmSize,
+                        height: RegisterDimens.namingButtonConfirmSize,
+                        child: CircularProgressIndicator(
+                          strokeWidth: RegisterDimens.namingButtonStrokeWidth,
+                          valueColor: AlwaysStoppedAnimation(colors.register.buttonText),
+                        ),
+                      )
+                    : Text('确认',
+                        style: TextStyle(
+                          fontSize: RegisterDimens.namingConfirmButtonFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: RegisterDimens.namingConfirmButtonLetterSpacing,
+                        )),
+              ),
+            ),
+          ],
         ),
         if (_renameError != null) ...[
           const SizedBox(height: RegisterDimens.namingErrorGap),
