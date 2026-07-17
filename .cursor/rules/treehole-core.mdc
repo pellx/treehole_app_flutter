@@ -1,0 +1,25 @@
+---
+description: Treehole Flutter 项目核心约定（架构分层、语言、日志）
+alwaysApply: true
+---
+
+# Treehole Flutter 核心约定
+
+## 语言与沟通
+- 与用户交流、UI 文案、代码注释均使用中文
+- 注释只解释「为什么」，不复述代码做了什么
+
+## 架构分层（必须遵守）
+- `lib/pages/` — 页面 UI（StatefulWidget），不直接访问 Hive / http
+- `lib/services/` — 全部网络与存储：`ApiService`（静态方法）、`SessionService`（单例）、`PostStorage`（Hive）、`DeviceCredentialStore`（Keystore/Keychain）
+- `lib/models/` — 纯数据模型，只有字段 + toJson/fromJson
+- `lib/widgets/` — 可复用组件
+- `lib/theme/` — `AppColors`（ThemeExtension）、`AppDimens` / `RegisterDimens`（尺寸常量）
+
+## 硬性规则
+- 不要修改 `AppDimens` / `RegisterDimens` 中的数值来「顺手重构」
+- 颜色一律取自 `Theme.of(context).extension<AppColors>()!`，不写死色值
+- 敏感凭证（user_token、device_secret、session）只存 `DeviceCredentialStore`（flutter_secure_storage），禁止写入 Hive / SharedPreferences / 日志
+- 日志用 `debugPrint('[模块名] ...')`，禁止 `print()`
+- API 错误消息统一写入 `ApiService.lastError`，UI 层读取展示
+- 异步回调中操作 State 前必须检查 `mounted`

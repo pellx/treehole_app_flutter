@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
+import '../../services/avatar_storage.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -47,28 +45,9 @@ class _SquarePageState extends State<SquarePage> {
   Duration _postButtonAnimDuration = const Duration(milliseconds: 300);
   bool _updateAvailable = false;                     // 有新版本可更新
 
-  Future<File> _avatarSavePath() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/avatar.jpg');
-  }
-
   Future<void> _loadAvatar() async {
-    final file = await _avatarSavePath();
-    if (await file.exists()) {
-      final bytes = await file.readAsBytes();
-      if (mounted) setState(() => _avatarBytes = bytes);
-    }
-  }
-
-  Future<void> _pickAvatar() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 256);
-    if (picked != null) {
-      final bytes = await File(picked.path).readAsBytes();
-      final saveFile = await _avatarSavePath();
-      await saveFile.writeAsBytes(bytes);
-      if (mounted) setState(() => _avatarBytes = bytes);
-    }
+    final bytes = await AvatarStorage.load();
+    if (mounted && bytes != null) setState(() => _avatarBytes = bytes);
   }
 
   void _onNeedCommentRefresh(int postId) {
@@ -172,25 +151,29 @@ class _SquarePageState extends State<SquarePage> {
       _loadingIds.add(id);
     }
 
-    // 并行请求所有帖子（缓存 → API fallback）
+    // 并行请求所有帖子（缓存 → API fallback）；fresh 标记该帖是否刚从 API 拉取
     final futures = batch.map((id) async {
-      final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
+      final cached = PostStorage.getPost(id);
+      if (cached != null) return (post: cached, fresh: false);
+      final post = await ApiService.getPost(id);
       if (post != null) await PostStorage.savePost(post);
-      return post;
+      return (post: post, fresh: true);
     }).toList();
 
-    // 按顺序处理结果，拿到一篇显示一篇
+    // 按顺序处理结果，拿到一篇立即显示，评论走缓存 + 后台刷新（不阻塞帖子上屏）
     for (int i = 0; i < futures.length; i++) {
-      final post = await futures[i];
+      final result = await futures[i];
+      final post = result.post;
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
-        await _refreshPostComments(post);
+        _comments[post.id] ??= PostStorage.getComments(post.comments);
+        final order = {for (var j = 0; j < _allIds.length; j++) _allIds[j]: j};
         setState(() {
           _posts.add(post);
-          _posts.sort(
-            (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
-          );
+          _posts.sort((a, b) => (order[a.id] ?? 0).compareTo(order[b.id] ?? 0));
         });
+        // 刚从 API 拉的帖子评论列表已是最新，无需再 getPost
+        _refreshPostComments(post, fetchLatest: !result.fresh);
       }
     }
 
@@ -213,6 +196,8 @@ class _SquarePageState extends State<SquarePage> {
   // ---- 下拉刷新 ----
   Future<void> _refresh() async {
     print('[refresh] start');
+    // 指示器至少显示 300ms，避免刷新过快时一闪而过
+    final stopwatch = Stopwatch()..start();
     _loading = true;
     List<int> newIds;
     try {
@@ -221,65 +206,90 @@ class _SquarePageState extends State<SquarePage> {
     } catch (_) {
       newIds = PostStorage.getIdList();
     }
-    if (newIds.isEmpty) { _loading = false; return; }
+    if (newIds.isEmpty) {
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 300) {
+        await Future.delayed(Duration(milliseconds: 300 - elapsed));
+      }
+      _loading = false;
+      return;
+    }
 
     // 移除已不在 ID 列表中的帖子（后端已删除）
+    final newIdSet = newIds.toSet();
     final removedIds = _posts
         .map((p) => p.id)
-        .where((id) => !newIds.contains(id))
+        .where((id) => !newIdSet.contains(id))
         .toList();
-    for (final id in removedIds) {
-      _posts.removeWhere((p) => p.id == id);
-      _comments.remove(id);
-      _postsNeedCommentRefresh.remove(id);
-      await PostStorage.deletePost(id);
-    }
     if (removedIds.isNotEmpty) {
+      for (final id in removedIds) {
+        _posts.removeWhere((p) => p.id == id);
+        _comments.remove(id);
+        _postsNeedCommentRefresh.remove(id);
+      }
       setState(() {});
+      await Future.wait(removedIds.map(PostStorage.deletePost));
     }
 
     final existingIds = _posts.map((p) => p.id).toSet();
     final addedIds = newIds.where((id) => !existingIds.contains(id)).toList();
 
-    final newPosts = <Post>[];
-    for (final id in addedIds) {
-      final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
-      if (post != null) {
-        await PostStorage.savePost(post);
-        newPosts.add(post);
-      }
-    }
+    // 并行拉取新帖，避免逐篇串行等待；fresh 标记是否刚从 API 拉取
+    final fetched = await Future.wait(addedIds.map((id) async {
+      final cached = PostStorage.getPost(id);
+      if (cached != null) return (post: cached, fresh: false);
+      final post = await ApiService.getPost(id);
+      if (post != null) await PostStorage.savePost(post);
+      return (post: post, fresh: true);
+    }));
+    final newPosts = [for (final r in fetched) if (r.post != null) r.post!];
+    final freshIds = {for (final r in fetched) if (r.fresh && r.post != null) r.post!.id};
 
     _allIds = newIds;
     _loadedCount = _posts.length + newPosts.length;
     if (newPosts.isNotEmpty) {
+      // 先用缓存评论填充，帖子立即完整上屏
+      for (final p in newPosts) {
+        _comments[p.id] ??= PostStorage.getComments(p.comments);
+      }
+      final order = {for (var i = 0; i < _allIds.length; i++) _allIds[i]: i};
       _posts.insertAll(0, newPosts);
-      _posts.sort(
-        (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
-      );
+      _posts.sort((a, b) => (order[a.id] ?? 0).compareTo(order[b.id] ?? 0));
       setState(() {});
     }
 
     for (final p in _posts) {
       _postsNeedCommentRefresh.add(p.id);
     }
-    for (final post in _posts.take(7)) {
-      if (_postsNeedCommentRefresh.contains(post.id)) {
-        await _refreshPostComments(post);
-        _postsNeedCommentRefresh.remove(post.id);
-      }
+    // 前 7 篇评论后台并行刷新，不阻塞下拉刷新指示器；其余滚动到时再刷
+    final top = _posts.take(7).toList();
+    for (final p in top) {
+      _postsNeedCommentRefresh.remove(p.id);
+    }
+    unawaited(Future.wait(top.map(
+      // 刚从 API 拉的新帖评论列表已最新，跳过重复 getPost
+      (p) => _refreshPostComments(p, fetchLatest: !freshIds.contains(p.id)),
+    )));
+    final elapsed = stopwatch.elapsedMilliseconds;
+    if (elapsed < 800) {
+      await Future.delayed(Duration(milliseconds: 800 - elapsed));
     }
     _loading = false;
     print('[refresh] done');
   }
 
   // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增
-  Future<void> _refreshPostComments(Post post) async {
+  // fetchLatest=false 时直接用 post.comments（帖子刚从 API 拉取，列表已最新，省一次 getPost）
+  Future<void> _refreshPostComments(Post post, {bool fetchLatest = true}) async {
     List<int> newIds;
-    try {
-      final fresh = await ApiService.getPost(post.id);
-      newIds = fresh?.comments ?? post.comments;
-    } catch (_) {
+    if (fetchLatest) {
+      try {
+        final fresh = await ApiService.getPost(post.id);
+        newIds = fresh?.comments ?? post.comments;
+      } catch (_) {
+        newIds = post.comments;
+      }
+    } else {
       newIds = post.comments;
     }
     if (newIds.isEmpty) return;
@@ -382,7 +392,9 @@ class _SquarePageState extends State<SquarePage> {
                 onTap: () {
                   Navigator.pop(context);
                   if (PostStorage.isRegistered()) {
-                    Navigator.of(context).push(bottomUpRoute(const UserPage()));
+                    Navigator.of(context)
+                        .push(bottomUpRoute(const UserPage()))
+                        .then((_) => _loadAvatar());
                   } else {
                     Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
                   }
@@ -438,7 +450,9 @@ class _SquarePageState extends State<SquarePage> {
                     _drawerTile(Icons.person_outline, '用户', onTap: () {
                       Navigator.pop(context);
                       if (PostStorage.isRegistered()) {
-                        Navigator.of(context).push(bottomUpRoute(const UserPage()));
+                        Navigator.of(context)
+                            .push(bottomUpRoute(const UserPage()))
+                            .then((_) => _loadAvatar());
                       } else {
                         Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
                       }

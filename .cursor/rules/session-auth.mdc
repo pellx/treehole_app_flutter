@@ -1,0 +1,26 @@
+---
+description: Session / 设备指纹 / 认证相关不变量（客户端与后端必须严格一致）
+globs: lib/services/session_service.dart,lib/services/api.dart,lib/services/device_*.dart,lib/pages/account/**,fingerprint.ts
+alwaysApply: false
+---
+
+# Session 与设备指纹不变量
+
+## fingerprint_hash v2 算法（两端必须一致，改一处必须同步另一处）
+
+- Android 仅 13 个硬件身份字段：`build_board/brand/device/hardware/manufacturer/model/product` + `abi_supported_abis/32bit/64bit` + `hw_is_physical_device/physical_ram_size/total_disk_size`
+- iOS 仅 9 个字段（不含 `identifier_for_vendor`、`total_disk_size`、`nodename`）
+- 数组字段 **sort 后**用 `,` join；布尔一律序列化为 `"true"`/`"false"`（后端 DB tinyint 0/1 也要规范化，不能用 `String(1)`）
+- 所有值用 `|` 拼接后取 SHA-256 hex
+- **禁止**将可变字段（`build_host/tags/type/bootloader`、`hw_system_features`、`hw_serial_number`、`hw_is_low_ram_device`）加回 hash
+- hash 不持久化：每次 `ensureSession()` 实时采集实时计算
+
+## Session 流程
+
+- 统一走 `SessionService.instance.ensureSession()`，不要绕过它直接 `createSession`
+- 凭证读写只经 `DeviceCredentialStore`；退出登录只清 session，保留 user_token/device_secret
+
+## 上传接口特殊约定
+
+- multipart 上传必须同时把 session 放 **header**（`x-session-id`/`x-session-secret`）和 form fields
+- 原因：NestJS Guard 先于 Multer 执行，Guard 阶段读不到 multipart body；删 header 会导致 `MISSING_SESSION`

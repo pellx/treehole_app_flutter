@@ -1,10 +1,18 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
+import '../../services/avatar_storage.dart';
+import '../../services/session_service.dart';
 import '../../services/storage.dart';
 import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_dimens_accent.dart';
+import '../settings/settings_navigation.dart';
 
 class UserPage extends StatefulWidget {
   const UserPage({super.key});
@@ -15,218 +23,619 @@ class UserPage extends StatefulWidget {
 
 class _UserPageState extends State<UserPage> {
   final _nameController = TextEditingController();
-  bool _editing = false;
-  bool _saving = false;
+  final _nameFocus = FocusNode();
+  bool _editingName = false;
+  bool _submittingName = false;
+  bool _resettingToken = false;
   String? _error;
   String _externalToken = '';
+  Uint8List? _avatarBytes;
+  DateTime? _tokenResetAt;
+
+  /// 两月内有重置 → 绿；否则红（从未重置则用注册时间，由后端 token_reset_at 给出）
+  bool get _tokenRecent {
+    final at = _tokenResetAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < const Duration(days: 60);
+  }
 
   @override
   void initState() {
     super.initState();
     _nameController.text = PostStorage.getDisplayName() ?? PostStorage.getUserName();
-    _nameController.addListener(() {
-      if (mounted) setState(() {});
-    });
     _loadExternalToken();
+    _loadAvatar();
+    _loadProfile();
+  }
+
+  Future<void> _loadAvatar() async {
+    final bytes = await AvatarStorage.load();
+    if (mounted && bytes != null) setState(() => _avatarBytes = bytes);
+  }
+
+  /// 从存储选择一张图片作为头像并保存到本地（与发帖页相同的文件选择方式）
+  Future<void> _pickAvatar() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    );
+    final path = result?.files.single.path;
+    if (path == null) return;
+    try {
+      final bytes = await File(path).readAsBytes();
+      await AvatarStorage.save(bytes);
+      if (mounted) setState(() => _avatarBytes = bytes);
+    } catch (e) {
+      debugPrint('[UserPage] 更换头像失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('头像更换失败'), duration: Duration(seconds: 1)),
+        );
+      }
+    }
   }
 
   Future<void> _loadExternalToken() async {
     final token = await DeviceCredentialStore.getUserExternalToken();
-    if (mounted) {
-      setState(() {
-        _externalToken = token ?? '';
-      });
+    if (mounted) setState(() => _externalToken = token ?? '');
+  }
+
+  Future<({int id, String secret})?> _readySession() async {
+    final ok = await SessionService.instance.ensureSession();
+    if (!ok) return null;
+    final id = await DeviceCredentialStore.getSessionId();
+    final secret = await DeviceCredentialStore.getSessionSecret();
+    if (id == null || secret == null) return null;
+    return (id: id, secret: secret);
+  }
+
+  Future<void> _loadProfile() async {
+    final session = await _readySession();
+    if (session == null) {
+      debugPrint('[UserPage] profile: session 未就绪');
+      return;
+    }
+    final profile = await ApiService.getUserProfile(
+      sessionId: session.id,
+      sessionSecret: session.secret,
+    );
+    if (!mounted || profile == null) return;
+    setState(() {
+      if (profile.userDisplayId.isNotEmpty) {
+        _nameController.text = profile.userDisplayId;
+      }
+      _tokenResetAt = profile.tokenResetAt;
+    });
+    if (profile.userDisplayId.isNotEmpty) {
+      await PostStorage.saveDisplayName(profile.userDisplayId);
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _saveName() async {
+  String _mapRenameError(String? raw) {
+    return switch (raw) {
+      'NAME_EMPTY' => '名字不能为空',
+      'NAME_UNCHANGED' => '名字未改变',
+      'RENAME_TOO_FREQUENT' => '改名冷却中，每两周可改一次',
+      'NAME_TAKEN' => '该名字已被使用',
+      null => '改名失败',
+      _ => raw,
+    };
+  }
+
+  /// 「更改」→ 进入原位编辑；「提交」→ 调后端改名
+  Future<void> _onNameButtonTap() async {
+    if (!_editingName) {
+      setState(() {
+        _editingName = true;
+        _error = null;
+      });
+      _nameFocus.requestFocus();
+      return;
+    }
+
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _error = '名字不能为空');
+      return;
+    }
 
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-
+    setState(() { _submittingName = true; _error = null; });
     try {
-      final userToken = await DeviceCredentialStore.getUserExternalToken();
-      if (userToken == null) {
-        setState(() => _error = '会话异常');
+      final session = await _readySession();
+      if (session == null) {
+        if (mounted) setState(() => _error = '会话验证失败，请稍后重试');
         return;
       }
-
       final result = await ApiService.rename(
-        userToken: userToken,
+        sessionId: session.id,
+        sessionSecret: session.secret,
         newName: name,
       );
-
       if (!mounted) return;
-
-      if (result != null) {
-        await PostStorage.saveDisplayName(result);
-        _nameController.text = result;
-        setState(() => _editing = false);
-      } else {
-        setState(() => _error = ApiService.lastError ?? '改名失败');
+      if (result == null) {
+        setState(() => _error = _mapRenameError(ApiService.lastError));
+        return;
       }
+      await PostStorage.saveDisplayName(result);
+      _nameController.text = result;
+      setState(() => _editingName = false);
     } catch (e) {
       if (mounted) setState(() => _error = '网络异常：$e');
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _submittingName = false);
     }
+  }
+
+  void _copyToken() {
+    if (_externalToken.isEmpty) return;
+    Clipboard.setData(ClipboardData(text: _externalToken));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制用户令牌'), duration: Duration(seconds: 1)),
+    );
+  }
+
+  Future<void> _confirmChangeToken() async {
+    if (_resettingToken) return;
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: colors.common.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AccentDimens.dialogRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AccentDimens.dialogPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '是否确认更改用户令牌？更改之后原本的令牌作废，如需登录，需使用新签发的令牌',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AccentDimens.dialogMessageFontSize,
+                  height: AccentDimens.dialogMessageLineHeight,
+                  color: onSurface,
+                ),
+              ),
+              const SizedBox(height: AccentDimens.dialogActionsTopGap),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: onSurface.withValues(
+                              alpha: AccentDimens.dialogCancelTextAlpha),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AccentDimens.dialogActionGap),
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.postCreate.submitBg,
+                          foregroundColor: colors.postCreate.submitText,
+                          elevation: 0,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('确认'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true && mounted) await _onChangeToken();
+  }
+
+  Future<void> _onChangeToken() async {
+    if (_resettingToken) return;
+    setState(() => _resettingToken = true);
+    try {
+      final session = await _readySession();
+      if (session == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
+          );
+        }
+        return;
+      }
+      final result = await ApiService.resetUserToken(
+        sessionId: session.id,
+        sessionSecret: session.secret,
+      );
+      if (!mounted) return;
+      if (result == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ApiService.lastError ?? '令牌重置失败'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      await DeviceCredentialStore.saveUserExternalToken(result.userToken);
+      setState(() {
+        _externalToken = result.userToken;
+        _tokenResetAt = result.tokenResetAt ?? DateTime.now();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('用户令牌已重置'), duration: Duration(seconds: 2)),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('网络异常：$e'), duration: const Duration(seconds: 2)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resettingToken = false);
+    }
+  }
+
+  String _formatTokenResetAt() {
+    final at = _tokenResetAt;
+    if (at == null) return '加载中…';
+    final local = at.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  void _openDeviceBinding() {
+    // TODO: 设备绑定操作页尚未实现
+    navigateToSubPage(context, '设备绑定', const Center(child: Text('开发中')));
+  }
+
+  void _openLoginOther() {
+    // TODO: 登录其他账户页尚未实现
+    navigateToSubPage(context, '登录其他账户', const Center(child: Text('开发中')));
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final displayName = PostStorage.getDisplayName() ?? PostStorage.getUserName();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: onSurface),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text('用户', style: TextStyle(color: onSurface, fontSize: 18)),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          children: [
-            const SizedBox(height: 40),
-            // 头像
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
-              backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
-            ),
-            const SizedBox(height: 28),
-            // 用户名区域
-            if (_editing) ...[
-              TextField(
-                controller: _nameController,
-                autofocus: true,
-                maxLength: 100,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: onSurface),
-                decoration: InputDecoration(
-                  hintText: '输入新名字',
-                  counterText: '',
-                  filled: true,
-                  fillColor: onSurface.withValues(alpha: 0.05),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+      body: Column(
+        children: [
+          _topBar(colors),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(AccentDimens.pagePadding),
+              children: [
+                _avatarIdRow(colors, onSurface),
+                if (_error != null)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(bottom: AccentDimens.errorBottomPadding),
+                    child: Text(_error!,
+                        style: TextStyle(
+                            fontSize: AccentDimens.errorFontSize,
+                            color: colors.register.errorText)),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: _saving ? null : () => setState(() {
-                      _editing = false;
-                      _error = null;
-                      _nameController.text = displayName;
-                    }),
-                    child: const Text('取消'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: (_saving || _nameController.text.trim().isEmpty) ? null : _saveName,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colors.postCreate.submitBg,
-                      foregroundColor: colors.postCreate.submitText,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('确认'),
-                  ),
-                ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFFE57373)),
-                  textAlign: TextAlign.center,
-                ),
+                _itemDivider(colors),
+                _tokenRow(onSurface),
+                _itemDivider(colors),
+                _changeTokenRow(colors, onSurface),
+                _itemDivider(colors),
+                _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
+                _itemDivider(colors),
+                _navRow(colors, onSurface, '登录其他账户', _openLoginOther),
+                _itemDivider(colors),
               ],
-            ] else ...[
-              GestureDetector(
-                onTap: () => setState(() {
-                  _editing = true;
-                  _error = null;
-                  _nameController.text = displayName;
-                }),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      displayName,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: onSurface),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.edit_outlined, size: 18, color: onSurface.withValues(alpha: 0.4)),
-                  ],
-                ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- 顶部栏（与颜色模式设置页同款：淡绿背景、标题居中、向上箭头） ----
+
+  Widget _topBar(AppColors colors) {
+    final barText = colors.common.barText;
+    return Container(
+      color: colors.common.drawerHeaderBg,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: AccentDimens.barHeight,
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.keyboard_arrow_up, color: barText),
+                onPressed: () => Navigator.pop(context),
               ),
+              Expanded(
+                child: Text('用户',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: AccentDimens.barTitleFontSize,
+                        fontWeight: FontWeight.w500,
+                        color: barText)),
+              ),
+              const SizedBox(width: AccentDimens.barTrailingWidth),
             ],
-            const SizedBox(height: 40),
-            // 账户信息
-            _infoTile('用户标识', _externalToken.length > 16
-                ? '${_externalToken.substring(0, 16)}...'
-                : _externalToken, onSurface, onTap: () {
-              Clipboard.setData(ClipboardData(text: _externalToken));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已复制用户标识'), duration: Duration(seconds: 1)),
-              );
-            }),
-            const Divider(height: 1),
-            _infoTile('注册时间', '—', onSurface),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- 头像 + ID + 更改/提交按钮 ----
+
+  Widget _avatarIdRow(AppColors colors, Color onSurface) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(vertical: AccentDimens.avatarIdRowVPadding),
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: AccentDimens.avatarLeftInset),
+            child: GestureDetector(
+              onTap: _pickAvatar,
+              child: CircleAvatar(
+                radius: AccentDimens.avatarRadius,
+                backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
+                backgroundImage: _avatarBytes != null
+                    ? MemoryImage(_avatarBytes!) as ImageProvider
+                    : const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
+              ),
+            ),
+          ),
+          const SizedBox(width: AccentDimens.avatarIdGap),
+          Expanded(
+            child: _editingName
+                ? TextField(
+                    controller: _nameController,
+                    focusNode: _nameFocus,
+                    maxLength: AccentDimens.nameMaxLength,
+                    style: TextStyle(
+                        fontSize: AccentDimens.idFontSize,
+                        fontWeight: FontWeight.w600,
+                        color: onSurface),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      counterText: '',
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: AccentDimens.nameInputVPadding),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                            color: onSurface.withValues(
+                                alpha: AccentDimens.nameInputUnderlineAlpha),
+                            width: AccentDimens.nameInputUnderlineWidth),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(
+                            color: onSurface,
+                            width: AccentDimens.nameInputUnderlineWidth),
+                      ),
+                    ),
+                  )
+                : Text(
+                    _nameController.text,
+                    style: TextStyle(
+                        fontSize: AccentDimens.idFontSize,
+                        fontWeight: FontWeight.w600,
+                        color: onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+          ),
+          const SizedBox(width: AccentDimens.idButtonGap),
+          Padding(
+            padding: const EdgeInsets.only(
+                right: AccentDimens.changeButtonRightInset),
+            child: SizedBox(
+              height: AccentDimens.buttonHeight,
+              child: ElevatedButton(
+                onPressed: _submittingName ? null : _onNameButtonTap,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.postCreate.submitBg.withValues(
+                      alpha: _editingName
+                          ? AccentDimens.buttonSubmitBgAlpha
+                          : AccentDimens.buttonBgAlpha),
+                  foregroundColor: colors.postCreate.submitText.withValues(
+                      alpha: _editingName
+                          ? AccentDimens.buttonSubmitTextAlpha
+                          : AccentDimens.buttonTextAlpha),
+                  elevation: 0,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AccentDimens.buttonHPadding, vertical: 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AccentDimens.buttonRadius),
+                  ),
+                  textStyle:
+                      const TextStyle(fontSize: AccentDimens.buttonFontSize),
+                ),
+                child: _submittingName
+                    ? SizedBox(
+                        width: AccentDimens.submitSpinnerSize,
+                        height: AccentDimens.submitSpinnerSize,
+                        child: CircularProgressIndicator(
+                            strokeWidth: AccentDimens.submitSpinnerStroke,
+                            color: colors.postCreate.submitText.withValues(
+                                alpha: AccentDimens.buttonSubmitTextAlpha)))
+                    : Text(_editingName ? '提交' : '更改'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---- 用户 token（点击复制） ----
+
+  Widget _tokenRow(Color onSurface) {
+    const head = AccentDimens.tokenHeadChars;
+    const tail = AccentDimens.tokenTailChars;
+    final display = _externalToken.isEmpty
+        ? '—'
+        : (_externalToken.length > head + tail
+            ? '${_externalToken.substring(0, head)}...'
+                '${_externalToken.substring(_externalToken.length - tail)}'
+            : _externalToken);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _copyToken,
+      child: _itemRow(
+        Row(
+          children: [
+            Text('用户令牌',
+                style: TextStyle(
+                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            const Spacer(),
+            Text(display,
+                style: TextStyle(
+                    fontSize: AccentDimens.tokenValueFontSize,
+                    color: onSurface.withValues(
+                        alpha: AccentDimens.tokenValueAlpha))),
+            const SizedBox(width: AccentDimens.tokenCopyIconGap),
+            Padding(
+              padding: const EdgeInsets.only(
+                  right: AccentDimens.copyIconRightInset),
+              child: Icon(Icons.copy,
+                  size: AccentDimens.tokenCopyIconSize,
+                  color: onSurface.withValues(
+                      alpha: AccentDimens.tokenCopyIconAlpha)),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _infoTile(String label, String value, Color onSurface, {VoidCallback? onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // ---- 更改用户 token（右侧上次更改时间 + 可用性圆点） ----
+
+  Widget _changeTokenRow(AppColors colors, Color onSurface) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _resettingToken ? null : _confirmChangeToken,
+      child: _itemRow(
+        Row(
           children: [
-            Text(label, style: TextStyle(fontSize: 15, color: onSurface.withValues(alpha: 0.6))),
-            Row(
-              children: [
-                Text(value, style: TextStyle(fontSize: 15, color: onSurface)),
-                if (onTap != null) ...[
-                  const SizedBox(width: 4),
-                  Icon(Icons.copy, size: 14, color: onSurface.withValues(alpha: 0.3)),
-                ],
-              ],
+            Text('更改用户令牌',
+                style: TextStyle(
+                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            const Spacer(),
+            if (_resettingToken)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Text(_formatTokenResetAt(),
+                  style: TextStyle(
+                      fontSize: AccentDimens.lastChangedFontSize,
+                      color: onSurface.withValues(
+                          alpha: AccentDimens.lastChangedAlpha))),
+            const SizedBox(width: AccentDimens.changeableDotGap),
+            Padding(
+              padding:
+                  const EdgeInsets.only(right: AccentDimens.dotRightInset),
+              child: Container(
+                width: AccentDimens.changeableDotSize,
+                height: AccentDimens.changeableDotSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  // 两月内有重置 → 绿；超过两月 → 红
+                  color: _tokenRecent
+                      ? const Color(0xFF4CAF50)
+                      : const Color(0xFFE57373),
+                ),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  // ---- 跳转子页面行 ----
+
+  Widget _navRow(AppColors colors, Color onSurface, String label, VoidCallback onTap) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: _itemRow(
+        Row(
+          children: [
+            Text(label,
+                style: TextStyle(
+                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            const Spacer(),
+            _rightAligned(Icon(Icons.chevron_right,
+                size: AccentDimens.arrowSize,
+                color: colors.common.arrowIcon)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---- 通用（与 color_mode_page 同风格） ----
+
+  /// 每行最右侧元素统一以 rowRightInset 为右侧基准对齐
+  Widget _rightAligned(Widget child) => Padding(
+        padding: const EdgeInsets.only(right: AccentDimens.rowRightInset),
+        child: child,
+      );
+
+  Widget _itemRow(Widget child) => SizedBox(
+        height: AccentDimens.itemHeight,
+        child: Center(child: child),
+      );
+
+  Widget _itemDivider(AppColors colors) => Divider(
+      height: 1,
+      thickness: AccentDimens.dividerThickness,
+      color: colors.common.divider);
 }

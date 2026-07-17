@@ -11,6 +11,9 @@ Base: `http://<host>:7300/node`
 - [3. POST /user/register](#3-post-userregister)
 - [4. POST /user/session/create](#4-post-usersessioncreate)
 - [5. POST /user/session/validate](#5-post-usersessionvalidate)
+- [6. POST /user/profile](#6-post-userprofile)
+- [7. POST /user/rename](#7-post-userrename)
+- [8. POST /user/token/reset](#8-post-usertokenreset)
 - [附录 A: 设备指纹结构](#附录-a-设备指纹结构)
 - [附录 B: fingerprint_hash 计算方法](#附录-b-fingerprint_hash-计算方法)
 - [附录 C: 注册流程](#附录-c-注册流程)
@@ -182,6 +185,112 @@ Base: `http://<host>:7300/node`
 | 状态码 | message |
 |---|---|
 | 401 | `SESSION_INVALID` |
+
+---
+
+## 6. POST /user/profile
+
+查询当前用户资料（需有效 session）。
+
+**请求** `200`
+
+```json
+{
+  "session_id": 1,
+  "session_secret": "64位hex"
+}
+```
+
+**响应**
+
+```json
+{
+  "user_display_id": "昵称",
+  "display_id_changed_at": "2026-07-01T12:00:00.000Z",
+  "token_reset_at": "2026-05-01T12:00:00.000Z"
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `user_display_id` | 当前显示名 |
+| `display_id_changed_at` | 上次改名时间；从未改过为 `null` |
+| `token_reset_at` | 上次令牌重置时间；从未重置过则回退为注册时间 `created_at` |
+
+---
+
+## 7. POST /user/rename
+
+改名。需有效 session。冷却期 **14 天**；名字不得被其他用户使用过（含 `user_identifier_history`）。
+
+**请求** `200`
+
+```json
+{
+  "session_id": 1,
+  "session_secret": "64位hex",
+  "new_name": "新昵称（1-100字符）"
+}
+```
+
+**响应**
+
+```json
+{
+  "user_display_id": "新昵称",
+  "display_id_changed_at": "2026-07-18T04:00:00.000Z"
+}
+```
+
+成功后写入：
+- `users.user_display_id` + `user_display_id_changed_at`
+- `user_identifier_history`（`type=display_id`）
+
+**错误**
+
+| 状态码 | message |
+|---|---|
+| 400 | `NAME_EMPTY` |
+| 400 | `NAME_UNCHANGED` |
+| 400 | `RENAME_TOO_FREQUENT` |
+| 400 | `NAME_TAKEN` |
+| 401 | `MISSING_SESSION` / `SESSION_INVALID` / `USER_NOT_FOUND` |
+
+---
+
+## 8. POST /user/token/reset
+
+重置用户令牌。需有效 session，**无冷却限制**。返回新 `user_token`；旧 token 立即失效（无法再申请 session）。
+
+**请求** `200`
+
+```json
+{
+  "session_id": 1,
+  "session_secret": "64位hex"
+}
+```
+
+**响应**
+
+```json
+{
+  "user_token": "64位hex",
+  "token_reset_at": "2026-07-18T04:00:00.000Z"
+}
+```
+
+成功后：
+- 更新 `users.user_token`
+- 写入 `user_identifier_history`（`type=user_token`，不存明文）
+
+客户端须立即用新 token 覆盖 Keystore 中的旧值。
+
+**错误**
+
+| 状态码 | message |
+|---|---|
+| 401 | `MISSING_SESSION` / `SESSION_INVALID` / `USER_NOT_FOUND` |
 
 ---
 

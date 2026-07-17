@@ -27,6 +27,13 @@ class SessionService {
   /// 正在进行的 ensureSession 调用，用于让并发调用者等待而非直接失败
   Completer<bool>? _pending;
 
+  /// 最近一次 session 校验通过的时间；短期内重复调用跳过网络校验
+  DateTime? _lastValidatedAt;
+  static const _validationCacheTtl = Duration(minutes: 5);
+
+  /// 使校验缓存失效（收到 401 等 session 失效信号时调用）
+  void invalidate() => _lastValidatedAt = null;
+
   /// 确保当前有有效 session。
   ///
   /// 返回 true 表示 session 已就绪可用，false 表示无法获取 session。
@@ -54,6 +61,12 @@ class SessionService {
     final sessionSecret = await DeviceCredentialStore.getSessionSecret();
 
     if (sessionId != null && sessionSecret != null) {
+      final lastValidated = _lastValidatedAt;
+      if (lastValidated != null &&
+          DateTime.now().difference(lastValidated) < _validationCacheTtl) {
+        debugPrint('[SessionService] session 近期已校验，跳过网络请求');
+        return true;
+      }
       debugPrint('[SessionService] 本地有 session(id=$sessionId)，校验中...');
       final validateResult = await ApiService.validateSession(
         sessionId: sessionId,
@@ -61,9 +74,11 @@ class SessionService {
       );
       if (validateResult != null && validateResult.valid) {
         debugPrint('[SessionService] session 仍有效(userId=${validateResult.userId})');
+        _lastValidatedAt = DateTime.now();
         return true;
       }
       debugPrint('[SessionService] session 已失效，尝试重新申请');
+      _lastValidatedAt = null;
       await DeviceCredentialStore.clearSession();
     } else {
       debugPrint('[SessionService] 本地无 session');
@@ -97,6 +112,7 @@ class SessionService {
       debugPrint('[SessionService] session 申请成功(id=${createResult.sessionId})');
       await DeviceCredentialStore.saveSessionId(createResult.sessionId);
       await DeviceCredentialStore.saveSessionSecret(createResult.sessionSecret);
+      _lastValidatedAt = DateTime.now();
       return true;
     }
 

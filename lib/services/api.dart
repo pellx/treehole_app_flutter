@@ -41,6 +41,35 @@ class SessionValidateResult {
   const SessionValidateResult({required this.valid, this.userId});
 }
 
+/// POST /user/profile 返回的用户资料
+class UserProfileResult {
+  final String userDisplayId;
+  final DateTime? displayIdChangedAt;
+  final DateTime? tokenResetAt;
+
+  const UserProfileResult({
+    required this.userDisplayId,
+    this.displayIdChangedAt,
+    this.tokenResetAt,
+  });
+
+  factory UserProfileResult.fromJson(Map<String, dynamic> json) {
+    return UserProfileResult(
+      userDisplayId: json['user_display_id'] as String? ?? '',
+      displayIdChangedAt: DateTime.tryParse(json['display_id_changed_at']?.toString() ?? ''),
+      tokenResetAt: DateTime.tryParse(json['token_reset_at']?.toString() ?? ''),
+    );
+  }
+}
+
+/// POST /user/token/reset 返回的新令牌
+class TokenResetResult {
+  final String userToken;
+  final DateTime? tokenResetAt;
+
+  const TokenResetResult({required this.userToken, this.tokenResetAt});
+}
+
 /// PoW 求解结果（challenge_id + nonce）
 class PoWResult {
   final String challengeId;
@@ -224,10 +253,16 @@ class ApiService {
   }
 
   /// 从 API 错误响应中提取 message 字段
+  /// Nest 可能返回 string，或 ValidationPipe 的 string[]
   static String _parseErrorMessage(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
-      return data['message'] as String? ?? '操作失败';
+      final msg = data['message'];
+      if (msg is String && msg.isNotEmpty) return msg;
+      if (msg is List && msg.isNotEmpty) {
+        return msg.map((e) => e.toString()).join('；');
+      }
+      return '操作失败';
     } catch (_) {
       return '操作失败';
     }
@@ -416,9 +451,38 @@ class ApiService {
     }
   }
 
-  /// 用户改名（5 天冷却期）
+  /// POST /user/profile — 查询名字与令牌重置时间
+  static Future<UserProfileResult?> getUserProfile({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/profile'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return UserProfileResult.fromJson(data);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] getUserProfile status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] getUserProfile error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/rename — session 鉴权改名（两周冷却）
   static Future<String?> rename({
-    required String userToken,
+    required int sessionId,
+    required String sessionSecret,
     required String newName,
   }) async {
     try {
@@ -426,7 +490,8 @@ class ApiService {
           .post(Uri.parse('$_userBase/rename'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
-                'user_token': userToken,
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
                 'new_name': newName,
               }))
           .timeout(_timeout);
@@ -439,6 +504,42 @@ class ApiService {
       return null;
     } catch (e) {
       debugPrint('[ApiService] rename error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/token/reset — 重置用户令牌（无冷却）
+  static Future<TokenResetResult?> resetUserToken({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/token/reset'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final token = data['user_token'] as String?;
+        if (token == null) {
+          lastError = '响应缺少 user_token';
+          return null;
+        }
+        return TokenResetResult(
+          userToken: token,
+          tokenResetAt: DateTime.tryParse(data['token_reset_at']?.toString() ?? ''),
+        );
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] resetUserToken status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] resetUserToken error: $e');
       lastError = '网络连接失败';
       return null;
     }
