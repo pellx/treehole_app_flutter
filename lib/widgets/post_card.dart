@@ -746,6 +746,24 @@ class _PostCardState extends State<PostCard> {
   Future<void> _submitComment() async {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
+
+    // 确保 session 就绪后再提交评论
+    debugPrint('[PostCard._submitComment] 调用 ensureSession...');
+    final sessionOk = await SessionService.instance.ensureSession();
+    final isRegistered = PostStorage.isRegistered();
+    debugPrint('[PostCard._submitComment] ensureSession=$sessionOk, isRegistered=$isRegistered, '
+        'lastError=${ApiService.lastError}');
+    if (!sessionOk) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isRegistered ? '会话验证失败，请检查网络后重试' : '请先注册账号'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final author = _commentHasAuthor ? PostStorage.getUserName() : '';
     final result = await ApiService.createComment(
       postId: widget.post.id,

@@ -314,7 +314,7 @@ class _RegisterPageState extends State<RegisterPage> {
       await PostStorage.saveDisplayName(name);
       await PostStorage.setRegistered(true);
 
-      // 注册成功后立即申请 session，避免回到主页时报 missing_session
+      // 注册成功后立即申请 session
       await SessionService.instance.ensureSession();
 
       setState(() => _phase = 'done');

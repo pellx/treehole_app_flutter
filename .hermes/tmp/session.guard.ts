@@ -14,8 +14,13 @@ export class SessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const body = request.body;
 
-    const sessionId = body?.session_id;
-    const sessionSecret = body?.session_secret;
+    // JSON body 走 fields；multipart upload 在 Guard 阶段 body 尚未解析，须读 header
+    const sessionId =
+      body?.session_id ??
+      request.headers['x-session-id'];
+    const sessionSecret =
+      body?.session_secret ??
+      request.headers['x-session-secret'];
 
     if (!sessionId || !sessionSecret) {
       throw new UnauthorizedException('MISSING_SESSION');

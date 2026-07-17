@@ -20,6 +20,17 @@ class DeviceCredentialStore {
   static const _kSessionId = 'session_id';
   static const _kSessionSecret = 'session_secret';
   static const _kFingerprintHash = 'fingerprint_hash';
+  static const _kRegisteredFingerprint = 'registered_fingerprint';
+
+  /// 保存注册时使用的设备指纹数据（JSON），用于后续 session 创建时不因设备状态变化导致指纹不匹配
+  static Future<void> saveRegisteredFingerprint(String fpJson) async {
+    await _storage.write(key: _kRegisteredFingerprint, value: fpJson);
+  }
+
+  /// 获取注册时保存的设备指纹 JSON
+  static Future<String?> getRegisteredFingerprintJson() async {
+    return _storage.read(key: _kRegisteredFingerprint);
+  }
 
   // ── device_id ──
 

@@ -115,9 +115,17 @@ class ApiService {
 
   static Future<UploadResult?> uploadFile(PostUploadType type, File file) async {
     try {
-      final sessionId = await DeviceCredentialStore.getSessionId() ?? 0;
-      final sessionSecret = await DeviceCredentialStore.getSessionSecret() ?? '';
+      final sessionId = await DeviceCredentialStore.getSessionId();
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret();
+      if (sessionId == null || sessionSecret == null || sessionSecret.isEmpty) {
+        debugPrint('[ApiService] uploadFile: session 未就绪 (id=$sessionId)');
+        lastError = 'missing_session';
+        return null;
+      }
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
+      // multipart 的 fields 在 NestJS 中晚于 Guard 解析，session 须同时放 header
+      request.headers['x-session-id'] = sessionId.toString();
+      request.headers['x-session-secret'] = sessionSecret;
       request.fields['type'] = type.apiValue;
       request.fields['session_id'] = sessionId.toString();
       request.fields['session_secret'] = sessionSecret;
