@@ -80,3 +80,7 @@ app.*.map.json
 
 # Local config (keys, secrets)
 lib/config/local.dart
+
+# Agent/tool temp files (backend source copies for reference)
+.hermes/
+tmp_verification/
