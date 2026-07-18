@@ -18,7 +18,11 @@ alwaysApply: false
 ## Session 流程
 
 - 统一走 `SessionService.instance.ensureSession()`，不要绕过它直接 `createSession`
-- 凭证读写只经 `DeviceCredentialStore`；退出登录只清 session，保留 user_token/device_secret
+- 凭证读写只经 `DeviceCredentialStore`；普通退出只清 session，保留 user_token/device_secret
+- `unbind_pending`（解绑冷却期）仍算已登录：保留 user_token 与 session，可继续用
+- 已有账户登录本机走 `POST /user/login`（只需 `user_token` + `fingerprint_hash`）；成功必须用响应中的新 `device_secret` 覆盖本地
+- 日常拿 session 仍走 `session/create`（需本地 secret）；secret 失效或 `DEVICE_NOT_BOUND` 时改走 `login`
+- 仅当本机绑定已正式 `unbound` 且 `login` 也无法复活时：清该账号令牌与 session；再尝试本机其他账户 `login`
 
 ## 上传接口特殊约定
 

@@ -237,7 +237,6 @@ class _RegisterPageState extends State<RegisterPage> {
       // PoW
       int? nonce = _prePowNonce;
       if (nonce == null) {
-        debugPrint('[Register] Fetching PoW challenge (not pre-fetched)...');
         final challenge = await ApiService.getPoWChallenge();
         if (challenge == null) {
           setState(() { _powStatus = _StepStatus.failed; _phase = 'failed'; });
@@ -256,7 +255,6 @@ class _RegisterPageState extends State<RegisterPage> {
       // Turnstile
       String? turnstileToken = _preTurnstileToken;
       if (turnstileToken == null) {
-        debugPrint('[Register] Waiting for Turnstile token (not pre-fetched)...');
         turnstileToken = await TurnstileService.instance.getToken();
         if (!mounted) return;
         if (turnstileToken == null) {
@@ -287,9 +285,6 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
 
-      debugPrint('[Register] _confirmName: turnstile=${_preTurnstileToken != null ? "OK" : "NULL"}, '
-          'pow=${_prePowNonce != null ? "OK(${_prePowChallenge?.challengeId})" : "NULL"}');
-
       final result = await ApiService.register(
         userDisplayId: name,
         deviceFingerPrint: fp,
@@ -303,13 +298,12 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       if (result == null) {
-        final errMsg = ApiService.lastError ?? '未知错误';
-        debugPrint('[Register] register FAILED: lastError=$errMsg');
-        setState(() => _renameError = errMsg);
+        setState(() => _renameError = ApiService.lastError ?? '未知错误');
         return;
       }
 
       await DeviceCredentialStore.saveUserExternalToken(result.userToken);
+      await DeviceCredentialStore.mergeKnownUserTokens([result.userToken]);
       await DeviceCredentialStore.saveDeviceSecret(result.deviceSecret);
       await PostStorage.saveDisplayName(name);
       await PostStorage.setRegistered(true);
@@ -330,15 +324,52 @@ class _RegisterPageState extends State<RegisterPage> {
     final token = _tokenController.text.trim();
     if (token.isEmpty) return;
 
-    setState(() { _submitting = true; });
+    setState(() {
+      _submitting = true;
+      _renameError = null;
+    });
 
     try {
-      // TODO: 调用登录 API，传入 token
+      final ok = await SessionService.instance.loginWithToken(token);
+      if (!mounted) return;
+      if (!ok) {
+        setState(() => _renameError = _mapLoginError(ApiService.lastError));
+        return;
+      }
+
+      await PostStorage.setRegistered(true);
+      final sessionId = await DeviceCredentialStore.getSessionId();
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret();
+      if (sessionId != null && sessionSecret != null) {
+        final profile = await ApiService.getUserProfile(
+          sessionId: sessionId,
+          sessionSecret: sessionSecret,
+        );
+        if (profile != null && profile.userDisplayId.isNotEmpty) {
+          await PostStorage.saveDisplayName(profile.userDisplayId);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() => _phase = 'done');
+      Navigator.pop(context);
     } catch (e) {
-      // TODO: 处理登录错误
+      if (mounted) setState(() => _renameError = '网络异常：$e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _mapLoginError(String? raw) {
+    return switch (raw) {
+      'TOKEN_EMPTY' => '请输入用户令牌',
+      'USER_NOT_FOUND' => '用户令牌无效',
+      'FINGERPRINT_MISMATCH' => '设备指纹不匹配',
+      'DEVICE_NOT_FOUND' => '本机设备未找到，请先在本机完成注册',
+      'REBIND_COOLDOWN' => '解绑冷却中，请 2 天后再登录此账户',
+      'RATE_LIMITED' => '操作过于频繁，请稍后再试',
+      _ => (raw == null || raw.isEmpty) ? '登录失败' : raw,
+    };
   }
 
   @override
@@ -437,7 +468,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       height: RegisterDimens.registeredLoginButtonHeight,
                       child: ElevatedButton(
                         onPressed: () {
-                          setState(() => _phase = 'login');
+                          setState(() {
+                            _phase = 'login';
+                            _renameError = null;
+                          });
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: colors.register.buttonBg,
@@ -720,7 +754,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   color: onSurface,
                 ),
                 decoration: InputDecoration(
-                  hintText: '请输入（每月可更改一次）',
+                  hintText: '请输入（每14天可更改一次）',
                   hintStyle: TextStyle(
                     fontSize: RegisterDimens.namingHintFontSize,
                     color: onSurface.withValues(alpha: RegisterDimens.namingHintAlpha),
@@ -893,6 +927,17 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ],
         ),
+        if (_renameError != null) ...[
+          const SizedBox(height: RegisterDimens.namingErrorGap),
+          Text(
+            _renameError!,
+            style: TextStyle(
+              fontSize: RegisterDimens.stepFontSize,
+              color: colors.register.errorText,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
         SizedBox(height: RegisterDimens.loginRecoverGap),
         GestureDetector(
           onTap: () {

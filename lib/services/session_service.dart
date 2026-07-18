@@ -3,11 +3,14 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
 
 import '../models/device_fingerprint.dart';
 import 'api.dart';
+import 'avatar_storage.dart';
 import 'device_credential_store.dart';
 import 'device_fingerprint.dart';
+import 'storage.dart';
 
 /// Session 管理服务
 ///
@@ -16,13 +19,18 @@ import 'device_fingerprint.dart';
 ///
 /// 逻辑：
 ///   1. 本地有 session → 校验有效性 → 有效则继续
-///   2. 无 session 或无效 → 检查是否有用户凭证（user_token + device_secret）
-///      - 有 → 实时采集指纹 → 计算不变字段哈希 → 申请新 session
-///      - 无 → 不做操作（用户尚未注册）
+///   2. 确认当前账号在本机仍为 live 绑定（active / unbind_pending）
+///      - unbind_pending（解绑冷却期）仍保留令牌与 session，可继续使用
+///      - 已 unbound（不在列表中）→ 清本地该账号令牌，尝试本机其他账户
+///   3. 无 session 或无效 → 用 user_token + device_secret 申请
+///      - DEVICE_NOT_BOUND（正式解绑后）→ 同上，清账号并尝试其他账户
 class SessionService {
   SessionService._();
 
   static final SessionService instance = SessionService._();
+
+  /// 本机仍视为已登录的绑定状态（冷却期内不踢下线）
+  static const _liveBindingStatuses = {'active', 'unbind_pending'};
 
   /// 正在进行的 ensureSession 调用，用于让并发调用者等待而非直接失败
   Completer<bool>? _pending;
@@ -38,10 +46,7 @@ class SessionService {
   ///
   /// 返回 true 表示 session 已就绪可用，false 表示无法获取 session。
   Future<bool> ensureSession() async {
-    if (_pending != null) {
-      debugPrint('[SessionService] ensureSession 正在执行中，等待结果...');
-      return _pending!.future;
-    }
+    if (_pending != null) return _pending!.future;
     _pending = Completer<bool>();
     try {
       final result = await _ensureSessionInternal();
@@ -56,51 +61,160 @@ class SessionService {
   }
 
   Future<bool> _ensureSessionInternal() async {
-    // 1. 检查本地是否有 session
     final sessionId = await DeviceCredentialStore.getSessionId();
     final sessionSecret = await DeviceCredentialStore.getSessionSecret();
 
     if (sessionId != null && sessionSecret != null) {
       final lastValidated = _lastValidatedAt;
-      if (lastValidated != null &&
-          DateTime.now().difference(lastValidated) < _validationCacheTtl) {
-        debugPrint('[SessionService] session 近期已校验，跳过网络请求');
-        return true;
+      final cacheHit = lastValidated != null &&
+          DateTime.now().difference(lastValidated) < _validationCacheTtl;
+
+      if (!cacheHit) {
+        final validateResult = await ApiService.validateSession(
+          sessionId: sessionId,
+          sessionSecret: sessionSecret,
+        );
+        if (validateResult == null || !validateResult.valid) {
+          _lastValidatedAt = null;
+          await DeviceCredentialStore.clearSession();
+        } else {
+          _lastValidatedAt = DateTime.now();
+          return _ensureCurrentAccountBoundOnDevice(
+            sessionId: sessionId,
+            sessionSecret: sessionSecret,
+          );
+        }
+      } else {
+        return _ensureCurrentAccountBoundOnDevice(
+          sessionId: sessionId,
+          sessionSecret: sessionSecret,
+        );
       }
-      debugPrint('[SessionService] 本地有 session(id=$sessionId)，校验中...');
-      final validateResult = await ApiService.validateSession(
-        sessionId: sessionId,
-        sessionSecret: sessionSecret,
-      );
-      if (validateResult != null && validateResult.valid) {
-        debugPrint('[SessionService] session 仍有效(userId=${validateResult.userId})');
-        _lastValidatedAt = DateTime.now();
-        return true;
-      }
-      debugPrint('[SessionService] session 已失效，尝试重新申请');
-      _lastValidatedAt = null;
-      await DeviceCredentialStore.clearSession();
-    } else {
-      debugPrint('[SessionService] 本地无 session');
     }
 
-    // 2. 检查是否有用户凭证（注册时获得的 user_token + device_secret）
+    return _createSessionOrFailover();
+  }
+
+  /// 用当前/已知令牌申请 session；解绑则 login 复活或切其他账户
+  Future<bool> _createSessionOrFailover() async {
     final userToken = await DeviceCredentialStore.getUserExternalToken();
     final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
 
-    debugPrint('[SessionService] userToken=${userToken != null ? "存在(${userToken.length}字符)" : "NULL"}, '
-        'deviceSecret=${deviceSecret != null ? "存在(${deviceSecret.length}字符)" : "NULL"}');
+    if (userToken != null) {
+      // 日常：有 secret 时走 session/create
+      if (deviceSecret != null) {
+        final ok = await _tryCreateSession(
+          userToken: userToken,
+          deviceSecret: deviceSecret,
+        );
+        if (ok) return true;
+        // secret 失效或未绑定 → login 可复活并轮换 secret
+        if (ApiService.lastError == 'DEVICE_NOT_BOUND' ||
+            ApiService.lastError == 'DEVICE_SECRET_INVALID') {
+          final loginOk = await loginWithToken(userToken);
+          if (loginOk) return true;
+        } else {
+          return false;
+        }
+      } else {
+        // 无本地 secret：直接 login
+        final loginOk = await loginWithToken(userToken);
+        if (loginOk) return true;
+      }
 
-    if (userToken == null || deviceSecret == null) {
-      debugPrint('[SessionService] 无用户凭证，无法申请 session（用户尚未注册）');
+      return _failoverAfterUnbound(
+        failedToken: userToken,
+        extraCandidates: const [],
+      );
+    }
+
+    final known = await DeviceCredentialStore.getKnownUserTokens();
+    if (known.isEmpty) return false;
+    return _tryCandidateLogins(known);
+  }
+
+  /// session 有效时确认当前账号仍在本机 live 绑定列表中
+  Future<bool> _ensureCurrentAccountBoundOnDevice({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    final accounts = await ApiService.listBoundAccounts(
+      sessionId: sessionId,
+      sessionSecret: sessionSecret,
+    );
+    // 网络失败时不误踢登录
+    if (accounts == null) return true;
+
+    // 仅 active / unbind_pending；冷却期内必须保留令牌与 session
+    final live = accounts
+        .where((a) => _liveBindingStatuses.contains(a.status))
+        .toList();
+    final tokens = live
+        .map((a) => a.userToken.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    await DeviceCredentialStore.mergeKnownUserTokens(tokens);
+
+    final current = await DeviceCredentialStore.getUserExternalToken();
+    if (current != null) {
+      final mine = live.where((a) => a.userToken == current);
+      if (mine.isNotEmpty) {
+        // active 与 unbind_pending 均保持登录态
+        return true;
+      }
+      // 不在 live 列表：先 login 尝试复活绑定
+      final revived = await loginWithToken(current);
+      if (revived) return true;
+    }
+
+    final others = tokens.where((t) => t != current).toList();
+    return _failoverAfterUnbound(
+      failedToken: current,
+      extraCandidates: others,
+    );
+  }
+
+  Future<bool> _failoverAfterUnbound({
+    required String? failedToken,
+    required List<String> extraCandidates,
+  }) async {
+    await _evictCurrentAccount(failedToken);
+
+    final known = await DeviceCredentialStore.getKnownUserTokens();
+    final candidates = <String>{
+      ...extraCandidates,
+      ...known,
+    };
+    if (failedToken != null) candidates.remove(failedToken);
+
+    if (candidates.isEmpty) {
+      await _markLoggedOutFully();
       return false;
     }
 
-    // 3. 实时采集设备指纹，只用不变字段计算哈希
-    debugPrint('[SessionService] 实时采集设备指纹...');
+    final ok = await _tryCandidateLogins(candidates.toList());
+    if (!ok) await _markLoggedOutFully();
+    return ok;
+  }
+
+  Future<bool> _tryCandidateLogins(List<String> tokens) async {
+    for (final token in tokens) {
+      final ok = await loginWithToken(token);
+      if (ok) return true;
+      if (ApiService.lastError == 'DEVICE_NOT_BOUND' ||
+          ApiService.lastError == 'USER_NOT_FOUND') {
+        await DeviceCredentialStore.removeKnownUserToken(token);
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _tryCreateSession({
+    required String userToken,
+    required String deviceSecret,
+  }) async {
     final fingerprint = await DeviceFingerprintService.collect();
     final fingerprintHash = _computeFingerprintHash(fingerprint);
-    debugPrint('[SessionService] fingerprintHash=$fingerprintHash');
 
     final createResult = await ApiService.createSession(
       userToken: userToken,
@@ -108,16 +222,69 @@ class SessionService {
       fingerprintHash: fingerprintHash,
     );
 
-    if (createResult != null) {
-      debugPrint('[SessionService] session 申请成功(id=${createResult.sessionId})');
-      await DeviceCredentialStore.saveSessionId(createResult.sessionId);
-      await DeviceCredentialStore.saveSessionSecret(createResult.sessionSecret);
-      _lastValidatedAt = DateTime.now();
-      return true;
+    if (createResult == null) return false;
+
+    await DeviceCredentialStore.saveUserExternalToken(userToken);
+    await DeviceCredentialStore.mergeKnownUserTokens([userToken]);
+    await DeviceCredentialStore.saveSessionId(createResult.sessionId);
+    await DeviceCredentialStore.saveSessionSecret(createResult.sessionSecret);
+    _lastValidatedAt = DateTime.now();
+    return true;
+  }
+
+  /// 已有账户登录本机：`POST /user/login`（可新建/复活绑定并轮换 device_secret）
+  Future<bool> loginWithToken(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) {
+      ApiService.lastError = 'TOKEN_EMPTY';
+      return false;
     }
 
-    debugPrint('[SessionService] session 申请失败(lastError=${ApiService.lastError})');
-    return false;
+    final fingerprint = await DeviceFingerprintService.collect();
+    final fingerprintHash = _computeFingerprintHash(fingerprint);
+    final result = await ApiService.login(
+      userToken: token,
+      fingerprintHash: fingerprintHash,
+    );
+    if (result == null) return false;
+
+    invalidate();
+    // login 下发的新 secret 必须覆盖本地，旧值已失效
+    await DeviceCredentialStore.saveDeviceSecret(result.deviceSecret);
+    await DeviceCredentialStore.saveUserExternalToken(token);
+    await DeviceCredentialStore.mergeKnownUserTokens([token]);
+    await DeviceCredentialStore.saveDeviceId(result.deviceId);
+    await DeviceCredentialStore.saveSessionId(result.sessionId);
+    await DeviceCredentialStore.saveSessionSecret(result.sessionSecret);
+    _lastValidatedAt = DateTime.now();
+    return true;
+  }
+
+  /// 清当前账号本地凭证与展示缓存（保留 device_secret）
+  Future<void> _evictCurrentAccount(String? token) async {
+    invalidate();
+    await DeviceCredentialStore.clearUserAccount();
+    if (token != null && token.isNotEmpty) {
+      await DeviceCredentialStore.removeKnownUserToken(token);
+    }
+    await PostStorage.saveDisplayName('');
+    try {
+      await AvatarStorage.clear();
+    } catch (e) {
+      debugPrint('[SessionService] 清除头像失败: $e');
+    }
+    try {
+      if (Hive.isBoxOpen('binding_cache')) {
+        await Hive.box('binding_cache').clear();
+      }
+    } catch (e) {
+      debugPrint('[SessionService] 清除绑定缓存失败: $e');
+    }
+  }
+
+  Future<void> _markLoggedOutFully() async {
+    await PostStorage.setRegistered(false);
+    await DeviceCredentialStore.saveKnownUserTokens([]);
   }
 
   /// 计算设备指纹的 SHA-256 hex（每次 session 申请实时采集后计算，不持久化）
@@ -126,65 +293,46 @@ class SessionService {
   /// 仅含严格硬件身份字段；数组 sort 后用逗号拼接；所有值用 | 连接后 SHA-256。
   /// 可变字段（ROM 构建信息、systemFeatures、serialNumber 等）已排除，见 advice.md。
   static String _computeFingerprintHash(DeviceFingerprint fp) {
-    final fields = <String>[];
     final values = <String>[];
 
-    void add(String name, String value) {
-      fields.add(name);
-      values.add(value);
-    }
+    void add(String value) => values.add(value);
 
     if (fp.platform == DevicePlatform.android && fp.android != null) {
       final a = fp.android!;
 
-      // build_* — 仅硬件身份字段（排除 host/tags/type/bootloader，随 ROM 重建可能变）
-      add('build_board', a.build.board);
-      add('build_brand', a.build.brand);
-      add('build_device', a.build.device);
-      add('build_hardware', a.build.hardware);
-      add('build_manufacturer', a.build.manufacturer);
-      add('build_model', a.build.model);
-      add('build_product', a.build.product);
+      add(a.build.board);
+      add(a.build.brand);
+      add(a.build.device);
+      add(a.build.hardware);
+      add(a.build.manufacturer);
+      add(a.build.model);
+      add(a.build.product);
 
-      // abi_* — sort 后 join
-      add('abi_supported_abis', _sortedJoin(a.abi.supportedAbis));
-      add('abi_supported_32bit', _sortedJoin(a.abi.supported32BitAbis));
-      add('abi_supported_64bit', _sortedJoin(a.abi.supported64BitAbis));
+      add(_sortedJoin(a.abi.supportedAbis));
+      add(_sortedJoin(a.abi.supported32BitAbis));
+      add(_sortedJoin(a.abi.supported64BitAbis));
 
-      // hw_* — 仅硬件常量（排除 serialNumber、systemFeatures、isLowRamDevice）
-      add('hw_is_physical_device', _boolString(a.hardware.isPhysicalDevice));
-      add('hw_physical_ram_size', a.hardware.physicalRamSize.toString());
-      add('hw_total_disk_size', a.hardware.totalDiskSize.toString());
+      add(_boolString(a.hardware.isPhysicalDevice));
+      add(a.hardware.physicalRamSize.toString());
+      add(a.hardware.totalDiskSize.toString());
     } else if (fp.platform == DevicePlatform.ios && fp.ios != null) {
       final i = fp.ios!;
 
-      add('ios_model', i.device.model);
-      add('ios_model_name', i.device.modelName);
-      add('ios_system_name', i.device.systemName);
-      add('ios_localized_model', i.device.localizedModel);
-      add('ios_is_physical_device', _boolString(i.device.isPhysicalDevice));
-      add('ios_is_ios_app_on_mac', _boolString(i.device.isiOSAppOnMac));
-      add('ios_physical_ram_size', i.storage.physicalRamSize.toString());
-      add('ios_sysname', i.utsname.sysname);
-      add('ios_machine', i.utsname.machine);
+      add(i.device.model);
+      add(i.device.modelName);
+      add(i.device.systemName);
+      add(i.device.localizedModel);
+      add(_boolString(i.device.isPhysicalDevice));
+      add(_boolString(i.device.isiOSAppOnMac));
+      add(i.storage.physicalRamSize.toString());
+      add(i.utsname.sysname);
+      add(i.utsname.machine);
     } else {
-      // unknown platform — 回退到完整 JSON hash
       final jsonStr = jsonEncode(fp.toJson());
-      final bytes = utf8.encode(jsonStr);
-      return sha256.convert(bytes).toString();
+      return sha256.convert(utf8.encode(jsonStr)).toString();
     }
 
-    debugPrint('[SessionService] === hash 输入字段(${fields.length}个) ===');
-    for (int i = 0; i < fields.length; i++) {
-      final v = values[i];
-      final display = v.length > 80 ? '${v.substring(0, 80)}...(len=${v.length})' : v;
-      debugPrint('[SessionService]   $i: ${fields[i]} = $display');
-    }
-    final input = values.join('|');
-    debugPrint('[SessionService] 拼接总长度=${input.length}');
-    debugPrint('[SessionService] 拼接前200字符: ${input.substring(0, input.length < 200 ? input.length : 200)}');
-    final bytes = utf8.encode(input);
-    return sha256.convert(bytes).toString();
+    return sha256.convert(utf8.encode(values.join('|'))).toString();
   }
 
   static String _sortedJoin(List<String> values) {
