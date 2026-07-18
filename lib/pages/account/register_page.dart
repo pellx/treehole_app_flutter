@@ -896,13 +896,19 @@ class _RegisterPageState extends State<RegisterPage> {
                             bottom: BorderSide(color: onSurface, width: 1),
                           ),
                         ),
-                        child: Text(
-                          _maskLoginToken(token),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: AccentDimens.tokenValueFontSize,
-                            color: onSurface.withValues(
-                                alpha: AccentDimens.tokenValueAlpha),
+                        child: Transform.translate(
+                          offset: Offset(
+                            RegisterDimens.loginMaskedHOffset,
+                            RegisterDimens.loginMaskedVOffset,
+                          ),
+                          child: Text(
+                            _maskLoginToken(token),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: RegisterDimens.loginMaskedFontSize,
+                              color: onSurface.withValues(
+                                  alpha: RegisterDimens.loginMaskedAlpha),
+                            ),
                           ),
                         ),
                       ),

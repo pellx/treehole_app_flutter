@@ -131,13 +131,13 @@ class RegisterDimens {
   static const double loginInputTop = 380; // 输入框距顶部距离
   static const double loginInputHeight = 20;
   static const double loginInputWidth = 200;
-  static const double loginInputFontSize = 14;
-  static const double loginHintFontSize = 14;
+  static const double loginInputFontSize = 17;
+  static const double loginHintFontSize = 17;
   static const double loginHintAlpha = 0.3;
   static const double loginInputPaddingH = 0;
   static const double loginInputPaddingV = 10;
 
-  static const double loginButtonGap = 6;
+  static const double loginButtonGap = 10;
   static const double loginConfirmButtonWidth = 50;
   static const double loginConfirmButtonHeight = 27;
   static const double loginConfirmButtonPaddingH = 0;
