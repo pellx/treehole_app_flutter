@@ -52,7 +52,6 @@ class _SquarePageState extends State<SquarePage> {
 
   void _onNeedCommentRefresh(int postId) {
     if (!_postsNeedCommentRefresh.contains(postId)) return;
-    print('[comment] refreshing postId=$postId');
     final post = _posts.firstWhere((p) => p.id == postId);
     _refreshPostComments(post);
     _postsNeedCommentRefresh.remove(postId);
@@ -145,7 +144,6 @@ class _SquarePageState extends State<SquarePage> {
         .toList();
     if (batch.isEmpty) return;
 
-    print('[loadMore] start, _loading=$_loading, _loadedCount=$_loadedCount');
     setState(() => _loading = true);
     for (final id in batch) {
       _loadingIds.add(id);
@@ -178,7 +176,6 @@ class _SquarePageState extends State<SquarePage> {
     }
 
     _loadedCount += batch.length;
-    print('[loadMore] done, _loadedCount=$_loadedCount, _posts=${_posts.length}');
     setState(() => _loading = false);
 
     // 后台预下载缩略图，Hive 有就跳过
@@ -195,7 +192,6 @@ class _SquarePageState extends State<SquarePage> {
 
   // ---- 下拉刷新 ----
   Future<void> _refresh() async {
-    print('[refresh] start');
     // 指示器至少显示 300ms，避免刷新过快时一闪而过
     final stopwatch = Stopwatch()..start();
     _loading = true;
@@ -275,7 +271,6 @@ class _SquarePageState extends State<SquarePage> {
       await Future.delayed(Duration(milliseconds: 800 - elapsed));
     }
     _loading = false;
-    print('[refresh] done');
   }
 
   // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增

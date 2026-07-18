@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// 设备与用户凭证安全存储
@@ -10,7 +12,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 ///   - session_secret       当前会话密钥（保密）
 ///   - fingerprint_hash     服务端返回的设备环境哈希（诊断用）
 ///
-/// 退出登录只清 session；清除全部仅用于调试。
+/// 普通退出只清 session；绑定已 unbound 时清该账号令牌（保留 device 凭证）。
 class DeviceCredentialStore {
   static const _storage = FlutterSecureStorage();
 
@@ -21,6 +23,8 @@ class DeviceCredentialStore {
   static const _kSessionSecret = 'session_secret';
   static const _kFingerprintHash = 'fingerprint_hash';
   static const _kRegisteredFingerprint = 'registered_fingerprint';
+  /// 本机曾见过的其他账户 user_token（JSON 字符串数组），用于解绑后切号
+  static const _kKnownUserTokens = 'known_user_tokens';
 
   /// 保存注册时使用的设备指纹数据（JSON），用于后续 session 创建时不因设备状态变化导致指纹不匹配
   static Future<void> saveRegisteredFingerprint(String fpJson) async {
@@ -111,10 +115,55 @@ class DeviceCredentialStore {
     return sid != null && ssec != null && user != null;
   }
 
+  // ── 本机已知账户令牌 ──
+
+  static Future<List<String>> getKnownUserTokens() async {
+    final raw = await _storage.read(key: _kKnownUserTokens);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw);
+      if (list is! List) return [];
+      return list.whereType<String>().where((t) => t.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveKnownUserTokens(List<String> tokens) async {
+    final unique = <String>{
+      for (final t in tokens)
+        if (t.trim().isNotEmpty) t.trim(),
+    };
+    if (unique.isEmpty) {
+      await _storage.delete(key: _kKnownUserTokens);
+      return;
+    }
+    await _storage.write(
+        key: _kKnownUserTokens, value: jsonEncode(unique.toList()));
+  }
+
+  static Future<void> mergeKnownUserTokens(Iterable<String> tokens) async {
+    final current = await getKnownUserTokens();
+    await saveKnownUserTokens([...current, ...tokens]);
+  }
+
+  static Future<void> removeKnownUserToken(String token) async {
+    final current = await getKnownUserTokens();
+    current.removeWhere((t) => t == token);
+    await saveKnownUserTokens(current);
+  }
+
   // ── 清除 ──
 
   /// 退出登录：只清 session，保留设备和用户凭证
   static Future<void> clearSession() async {
+    await _storage.delete(key: _kSessionId);
+    await _storage.delete(key: _kSessionSecret);
+  }
+
+  /// 当前账号已解绑：清该账号令牌与 session，保留 device_id / device_secret
+  static Future<void> clearUserAccount() async {
+    await _storage.delete(key: _kUserExternalToken);
     await _storage.delete(key: _kSessionId);
     await _storage.delete(key: _kSessionSecret);
   }
@@ -127,5 +176,6 @@ class DeviceCredentialStore {
     await _storage.delete(key: _kSessionId);
     await _storage.delete(key: _kSessionSecret);
     await _storage.delete(key: _kFingerprintHash);
+    await _storage.delete(key: _kKnownUserTokens);
   }
 }

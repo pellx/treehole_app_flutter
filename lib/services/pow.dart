@@ -30,24 +30,13 @@ class PoWService {
 
   /// 在后台 isolate 中暴力搜索 nonce，30 秒超时
   static Future<int?> solve(PoWChallenge c) async {
-    debugPrint('[PoW] challenge="${c.challenge}", difficulty=${c.difficulty}');
-    final sw = Stopwatch()..start();
     try {
-      final result = await Isolate.run(() => _solveSync(c))
-          .timeout(_timeout, onTimeout: () {
-        debugPrint('[PoW] TIMEOUT after ${sw.elapsedMilliseconds}ms');
-        return null;
-      });
-      sw.stop();
-      if (result != null) {
-        debugPrint('[PoW] Solved nonce=$result in ${sw.elapsedMilliseconds}ms');
-      } else {
-        debugPrint('[PoW] Failed (null) after ${sw.elapsedMilliseconds}ms');
-      }
-      return result;
+      return await Isolate.run(() => _solveSync(c)).timeout(
+        _timeout,
+        onTimeout: () => null,
+      );
     } catch (e) {
-      sw.stop();
-      debugPrint('[PoW] Exception after ${sw.elapsedMilliseconds}ms: $e');
+      debugPrint('[PoW] Exception: $e');
       return null;
     }
   }

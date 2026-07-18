@@ -23,8 +23,6 @@ class TurnstileService {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel('TurnstileChannel', onMessageReceived: _onMessage)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (url) =>
-            debugPrint('[TurnstileService] Page finished: $url'),
         onWebResourceError: (err) =>
             debugPrint('[TurnstileService] Resource error: '
                 '${err.errorType} — ${err.description}'),
@@ -41,7 +39,6 @@ class TurnstileService {
       if (status == 'success') {
         c.complete(data['token'] as String?);
       } else {
-        debugPrint('[TurnstileService] JS error: ${msg.message}');
         c.complete(null);
       }
     } catch (_) {
@@ -53,42 +50,6 @@ class TurnstileService {
   Future<String?> getToken() async {
     if (_controller == null) return null;
     _completer = Completer<String?>();
-
-    // 先诊断页面状态
-    try {
-      final url = await _controller!.currentUrl();
-      final hasTs = await _controller!.runJavaScriptReturningResult(
-        'typeof turnstile !== "undefined"',
-      );
-      debugPrint('[TurnstileService] Pre-check: url=$url, turnstile=$hasTs');
-    } catch (e) {
-      debugPrint('[TurnstileService] Pre-check failed: $e');
-    }
-
-    // 10 秒后再检查一次（含脚本加载诊断）
-    Future.delayed(const Duration(seconds: 10), () async {
-      try {
-        final diag = await _controller!.runJavaScriptReturningResult('''
-          (function() {
-            var scripts = document.querySelectorAll('script[src]');
-            var info = [];
-            for (var i = 0; i < scripts.length; i++) {
-              info.push(scripts[i].src);
-            }
-            return JSON.stringify({
-              turnstile: typeof turnstile !== 'undefined',
-              scriptCount: scripts.length,
-              scripts: info,
-              readyState: document.readyState,
-              bodyHTML: document.body ? document.body.innerHTML.substring(0, 200) : 'null'
-            });
-          })()
-        ''');
-        debugPrint('[TurnstileService] 10s diag: $diag');
-      } catch (e) {
-        debugPrint('[TurnstileService] 10s diag failed: $e');
-      }
-    });
 
     await _controller!.runJavaScript('''
       (function() {

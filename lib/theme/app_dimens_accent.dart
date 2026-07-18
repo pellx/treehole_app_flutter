@@ -38,7 +38,7 @@ class AccentDimens {
   static const double buttonRadius = 8;         // 按钮圆角
   static const double buttonHPadding = 6;      // 按钮水平内边距
   static const double buttonFontSize = 14;      // 按钮字号
-  static const double buttonBgAlpha = 0.7;    // 「更改」态背景透明度（0~1）
+  static const double buttonBgAlpha = 0.6;    // 「更改」态背景透明度（0~1）
   static const double buttonTextAlpha = 1.0;  // 「更改」态文字透明度（0~1）
   static const double buttonSubmitBgAlpha = 1.0;   // 「提交」态背景透明度
   static const double buttonSubmitTextAlpha = 1.0; // 「提交」态文字透明度
@@ -83,4 +83,29 @@ class AccentDimens {
 
   // ── 跳转行箭头 ──
   static const double arrowSize = 21;            // 箭头图标大小
+
+  // ── 设备绑定卡片 ──
+  static const double deviceCardRadius = 12;       // 卡片圆角
+  static const double deviceCardPadding = 13;      // 卡片内边距
+  static const double deviceCardGap = 18;          // 卡片间距
+  static const double deviceCardBorderWidth = 0.5; // 边框粗细
+  static const double deviceCardTitleSize = 16;    // 显示名称字号
+  static const double deviceCardMetaSize = 13;     // 参数字号
+  static const double deviceCardMetaAlpha = 0.65;  // 参数文字透明度
+  static const double deviceCardMetaGap = 6;       // 参数行间距
+  static const double deviceCardMetaColGap = 0;    // 同一行两参数间距
+  static const double deviceCardTitleBottom = 6;  // 设备名到参数间距
+  static const double deviceCardMetaLeftInset = 10; // 参数相对卡片内容左侧间距
+  static const double deviceCardIconSize = 22;     // 左侧设备图标
+  static const double deviceCardIconGap = 5;      // 图标与文字间距
+  static const double deviceCardIconTopInset = 8;  // 设备图标竖直偏移（负值向上）
+  static const double deviceCardRenameGap = -3;    // 名称与改名图标间距（负值向左）
+  static const double deviceCardRenameSize = 17;   // 改名笔图标大小
+  static const double deviceCardRenameAlpha = 0.55; // 改名笔图标透明度
+  static const double deviceCardDeleteSize = 21;   // 删除垃圾桶图标大小
+  static const double deviceCardDeleteTopInset = -4; // 删除按钮距最上端（负值向上）
+  static const double deviceCardUnbindTimeSize = 12; // 解绑预计时间字号
+  static const double deviceCardUnbindTimeAlpha = 0.5; // 解绑预计时间透明度
+  static const double deviceCardUnbindTimeGap = 6;  // 时间与删除/取消按钮间距
+  static const double deviceCardCancelFontSize = 13; // 「取消」文字字号
 }

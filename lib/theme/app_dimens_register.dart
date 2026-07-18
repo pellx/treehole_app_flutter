@@ -151,6 +151,6 @@ class RegisterDimens {
   static const double loginButtonStrokeWidth = 2;
   static const double loginErrorGap = 12;
 
-  static const double loginRecoverGap = 8; // 输入框和"找回用户"间距
+  static const double loginRecoverGap = 2; // 输入框和"找回用户"间距
   static const double loginRecoverFontSize = 12;
 }

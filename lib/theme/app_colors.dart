@@ -26,6 +26,7 @@ class CommonColors {
   final Color overlayIcon;
   final Color overlayPageDot;
   final Color updateArrow;
+  final Color deviceDeleteIcon;
 
   const CommonColors({
     required this.background,
@@ -50,6 +51,7 @@ class CommonColors {
     required this.overlayIcon,
     required this.overlayPageDot,
     required this.updateArrow,
+    required this.deviceDeleteIcon,
   });
 }
 
@@ -318,6 +320,7 @@ static const commonLight = CommonColors(
   overlayIcon:            Color(0xFFFFFFFF),
   overlayPageDot:         Color(0xFFFFFFFF),
   updateArrow:            Color(0xFF92C8FF),
+  deviceDeleteIcon:       Color(0x8CBD0000),
 );
 
 static const commonDark = CommonColors(
@@ -343,6 +346,7 @@ static const commonDark = CommonColors(
   overlayIcon:            Color(0xFFFFFFFF),
   overlayPageDot:         Color(0xFFFFFFFF),
   updateArrow:            Color(0xFF235180),
+  deviceDeleteIcon:       Color(0x8Cd3d3d3),
 );
 
 // ---- PostCardColors ----

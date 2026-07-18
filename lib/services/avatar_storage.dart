@@ -22,4 +22,9 @@ class AvatarStorage {
     final file = await _file();
     await file.writeAsBytes(bytes);
   }
+
+  static Future<void> clear() async {
+    final file = await _file();
+    if (await file.exists()) await file.delete();
+  }
 }

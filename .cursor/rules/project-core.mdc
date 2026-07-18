@@ -7,7 +7,7 @@ alwaysApply: true
 
 - 面向用户的 UI 文案一律中文；代码标识符与注释可中英混用
 - 布局尺寸从 `theme/app_dimens*.dart` 取常量，颜色从 `AppColors` 主题扩展取；重构时**不得改动既有数值**
-- 后端 API 契约以根目录 `api.md` 为准；改动请求/响应结构须同步更新 `api.md`
+- 后端 API 契约以服务器 `/var/www/treehole-nest/README.md` 为准（本仓库不再维护 `api.md`）；改动请求/响应结构须同步更新该 README
 - 已知问题与待办记录在根目录 `todo.md`，完成后更新状态而非删除
 - `fingerprint.ts` 等根目录 `.ts` 文件是后端 NestJS 源码的参考副本，修改后需提醒用户手动同步部署到后端
 - 不要主动 git commit；`.hermes/`、`tmp_verification/` 已 gitignore，不要再往里加需要版本控制的文件

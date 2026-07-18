@@ -7,12 +7,15 @@ import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
 import '../../services/avatar_storage.dart';
+import '../../services/binding_cache.dart';
 import '../../services/session_service.dart';
 import '../../services/storage.dart';
 import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../settings/settings_navigation.dart';
+import 'device_binding_page.dart';
+import 'switch_account_page.dart';
 
 class UserPage extends StatefulWidget {
   const UserPage({super.key});
@@ -31,6 +34,7 @@ class _UserPageState extends State<UserPage> {
   String _externalToken = '';
   Uint8List? _avatarBytes;
   DateTime? _tokenResetAt;
+  DateTime? _displayIdChangedAt;
 
   /// 两月内有重置 → 绿；否则红（从未重置则用注册时间，由后端 token_reset_at 给出）
   bool get _tokenRecent {
@@ -43,9 +47,23 @@ class _UserPageState extends State<UserPage> {
   void initState() {
     super.initState();
     _nameController.text = PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    _nameFocus.addListener(_onNameFocusChange);
     _loadExternalToken();
     _loadAvatar();
     _loadProfile();
+    // 预取绑定列表，进入子页时可先展示缓存
+    BindingCache.prefetchAll();
+  }
+
+  /// 点到输入框外导致失焦时退出编辑；延后一帧以免与「提交」按钮抢序
+  void _onNameFocusChange() {
+    if (_nameFocus.hasFocus || !_editingName || _submittingName) return;
+    Future.microtask(() {
+      if (!mounted || _nameFocus.hasFocus || !_editingName || _submittingName) {
+        return;
+      }
+      _exitNameEditing();
+    });
   }
 
   Future<void> _loadAvatar() async {
@@ -105,6 +123,7 @@ class _UserPageState extends State<UserPage> {
         _nameController.text = profile.userDisplayId;
       }
       _tokenResetAt = profile.tokenResetAt;
+      _displayIdChangedAt = profile.displayIdChangedAt;
     });
     if (profile.userDisplayId.isNotEmpty) {
       await PostStorage.saveDisplayName(profile.userDisplayId);
@@ -113,16 +132,38 @@ class _UserPageState extends State<UserPage> {
 
   @override
   void dispose() {
+    _nameFocus.removeListener(_onNameFocusChange);
     _nameController.dispose();
     _nameFocus.dispose();
     super.dispose();
+  }
+
+  String _formatRenameDate(DateTime dt) {
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    return '$y/$m/$d';
+  }
+
+  /// 冷却结束日：优先用错误体 next_rename_at，否则上次改名 + 14 天
+  DateTime? _nextRenameAt() {
+    final fromApi = ApiService.lastNextRenameAt;
+    if (fromApi != null) return fromApi;
+    final last = ApiService.lastDisplayIdChangedAt ?? _displayIdChangedAt;
+    if (last == null) return null;
+    return last.add(const Duration(days: 14));
   }
 
   String _mapRenameError(String? raw) {
     return switch (raw) {
       'NAME_EMPTY' => '名字不能为空',
       'NAME_UNCHANGED' => '名字未改变',
-      'RENAME_TOO_FREQUENT' => '改名冷却中，每两周可改一次',
+      'RENAME_TOO_FREQUENT' => () {
+          final next = _nextRenameAt();
+          if (next == null) return '改名冷却中，每两周可改一次';
+          return '改名冷却中，每两周可改一次\n下一次可更改日期：${_formatRenameDate(next)}';
+        }(),
       'NAME_TAKEN' => '该名字已被使用',
       null => '改名失败',
       _ => raw,
@@ -142,7 +183,17 @@ class _UserPageState extends State<UserPage> {
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _error = '名字不能为空');
+      _exitNameEditing(error: '名字不能为空');
+      return;
+    }
+    final current =
+        PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    if (name == current) {
+      _nameFocus.unfocus();
+      setState(() {
+        _editingName = false;
+        _error = null;
+      });
       return;
     }
 
@@ -150,7 +201,7 @@ class _UserPageState extends State<UserPage> {
     try {
       final session = await _readySession();
       if (session == null) {
-        if (mounted) setState(() => _error = '会话验证失败，请稍后重试');
+        if (mounted) _exitNameEditing(error: '会话验证失败，请稍后重试');
         return;
       }
       final result = await ApiService.rename(
@@ -160,17 +211,34 @@ class _UserPageState extends State<UserPage> {
       );
       if (!mounted) return;
       if (result == null) {
-        setState(() => _error = _mapRenameError(ApiService.lastError));
+        final changedAt = ApiService.lastDisplayIdChangedAt;
+        if (changedAt != null) _displayIdChangedAt = changedAt;
+        _exitNameEditing(error: _mapRenameError(ApiService.lastError));
         return;
       }
-      await PostStorage.saveDisplayName(result);
-      _nameController.text = result;
-      setState(() => _editingName = false);
+      await PostStorage.saveDisplayName(result.userDisplayId);
+      _nameController.text = result.userDisplayId;
+      setState(() {
+        _editingName = false;
+        _displayIdChangedAt =
+            result.displayIdChangedAt ?? DateTime.now();
+      });
     } catch (e) {
-      if (mounted) setState(() => _error = '网络异常：$e');
+      if (mounted) _exitNameEditing(error: '网络异常：$e');
     } finally {
       if (mounted) setState(() => _submittingName = false);
     }
+  }
+
+  /// 提交失败后退出编辑态，恢复为上次已保存名字
+  void _exitNameEditing({String? error}) {
+    _nameFocus.unfocus();
+    _nameController.text =
+        PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    setState(() {
+      _editingName = false;
+      _error = error;
+    });
   }
 
   void _copyToken() {
@@ -198,7 +266,7 @@ class _UserPageState extends State<UserPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '是否确认更改用户令牌？更改之后原本的令牌作废，如需登录，需使用新签发的令牌',
+                '是否确认更改用户令牌？更改之后原令牌作废，如需登录，需使用新签发令牌',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: AccentDimens.dialogMessageFontSize,
@@ -294,7 +362,12 @@ class _UserPageState extends State<UserPage> {
         );
         return;
       }
+      final oldToken = await DeviceCredentialStore.getUserExternalToken();
+      if (oldToken != null) {
+        await DeviceCredentialStore.removeKnownUserToken(oldToken);
+      }
       await DeviceCredentialStore.saveUserExternalToken(result.userToken);
+      await DeviceCredentialStore.mergeKnownUserTokens([result.userToken]);
       setState(() {
         _externalToken = result.userToken;
         _tokenResetAt = result.tokenResetAt ?? DateTime.now();
@@ -324,13 +397,11 @@ class _UserPageState extends State<UserPage> {
   }
 
   void _openDeviceBinding() {
-    // TODO: 设备绑定操作页尚未实现
-    navigateToSubPage(context, '设备绑定', const Center(child: Text('开发中')));
+    Navigator.of(context).push(topDownRoute(const DeviceBindingPage()));
   }
 
   void _openLoginOther() {
-    // TODO: 登录其他账户页尚未实现
-    navigateToSubPage(context, '登录其他账户', const Center(child: Text('开发中')));
+    Navigator.of(context).push(topDownRoute(const SwitchAccountPage()));
   }
 
   @override
@@ -340,36 +411,42 @@ class _UserPageState extends State<UserPage> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        children: [
-          _topBar(colors),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(AccentDimens.pagePadding),
-              children: [
-                _avatarIdRow(colors, onSurface),
-                if (_error != null)
-                  Padding(
-                    padding:
-                        const EdgeInsets.only(bottom: AccentDimens.errorBottomPadding),
-                    child: Text(_error!,
-                        style: TextStyle(
-                            fontSize: AccentDimens.errorFontSize,
-                            color: colors.register.errorText)),
-                  ),
-                _itemDivider(colors),
-                _tokenRow(onSurface),
-                _itemDivider(colors),
-                _changeTokenRow(colors, onSurface),
-                _itemDivider(colors),
-                _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
-                _itemDivider(colors),
-                _navRow(colors, onSurface, '登录其他账户', _openLoginOther),
-                _itemDivider(colors),
-              ],
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          if (_editingName && !_submittingName) _exitNameEditing();
+        },
+        child: Column(
+          children: [
+            _topBar(colors),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(AccentDimens.pagePadding),
+                children: [
+                  _avatarIdRow(colors, onSurface),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          bottom: AccentDimens.errorBottomPadding),
+                      child: Text(_error!,
+                          style: TextStyle(
+                              fontSize: AccentDimens.errorFontSize,
+                              color: colors.register.errorText)),
+                    ),
+                  _itemDivider(colors),
+                  _tokenRow(onSurface),
+                  _itemDivider(colors),
+                  _changeTokenRow(colors, onSurface),
+                  _itemDivider(colors),
+                  _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
+                  _itemDivider(colors),
+                  _navRow(colors, onSurface, '登录其他账户', _openLoginOther),
+                  _itemDivider(colors),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
