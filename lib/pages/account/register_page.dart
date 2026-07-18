@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../models/device_fingerprint.dart';
@@ -12,6 +13,7 @@ import '../../services/session_service.dart';
 import '../../services/storage.dart';
 import '../../services/turnstile_service.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_dimens_accent.dart';
 import '../../theme/app_dimens_register.dart';
 
 enum _StepStatus { pending, loading, completed, failed }
@@ -370,6 +372,29 @@ class _RegisterPageState extends State<RegisterPage> {
       'RATE_LIMITED' => '操作过于频繁，请稍后再试',
       _ => (raw == null || raw.isEmpty) ? '登录失败' : raw,
     };
+  }
+
+  String _maskLoginToken(String token) {
+    const head = AccentDimens.tokenHeadChars;
+    const tail = AccentDimens.tokenTailChars;
+    if (token.length > head + tail) {
+      return '${token.substring(0, head)}...${token.substring(token.length - tail)}';
+    }
+    return token;
+  }
+
+  Future<void> _pasteLoginToken() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (!mounted) return;
+    if (text.isEmpty) {
+      setState(() => _renameError = '剪贴板为空');
+      return;
+    }
+    setState(() {
+      _tokenController.text = text;
+      _renameError = null;
+    });
   }
 
   @override
@@ -838,6 +863,13 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Widget _buildLoginInput(AppColors colors, Color onSurface) {
+    final token = _tokenController.text.trim();
+    final hasToken = token.isNotEmpty;
+    // 空：粘贴；有内容：确认登录
+    final onButtonPressed = _submitting
+        ? null
+        : (hasToken ? _confirmLogin : _pasteLoginToken);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -848,43 +880,71 @@ class _RegisterPageState extends State<RegisterPage> {
             SizedBox(
               width: RegisterDimens.loginInputWidth,
               height: RegisterDimens.loginInputHeight,
-              child: TextField(
-                controller: _tokenController,
-                autofocus: true,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: RegisterDimens.loginInputFontSize,
-                  color: onSurface,
-                ),
-                decoration: InputDecoration(
-                  hintText: '请输入令牌',
-                  hintStyle: TextStyle(
-                    fontSize: RegisterDimens.loginHintFontSize,
-                    color: onSurface.withValues(alpha: RegisterDimens.loginHintAlpha),
-                  ),
-                  counterText: '',
-                  border: UnderlineInputBorder(
-                    borderSide: BorderSide(color: onSurface, width: 1),
-                  ),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: onSurface, width: 1),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: onSurface, width: 1),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: RegisterDimens.loginInputPaddingH,
-                    vertical: RegisterDimens.loginInputPaddingV,
-                  ),
-                ),
-              ),
+              child: hasToken
+                  ? GestureDetector(
+                      // 点击掩码可清空，便于重新粘贴
+                      onTap: _submitting
+                          ? null
+                          : () => setState(() {
+                                _tokenController.clear();
+                                _renameError = null;
+                              }),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: onSurface, width: 1),
+                          ),
+                        ),
+                        child: Text(
+                          _maskLoginToken(token),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: AccentDimens.tokenValueFontSize,
+                            color: onSurface.withValues(
+                                alpha: AccentDimens.tokenValueAlpha),
+                          ),
+                        ),
+                      ),
+                    )
+                  : TextField(
+                      controller: _tokenController,
+                      autofocus: true,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: RegisterDimens.loginInputFontSize,
+                        color: onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '请输入令牌',
+                        hintStyle: TextStyle(
+                          fontSize: RegisterDimens.loginHintFontSize,
+                          color: onSurface.withValues(
+                              alpha: RegisterDimens.loginHintAlpha),
+                        ),
+                        counterText: '',
+                        border: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: RegisterDimens.loginInputPaddingH,
+                          vertical: RegisterDimens.loginInputPaddingV,
+                        ),
+                      ),
+                    ),
             ),
             SizedBox(width: RegisterDimens.loginButtonGap),
             SizedBox(
               width: RegisterDimens.loginConfirmButtonWidth,
               height: RegisterDimens.loginConfirmButtonHeight,
               child: ElevatedButton(
-                onPressed: (_submitting || _tokenController.text.trim().isEmpty) ? null : _confirmLogin,
+                onPressed: onButtonPressed,
                 style: ButtonStyle(
                   backgroundColor: WidgetStateProperty.resolveWith((states) =>
                     states.contains(WidgetState.disabled)
@@ -897,7 +957,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   shape: WidgetStateProperty.all(RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(RegisterDimens.loginConfirmButtonRadius),
                     side: BorderSide(
-                      color: (_submitting || _tokenController.text.trim().isEmpty)
+                      color: _submitting
                           ? colors.register.disabledButtonBorderColor
                           : colors.register.buttonBorderColor,
                       width: RegisterDimens.loginConfirmButtonBorderWidth,
@@ -917,7 +977,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           valueColor: AlwaysStoppedAnimation(colors.register.buttonText),
                         ),
                       )
-                    : Text('确认',
+                    : Text(hasToken ? '确认' : '粘贴',
                         style: TextStyle(
                           fontSize: RegisterDimens.loginConfirmButtonFontSize,
                           fontWeight: FontWeight.w500,
