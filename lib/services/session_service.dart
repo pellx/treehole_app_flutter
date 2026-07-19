@@ -260,6 +260,72 @@ class SessionService {
     return true;
   }
 
+  /// 切换到本机已绑定的其他账户。
+  ///
+  /// - **不预先删除**仍有效的本地 session；仅在校验失效时清掉失效 session
+  /// - 已有 device_secret 时优先 `session/create`（成功才覆盖本地 session）
+  /// - 无 secret、或 create 表明需复活绑定时，再走 `login`
+  Future<bool> switchToAccount(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) {
+      ApiService.lastError = 'TOKEN_EMPTY';
+      return false;
+    }
+
+    final current = (await DeviceCredentialStore.getUserExternalToken())?.trim();
+    if (current != null && current == token) {
+      // 已是目标账户：校验本地 session，失效再申请
+      return ensureSession();
+    }
+
+    // 先检查本地 session：有效则保留至新会话写入；失效才清 session（不动 token/secret）
+    final sessionId = await DeviceCredentialStore.getSessionId();
+    final sessionSecret = await DeviceCredentialStore.getSessionSecret();
+    if (sessionId != null && sessionSecret != null) {
+      final validated = await ApiService.validateSession(
+        sessionId: sessionId,
+        sessionSecret: sessionSecret,
+      );
+      if (validated == null || !validated.valid) {
+        invalidate();
+        await DeviceCredentialStore.clearSession();
+      }
+    }
+
+    final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
+    if (deviceSecret != null) {
+      final created = await _tryCreateSession(
+        userToken: token,
+        deviceSecret: deviceSecret,
+      );
+      if (created) {
+        await _resetAccountDisplayCache();
+        return true;
+      }
+
+      final err = ApiService.lastError;
+      final needLogin = err == 'DEVICE_NOT_BOUND' ||
+          err == 'DEVICE_SECRET_INVALID' ||
+          err == 'DEVICE_NOT_FOUND' ||
+          err == 'FINGERPRINT_MISMATCH';
+      if (!needLogin) return false;
+    }
+
+    final loginOk = await loginWithToken(token);
+    if (loginOk) await _resetAccountDisplayCache();
+    return loginOk;
+  }
+
+  /// 切换账户后清展示缓存（不影响 session / token，失败路径勿调用）
+  Future<void> _resetAccountDisplayCache() async {
+    await PostStorage.saveDisplayName('');
+    try {
+      await AvatarStorage.clear();
+    } catch (e) {
+      debugPrint('[SessionService] 清除头像失败: $e');
+    }
+  }
+
   /// 清当前账号本地凭证与展示缓存（保留 device_secret）
   Future<void> _evictCurrentAccount(String? token) async {
     invalidate();

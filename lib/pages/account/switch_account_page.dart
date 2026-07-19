@@ -258,7 +258,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     }
 
     setState(() => _switching = true);
-    final success = await SessionService.instance.loginWithToken(token);
+    final success = await SessionService.instance.switchToAccount(token);
     if (!mounted) return;
     setState(() => _switching = false);
 
