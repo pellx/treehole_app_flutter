@@ -334,7 +334,9 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       if (result == null) {
-        setState(() => _renameError = ApiService.lastError ?? '未知错误');
+        // 此处多为 POST /user/register；Internal Server Error = 服务端未捕获异常(500)
+        setState(() => _renameError =
+            '注册失败：${ApiService.lastError ?? '未知错误'}');
         return;
       }
 
@@ -348,8 +350,8 @@ class _RegisterPageState extends State<RegisterPage> {
       final activated =
           await SessionService.instance.activateAfterRegister(result.userToken);
       if (!activated) {
-        setState(() =>
-            _renameError = ApiService.lastError ?? '建绑或申请会话失败');
+        setState(() => _renameError =
+            '注册成功，但建绑/会话失败：${ApiService.lastError ?? '未知错误'}');
         return;
       }
 
@@ -727,6 +729,20 @@ class _RegisterPageState extends State<RegisterPage> {
                       tooltip: '重新加载',
                       onPressed: _reset,
                     ),
+                  ),
+                ),
+              ),
+            // Turnstile 需挂在树上才能跑 JS（1×1 透明，不拦截触摸）
+            if (_webViewController != null)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: 1,
+                height: 1,
+                child: Opacity(
+                  opacity: 0,
+                  child: IgnorePointer(
+                    child: WebViewWidget(controller: _webViewController!),
                   ),
                 ),
               ),

@@ -25,11 +25,10 @@
 
 ## P1 — 注册流程
 
-### 4. Turnstile WebView 被注释
+### 4. Turnstile WebView 被注释 ✅
 
-- **位置**：`register_page.dart` build 中 WebView 暂移出树
-- **影响**：Turnstile token 可能无法获取，注册失败
-- **TODO 注释**：「确认按钮可点击后恢复 WebView」
+- **位置**：`register_page.dart` 已用 1×1 透明 `WebViewWidget` 挂回树
+- **影响**：Turnstile 可正常取 token（仍需服务端校验通过）
 
 ### 5. 登录流程未实现
 

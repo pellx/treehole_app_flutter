@@ -644,10 +644,12 @@ class ApiService {
         debugPrint('[ApiService] register missing fields');
       } else {
         lastError = _parseErrorMessage(res.body);
-        debugPrint('[ApiService] register status=${res.statusCode}');
+        debugPrint(
+            '[ApiService] register status=${res.statusCode} body=${res.body}');
       }
       return null;
     } catch (e) {
+      lastError = '网络连接失败';
       debugPrint('[ApiService] register error: $e');
       return null;
     }
