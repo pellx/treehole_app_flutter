@@ -67,7 +67,9 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  ({String path, double width, double height, double vOffset, double hOffset}) get _phaseImageConfig {
+  /// [top] 为距 Stack 顶端；[hOffset] 水平不变
+  ({String path, double width, double height, double top, double hOffset})
+      get _phaseImageConfig {
     switch (_phase) {
       case 'checking':
       case 'registering':
@@ -75,7 +77,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-think.png',
           width: RegisterDimens.thinkWidth,
           height: RegisterDimens.thinkHeight,
-          vOffset: RegisterDimens.thinkVOffset,
+          top: RegisterDimens.thinkVOffset,
           hOffset: RegisterDimens.thinkHOffset,
         );
       case 'unregistered':
@@ -83,7 +85,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-true.png',
           width: RegisterDimens.trueWidth,
           height: RegisterDimens.trueHeight,
-          vOffset: RegisterDimens.trueVOffset,
+          top: RegisterDimens.trueVOffset,
           hOffset: RegisterDimens.trueHOffset,
         );
       case 'registered':
@@ -92,7 +94,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-flase.png',
           width: RegisterDimens.flaseWidth,
           height: RegisterDimens.flaseHeight,
-          vOffset: RegisterDimens.flaseVOffset,
+          top: RegisterDimens.flaseVOffset,
           hOffset: RegisterDimens.flaseHOffset,
         );
       case 'naming':
@@ -100,7 +102,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-flower.png',
           width: RegisterDimens.flowerWidth,
           height: RegisterDimens.flowerHeight,
-          vOffset: RegisterDimens.flowerVOffset,
+          top: RegisterDimens.flowerVOffset,
           hOffset: RegisterDimens.flowerHOffset,
         );
       case 'login':
@@ -108,7 +110,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-login.png',
           width: RegisterDimens.loginImageWidth,
           height: RegisterDimens.loginImageHeight,
-          vOffset: RegisterDimens.loginImageVOffset,
+          top: RegisterDimens.loginImageVOffset,
           hOffset: RegisterDimens.loginImageHOffset,
         );
       default:
@@ -116,7 +118,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-think.png',
           width: RegisterDimens.thinkWidth,
           height: RegisterDimens.thinkHeight,
-          vOffset: RegisterDimens.thinkVOffset,
+          top: RegisterDimens.thinkVOffset,
           hOffset: RegisterDimens.thinkHOffset,
         );
     }
@@ -426,19 +428,24 @@ class _RegisterPageState extends State<RegisterPage> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // 白色椭圆背景 — 最底层
-            IgnorePointer(
-              child: Center(
-                child: OverflowBox(
-                  maxWidth: double.infinity,
-                  maxHeight: double.infinity,
-                  child: Transform.translate(
-                    offset: Offset(RegisterDimens.ellipseHOffset, RegisterDimens.ellipseVOffset),
-                    child: ClipOval(
-                      child: Container(
-                        width: RegisterDimens.ellipseWidth,
-                        height: RegisterDimens.ellipseHeight,
-                        color: colors.register.ellipseBg,
+            // 白色椭圆 — 距顶端；OverflowBox 保证宽度可超出屏幕
+            Positioned(
+              top: RegisterDimens.ellipseVOffset,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: OverflowBox(
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: Transform.translate(
+                      offset: Offset(RegisterDimens.ellipseHOffset, 0),
+                      child: ClipOval(
+                        child: Container(
+                          width: RegisterDimens.ellipseWidth,
+                          height: RegisterDimens.ellipseHeight,
+                          color: colors.register.ellipseBg,
+                        ),
                       ),
                     ),
                   ),
@@ -448,17 +455,23 @@ class _RegisterPageState extends State<RegisterPage> {
             // 隐藏的 WebView 用于 Turnstile（暂移出树，排查触摸拦截）
             // WebView 平台视图可能在 Android 层面拦截触摸事件
             // TODO: 确认按钮可点击后恢复 WebView
-            // 悬浮图片 — 根据阶段显示不同图片（纯装饰，置于交互内容下方）
+            // 悬浮图片 — 距顶端定位（纯装饰）
             if (_phase != 'done')
-              Positioned.fill(
+              Positioned(
+                top: _phaseImageConfig.top,
+                left: 0,
+                right: 0,
                 child: IgnorePointer(
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: Transform.translate(
-                      offset: Offset(_phaseImageConfig.hOffset, _phaseImageConfig.vOffset),
-                      child: Image.asset(_phaseImageConfig.path,
-                          width: _phaseImageConfig.width,
-                          height: _phaseImageConfig.height),
+                  child: Center(
+                    child: OverflowBox(
+                      maxWidth: double.infinity,
+                      maxHeight: double.infinity,
+                      child: Transform.translate(
+                        offset: Offset(_phaseImageConfig.hOffset, 0),
+                        child: Image.asset(_phaseImageConfig.path,
+                            width: _phaseImageConfig.width,
+                            height: _phaseImageConfig.height),
+                      ),
                     ),
                   ),
                 ),
@@ -493,10 +506,12 @@ class _RegisterPageState extends State<RegisterPage> {
             if (_phase == 'registered')
               Positioned(
                 left: 0, right: 0,
-                top: RegisterDimens.registeredLoginButtonTop,
+                top: RegisterDimens.registeredLoginButtonTop +
+                    RegisterDimens.registeredLoginButtonVOffset,
                 child: Center(
                   child: Transform.translate(
-                    offset: Offset(RegisterDimens.registeredLoginButtonHOffset, RegisterDimens.registeredLoginButtonVOffset),
+                    offset: Offset(
+                        RegisterDimens.registeredLoginButtonHOffset, 0),
                     child: SizedBox(
                       width: RegisterDimens.registeredLoginButtonWidth,
                       height: RegisterDimens.registeredLoginButtonHeight,
@@ -537,10 +552,12 @@ class _RegisterPageState extends State<RegisterPage> {
             if (_phase == 'registered')
               Positioned(
                 left: 0, right: 0,
-                top: RegisterDimens.registeredContactButtonTop,
+                top: RegisterDimens.registeredContactButtonTop +
+                    RegisterDimens.registeredContactButtonVOffset,
                 child: Center(
                   child: Transform.translate(
-                    offset: Offset(RegisterDimens.registeredContactButtonHOffset, RegisterDimens.registeredContactButtonVOffset),
+                    offset: Offset(
+                        RegisterDimens.registeredContactButtonHOffset, 0),
                     child: SizedBox(
                       width: RegisterDimens.registeredContactButtonWidth,
                       height: RegisterDimens.registeredContactButtonHeight,
@@ -578,7 +595,7 @@ class _RegisterPageState extends State<RegisterPage> {
             if (_phase == 'unregistered' && _error == null)
               Positioned(
                 left: 0, right: 0,
-                top: RegisterDimens.buttonTop,
+                top: RegisterDimens.buttonTop + RegisterDimens.buttonVOffset,
                 child: Center(
                   child: SizedBox(
                     width: RegisterDimens.buttonWidth,
@@ -640,10 +657,14 @@ class _RegisterPageState extends State<RegisterPage> {
                 ),
               )
             else
-              Positioned.fill(
+              Positioned(
+                left: 0,
+                right: 0,
+                top: RegisterDimens.stepTop,
                 child: Center(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: RegisterDimens.contentHPadding),
                     child: _buildPhase(colors, onSurface),
                   ),
                 ),
@@ -746,31 +767,28 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Widget _buildRegisterButton(AppColors colors) {
-    return Transform.translate(
-      offset: Offset(0, RegisterDimens.buttonVOffset),
-      child: SizedBox(
-        width: RegisterDimens.buttonWidth,
-        height: RegisterDimens.buttonHeight,
-        child: ElevatedButton(
-          onPressed: _startRegister,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: colors.register.buttonBg,
-            foregroundColor: colors.register.buttonText,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(RegisterDimens.buttonRadius),
-              side: BorderSide(
-                color: colors.register.buttonBorderColor,
-                width: RegisterDimens.buttonBorderWidth,
-              ),
+    return SizedBox(
+      width: RegisterDimens.buttonWidth,
+      height: RegisterDimens.buttonHeight,
+      child: ElevatedButton(
+        onPressed: _startRegister,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: colors.register.buttonBg,
+          foregroundColor: colors.register.buttonText,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(RegisterDimens.buttonRadius),
+            side: BorderSide(
+              color: colors.register.buttonBorderColor,
+              width: RegisterDimens.buttonBorderWidth,
             ),
           ),
-          child: Text('注册',
-              style: TextStyle(
-                fontSize: RegisterDimens.buttonFontSize,
-                fontWeight: FontWeight.w500,
-                letterSpacing: RegisterDimens.buttonLetterSpacing,
-              )),
         ),
+        child: Text('注册',
+            style: TextStyle(
+              fontSize: RegisterDimens.buttonFontSize,
+              fontWeight: FontWeight.w500,
+              letterSpacing: RegisterDimens.buttonLetterSpacing,
+            )),
       ),
     );
   }

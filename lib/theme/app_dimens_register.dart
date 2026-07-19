@@ -1,36 +1,41 @@
 /// 注册页尺寸、间距、字号、弧度、动画参数
 ///
+/// 竖直：`*Top` / 插图与椭圆的 `*VOffset` 均表示距 Stack 顶端（可为负）。
 /// 修改后需检查亮色/暗色模式下各阶段显示效果。
 class RegisterDimens {
   const RegisterDimens._();
 
   // ── 页面内容 ──
   static const double contentHPadding = 40;
-  static const double phaseTitleTop = 330; // 阶段标题距顶部距离
+  static const double phaseTitleTop = 330; // 阶段标题距顶端
   static const double phaseTitleFontSize = 22;
 
   // ── 白色椭圆背景 ──
   static const double ellipseWidth = 1100;
   static const double ellipseHeight = 1000;
-  static const double ellipseVOffset = -580;
+  /// 距顶端（由原相对中心 -580 换算，参考高约 800）
+  static const double ellipseVOffset = -680;
   static const double ellipseHOffset = 0;
 
   // ── 注册页图片 — think（加载中/验证中）──
   static const double thinkWidth = 300;
   static const double thinkHeight = 1000;
-  static const double thinkVOffset = -137;
+  /// 距顶端（由原相对中心 -137 换算）
+  static const double thinkVOffset = -237;
   static const double thinkHOffset = 10;
 
   // ── 注册页图片 — true（可以注册）──
   static const double trueWidth = 300;
   static const double trueHeight = 1000;
-  static const double trueVOffset = -137;
+  /// 距顶端（由原相对中心 -137 换算）
+  static const double trueVOffset = -237;
   static const double trueHOffset = 6;
 
   // ── 注册页图片 — flase（已注册）──
   static const double flaseWidth = 300;
   static const double flaseHeight = 1000;
-  static const double flaseVOffset = -137;
+  /// 距顶端（由原相对中心 -137 换算）
+  static const double flaseVOffset = -237;
   static const double flaseHOffset = 15;
 
   // ── 错误提示 ──
@@ -94,13 +99,15 @@ class RegisterDimens {
   // ── 注册页图片 — flower（输入用户名）──
   static const double flowerWidth = 300;
   static const double flowerHeight = 1000;
-  static const double flowerVOffset = -140;
+  /// 距顶端（由原相对中心 -140 换算）
+  static const double flowerVOffset = -240;
   static const double flowerHOffset = 6;
 
   // ── 注册页图片 — login（登录令牌输入）──
   static const double loginImageWidth = 300;
   static const double loginImageHeight = 1000;
-  static const double loginImageVOffset = -137;
+  /// 距顶端（由原相对中心 -137 换算）
+  static const double loginImageVOffset = -237;
   static const double loginImageHOffset = 6;
 
   // ── 取名阶段（naming）──
