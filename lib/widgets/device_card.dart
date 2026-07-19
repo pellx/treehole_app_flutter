@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_dimens_accent.dart';
@@ -544,7 +545,11 @@ class _DeviceCardState extends State<DeviceCard> {
     );
   }
 
+  static const _primaryStarAsset =
+      'assets/icons/game-pack/five-pointed-star.svg';
+
   Widget _trailingAction(AppColors colors, Color onSurface) {
+    final star = colors.common.devicePrimaryStar;
     switch (widget.data.action) {
       case DeviceCardAction.delete:
         return _iconAction(
@@ -560,32 +565,45 @@ class _DeviceCardState extends State<DeviceCard> {
           onPressed: _confirmCancelDelete,
         );
       case DeviceCardAction.primaryStar:
-        return _iconAction(
-          icon: Icons.star,
-          color: colors.common.green,
-          onPressed: _confirmPrimaryStar,
-        );
+        return _starAction(color: star, onPressed: _confirmPrimaryStar);
       case DeviceCardAction.primaryCancel:
-        return _iconAction(
-          icon: Icons.star_border,
-          color: onSurface.withValues(
+        return _starAction(
+          color: star.withValues(
               alpha: AccentDimens.deviceCardPrimaryCancelAlpha),
           onPressed: _confirmPrimaryCancel,
         );
       case DeviceCardAction.transferTarget:
-        return _iconAction(
-          icon: Icons.star_outline,
-          color: colors.common.green,
-          onPressed: _confirmTransferTarget,
-        );
+        return _starAction(color: star, onPressed: _confirmTransferTarget);
       case DeviceCardAction.primaryStarReadonly:
-        return _iconAction(
-          icon: Icons.star,
-          color: colors.common.green
-              .withValues(alpha: AccentDimens.deviceCardPrimaryReadonlyAlpha),
+        return _starAction(
+          color: star.withValues(
+              alpha: AccentDimens.deviceCardPrimaryReadonlyAlpha),
           onPressed: null,
         );
     }
+  }
+
+  /// 与帖子卡片收藏同一 SVG，着色为黄色
+  Widget _starAction({
+    required Color color,
+    required Future<void> Function()? onPressed,
+  }) {
+    return IconButton(
+      onPressed: _editing || onPressed == null
+          ? null
+          : () {
+              onPressed();
+            },
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      icon: SvgPicture.asset(
+        _primaryStarAsset,
+        width: AccentDimens.deviceCardPrimaryStarSize,
+        height: AccentDimens.deviceCardPrimaryStarSize,
+        colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      ),
+    );
   }
 
   Widget _iconAction({

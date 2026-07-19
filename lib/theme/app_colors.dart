@@ -27,6 +27,8 @@ class CommonColors {
   final Color overlayPageDot;
   final Color updateArrow;
   final Color deviceDeleteIcon;
+  /// 主设备星标（与帖子收藏同款 SVG，黄色）
+  final Color devicePrimaryStar;
 
   const CommonColors({
     required this.background,
@@ -52,6 +54,7 @@ class CommonColors {
     required this.overlayPageDot,
     required this.updateArrow,
     required this.deviceDeleteIcon,
+    required this.devicePrimaryStar,
   });
 }
 
@@ -321,6 +324,7 @@ static const commonLight = CommonColors(
   overlayPageDot:         Color(0xFFFFFFFF),
   updateArrow:            Color(0xFF92C8FF),
   deviceDeleteIcon:       Color(0x8CBD0000),
+  devicePrimaryStar:      Color(0xFFFFC107),
 );
 
 static const commonDark = CommonColors(
@@ -347,6 +351,7 @@ static const commonDark = CommonColors(
   overlayPageDot:         Color(0xFFFFFFFF),
   updateArrow:            Color(0xFF235180),
   deviceDeleteIcon:       Color(0x8Cd3d3d3),
+  devicePrimaryStar:      Color(0xFFFFC107),
 );
 
 // ---- PostCardColors ----
