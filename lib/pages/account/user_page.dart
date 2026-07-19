@@ -38,13 +38,6 @@ class _UserPageState extends State<UserPage> {
   /// 用户页打开时预取绑定列表 + 切号锁；进切换页前等待完成以免闪烁
   Future<void>? _prefetchFuture;
 
-  /// 两月内有重置 → 绿；否则红（从未重置则用注册时间，由后端 token_reset_at 给出）
-  bool get _tokenRecent {
-    final at = _tokenResetAt;
-    if (at == null) return false;
-    return DateTime.now().difference(at) < const Duration(days: 60);
-  }
-
   @override
   void initState() {
     super.initState();
@@ -638,7 +631,7 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  // ---- 更改用户 token（右侧上次更改时间 + 可用性圆点） ----
+  // ---- 更改用户 token（右侧上次更改时间） ----
 
   Widget _changeTokenRow(AppColors colors, Color onSurface) {
     return GestureDetector(
@@ -658,27 +651,15 @@ class _UserPageState extends State<UserPage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              Text(_formatTokenResetAt(),
-                  style: TextStyle(
-                      fontSize: AccentDimens.lastChangedFontSize,
-                      color: onSurface.withValues(
-                          alpha: AccentDimens.lastChangedAlpha))),
-            const SizedBox(width: AccentDimens.changeableDotGap),
-            Padding(
-              padding:
-                  const EdgeInsets.only(right: AccentDimens.dotRightInset),
-              child: Container(
-                width: AccentDimens.changeableDotSize,
-                height: AccentDimens.changeableDotSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  // 两月内有重置 → 绿；超过两月 → 红
-                  color: _tokenRecent
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFE57373),
-                ),
+              Padding(
+                padding:
+                    const EdgeInsets.only(right: AccentDimens.dotRightInset),
+                child: Text(_formatTokenResetAt(),
+                    style: TextStyle(
+                        fontSize: AccentDimens.lastChangedFontSize,
+                        color: onSurface.withValues(
+                            alpha: AccentDimens.lastChangedAlpha))),
               ),
-            ),
           ],
         ),
       ),
