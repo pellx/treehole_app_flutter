@@ -36,6 +36,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final _nameController = TextEditingController();
   final _tokenController = TextEditingController();
+  final _tokenFocusNode = FocusNode();
+  bool _loginTokenFocused = false;
   bool _submitting = false;
   String? _renameError;
 
@@ -58,6 +60,10 @@ class _RegisterPageState extends State<RegisterPage> {
     });
     _tokenController.addListener(() {
       if (mounted) setState(() {});
+    });
+    _tokenFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() => _loginTokenFocused = _tokenFocusNode.hasFocus);
     });
     if (widget.startAtLogin) {
       _phase = 'login';
@@ -410,6 +416,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    _tokenFocusNode.dispose();
     _nameController.dispose();
     _tokenController.dispose();
     super.dispose();
@@ -690,29 +697,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
               ),
-            // 账户切换「登录用户」：底部转移申请提示
-            if (_phase == 'login' && widget.startAtLogin)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: RegisterDimens.loginTransferTipBottom,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: RegisterDimens.loginTransferTipHPadding,
-                  ),
-                  child: Text(
-                    '请在已登录账户设备的 [用户]=>[设备绑定] 页面中点击 [转移申请] 发出登录许可后进行登录',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: RegisterDimens.loginTransferTipFontSize,
-                      height: RegisterDimens.loginTransferTipLineHeight,
-                      color: onSurface.withValues(
-                        alpha: RegisterDimens.loginTransferTipAlpha,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             // 右上角重新加载按钮
             Positioned(
               right: 8, top: 4,
@@ -936,6 +920,9 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget _buildLoginInput(AppColors colors, Color onSurface) {
     final token = _tokenController.text.trim();
     final hasToken = token.isNotEmpty;
+    // 超过首末可见位数后，未聚焦时掩码；聚焦可编辑明文
+    final showMask = !_loginTokenFocused &&
+        token.length > AccentDimens.tokenHeadChars + AccentDimens.tokenTailChars;
     // 空：粘贴；有内容：确认登录
     final onButtonPressed = _submitting
         ? null
@@ -951,70 +938,61 @@ class _RegisterPageState extends State<RegisterPage> {
             SizedBox(
               width: RegisterDimens.loginInputWidth,
               height: RegisterDimens.loginInputHeight,
-              child: hasToken
-                  ? GestureDetector(
-                      // 点击掩码可清空，便于重新粘贴
-                      onTap: _submitting
-                          ? null
-                          : () => setState(() {
-                                _tokenController.clear();
-                                _renameError = null;
-                              }),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: onSurface, width: 1),
-                          ),
-                        ),
-                        child: Transform.translate(
-                          offset: Offset(
-                            RegisterDimens.loginMaskedHOffset,
-                            RegisterDimens.loginMaskedVOffset,
-                          ),
-                          child: Text(
-                            _maskLoginToken(token),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: RegisterDimens.loginMaskedFontSize,
-                              color: onSurface.withValues(
-                                  alpha: RegisterDimens.loginMaskedAlpha),
-                            ),
-                          ),
-                        ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (showMask)
+                    Transform.translate(
+                      offset: Offset(
+                        RegisterDimens.loginMaskedHOffset,
+                        RegisterDimens.loginMaskedVOffset,
                       ),
-                    )
-                  : TextField(
-                      controller: _tokenController,
-                      autofocus: true,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: RegisterDimens.loginInputFontSize,
-                        color: onSurface,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: '请输入令牌',
-                        hintStyle: TextStyle(
-                          fontSize: RegisterDimens.loginHintFontSize,
+                      child: Text(
+                        _maskLoginToken(token),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: RegisterDimens.loginMaskedFontSize,
                           color: onSurface.withValues(
-                              alpha: RegisterDimens.loginHintAlpha),
-                        ),
-                        counterText: '',
-                        border: UnderlineInputBorder(
-                          borderSide: BorderSide(color: onSurface, width: 1),
-                        ),
-                        enabledBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: onSurface, width: 1),
-                        ),
-                        focusedBorder: UnderlineInputBorder(
-                          borderSide: BorderSide(color: onSurface, width: 1),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: RegisterDimens.loginInputPaddingH,
-                          vertical: RegisterDimens.loginInputPaddingV,
+                              alpha: RegisterDimens.loginMaskedAlpha),
                         ),
                       ),
                     ),
+                  TextField(
+                    controller: _tokenController,
+                    focusNode: _tokenFocusNode,
+                    enabled: !_submitting,
+                    autofocus: !hasToken,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: RegisterDimens.loginInputFontSize,
+                      color: showMask ? Colors.transparent : onSurface,
+                    ),
+                    cursorColor: onSurface,
+                    decoration: InputDecoration(
+                      hintText: '请输入令牌',
+                      hintStyle: TextStyle(
+                        fontSize: RegisterDimens.loginHintFontSize,
+                        color: onSurface.withValues(
+                            alpha: RegisterDimens.loginHintAlpha),
+                      ),
+                      counterText: '',
+                      border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: onSurface, width: 1),
+                      ),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: onSurface, width: 1),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: onSurface, width: 1),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: RegisterDimens.loginInputPaddingH,
+                        vertical: RegisterDimens.loginInputPaddingV,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             SizedBox(width: RegisterDimens.loginButtonGap),
             SizedBox(
@@ -1064,6 +1042,25 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ],
         ),
+        if (widget.startAtLogin) ...[
+          const SizedBox(height: RegisterDimens.loginTransferTipGap),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: RegisterDimens.loginTransferTipHPadding,
+            ),
+            child: Text(
+              '请在已登录账户设备的 [用户]=>[设备绑定] 页面中点击 [转移申请] 发出登录许可后进行登录',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: RegisterDimens.loginTransferTipFontSize,
+                height: RegisterDimens.loginTransferTipLineHeight,
+                color: onSurface.withValues(
+                  alpha: RegisterDimens.loginTransferTipAlpha,
+                ),
+              ),
+            ),
+          ),
+        ],
         if (_renameError != null) ...[
           const SizedBox(height: RegisterDimens.namingErrorGap),
           Text(

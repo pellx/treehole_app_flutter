@@ -93,7 +93,7 @@ class RegisterDimens {
   static const double stepIconGap = 10; // 图标和文字间距
   static const double stepFontSize = 13;
   static const double stepLoadingStrokeWidth = 2;
-  static const double stepPendingAlpha = 0.4;
+  static const double stepPendingAlpha =  .4;
   static const double stepDefaultAlpha = 0.6;
   static const double stepErrorGap = 16; // 步骤区和错误信息间距
 
@@ -175,9 +175,9 @@ class RegisterDimens {
   static const double loginRecoverHitPaddingH = 12;
   static const double loginRecoverHitPaddingV = 8;
 
-  // ── 账户切换「登录用户」底部提示 ──
-  static const double loginTransferTipBottom = 28;
-  static const double loginTransferTipHPadding = 28;
+  // ── 账户切换「登录用户」输入栏下方提示 ──
+  static const double loginTransferTipGap = 16;
+  static const double loginTransferTipHPadding = 12;
   static const double loginTransferTipFontSize = 12;
   static const double loginTransferTipAlpha = 0.45;
   static const double loginTransferTipLineHeight = 1.5;
