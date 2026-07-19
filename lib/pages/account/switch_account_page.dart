@@ -24,10 +24,15 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
   List<BoundAccountInfo> _accounts = [];
   /// 当前登录账户的完整 user_token
   String? _currentToken;
-  /// 仅在无缓存且首次请求未完成时显示加载
-  bool _loading = false;
   bool _switching = false;
   String? _error;
+  /// 切号锁过期时间（来自 binding/last-switch）
+  DateTime? _switchLockExpiresAt;
+
+  bool get _switchLocked {
+    final exp = _switchLockExpiresAt;
+    return exp != null && exp.isAfter(DateTime.now());
+  }
 
   @override
   void initState() {
@@ -35,8 +40,6 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     final cached = BindingCache.getAccounts();
     if (cached.isNotEmpty) {
       _accounts = cached;
-    } else {
-      _loading = true;
     }
     _bootstrap();
   }
@@ -49,7 +52,8 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
         _accounts = _withCurrentFirst(_accounts);
       });
     }
-    await _loadAccounts();
+    // 进页立刻查可否切号，并与账户列表并行刷新
+    await _refreshPage();
   }
 
   /// 当前账户置顶，其余保持相对顺序
@@ -73,7 +77,6 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
 
     if (list == null) {
       setState(() {
-        _loading = false;
         if (_accounts.isEmpty) {
           _error = ApiService.lastError ?? '加载账户失败';
         } else {
@@ -86,9 +89,32 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     final next = _withCurrentFirst(list);
     final changed = !BindingCache.accountsEqual(_accounts, next);
     setState(() {
-      _loading = false;
       _error = null;
       if (changed) _accounts = next;
+    });
+  }
+
+  Future<void> _refreshPage() async {
+    await Future.wait([
+      _loadSwitchLock(),
+      _loadAccounts(),
+    ]);
+  }
+
+  Future<void> _loadSwitchLock() async {
+    final ok = await SessionService.instance.ensureSession();
+    if (!ok || !mounted) return;
+    final id = await DeviceCredentialStore.getSessionId();
+    final secret = await DeviceCredentialStore.getSessionSecret();
+    if (id == null || secret == null) return;
+
+    final last = await ApiService.getLastSwitch(
+      sessionId: id,
+      sessionSecret: secret,
+    );
+    if (!mounted) return;
+    setState(() {
+      _switchLockExpiresAt = last?.isLocked == true ? last!.expiresAt : null;
     });
   }
 
@@ -104,6 +130,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
 
   AccountCardData _toCard(BoundAccountInfo a) {
     final id = a.userDisplayId?.trim();
+    final isCurrent = _isCurrent(a);
     return AccountCardData(
       bindingId: a.bindingId,
       deviceId: a.deviceId,
@@ -111,7 +138,9 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
       displayId: (id != null && id.isNotEmpty) ? id : '未命名账户',
       createdAt: a.createdAt,
       userToken: a.userToken,
-      isCurrent: _isCurrent(a),
+      isCurrent: isCurrent,
+      // 冷却中仅当前账户可交互
+      enabled: isCurrent || !_switchLocked,
     );
   }
 
@@ -137,6 +166,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
   Future<bool> _confirmSwitch(String displayId) async {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    const message = '是否要切换到「{id}」？\n每两天仅可进行一次切换';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => Dialog(
@@ -150,7 +180,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '是否切换到「$displayId」？',
+                message.replaceFirst('{id}', displayId),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: AccentDimens.dialogMessageFontSize,
@@ -224,13 +254,26 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
       'TRANSFER_REQUIRED' => '需先在原设备发起转移申请（15 分钟内有效）',
       'TRANSFER_INVALID' => '转移申请无效或已过期，请在原设备重新申请',
       'DEVICE_COOLDOWN' => '解绑冷却中，暂不可登录',
+      'DEVICE_SESSION_LOCKED' => '本机切号锁定中（约 2 天），暂不可切换到其他账户',
+      'RATE_LIMITED' => '操作过于频繁，请稍后再试',
       _ => raw ?? '登录失败',
     };
+  }
+
+  String _formatSwitchAvailableAt(DateTime at) {
+    final local = at.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '可于 $y/$m/$d $hh:$mm 再次切换账户';
   }
 
   Future<void> _onAccountTap(BoundAccountInfo a) async {
     if (_switching) return;
     final card = _toCard(a);
+    if (!card.enabled) return;
     if (card.isCurrent) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -269,6 +312,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
           duration: const Duration(seconds: 2),
         ),
       );
+      await _loadSwitchLock();
       return;
     }
 
@@ -276,6 +320,8 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
       _currentToken = token;
       _accounts = _withCurrentFirst(_accounts);
     });
+    await _loadSwitchLock();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('已切换账户'),
@@ -284,21 +330,14 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     );
   }
 
-  static const _loadingGif = Image(
-    image: AssetImage('assets/loading.gif'),
-    width: AppDimens.loadingGifSize,
-    height: AppDimens.loadingGifSize,
-  );
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final loginDisabled = _switching || _switchLocked;
 
     Widget body;
-    if (_loading) {
-      body = const Center(child: _loadingGif);
-    } else if (_error != null) {
+    if (_error != null && _accounts.isEmpty) {
       body = Center(
         child: Padding(
           padding: const EdgeInsets.all(AccentDimens.pagePadding),
@@ -314,7 +353,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextButton(onPressed: _loadAccounts, child: const Text('重试')),
+              TextButton(onPressed: _refreshPage, child: const Text('重试')),
             ],
           ),
         ),
@@ -330,21 +369,47 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
         ),
       );
     } else {
-      body = RefreshIndicator(
-        onRefresh: _loadAccounts,
-        child: ListView.separated(
-          padding: const EdgeInsets.all(AccentDimens.pagePadding),
-          itemCount: _accounts.length,
-          separatorBuilder: (_, __) =>
-              const SizedBox(height: AccentDimens.deviceCardGap),
-          itemBuilder: (context, index) {
-            final a = _accounts[index];
-            return AccountCard(
-              data: _toCard(a),
-              onTap: () => _onAccountTap(a),
-            );
-          },
-        ),
+      body = Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refreshPage,
+              child: ListView.separated(
+                padding: const EdgeInsets.all(AccentDimens.pagePadding),
+                itemCount: _accounts.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AccentDimens.deviceCardGap),
+                itemBuilder: (context, index) {
+                  final a = _accounts[index];
+                  return AccountCard(
+                    data: _toCard(a),
+                    onTap: () => _onAccountTap(a),
+                  );
+                },
+              ),
+            ),
+          ),
+          if (_switchLocked && _switchLockExpiresAt != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AccentDimens.switchLockTipHPadding,
+                0,
+                AccentDimens.switchLockTipHPadding,
+                AccentDimens.switchLockTipBottom,
+              ),
+              child: Text(
+                _formatSwitchAvailableAt(_switchLockExpiresAt!),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AccentDimens.switchLockTipFontSize,
+                  height: AccentDimens.switchLockTipLineHeight,
+                  color: onSurface.withValues(
+                    alpha: AccentDimens.switchLockTipAlpha,
+                  ),
+                ),
+              ),
+            ),
+        ],
       );
     }
 
@@ -357,21 +422,23 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
         child: SizedBox(
           height: AppDimens.postCreateSubmitHeight,
           child: ElevatedButton(
-            onPressed: _switching ? null : _openLoginUser,
+            onPressed: loginDisabled ? null : _openLoginUser,
             style: ElevatedButton.styleFrom(
               backgroundColor: colors.postCreate.submitBg,
               foregroundColor: colors.postCreate.submitText,
+              disabledBackgroundColor:
+                  colors.postCreate.submitBg.withValues(alpha: 0.35),
+              disabledForegroundColor:
+                  colors.postCreate.submitText.withValues(alpha: 0.45),
               elevation: 0,
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.postCreateSubmitHPadding, vertical: 0),
+                  horizontal: AppDimens.postCreateSubmitHPadding),
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppDimens.postCreateSubmitRadius),
+                borderRadius: BorderRadius.circular(
+                    AppDimens.postCreateSubmitRadius),
               ),
-              textStyle:
-                  const TextStyle(fontSize: AppDimens.postCreateSubmitFontSize),
             ),
             child: const Text('登录用户'),
           ),
@@ -385,6 +452,11 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
       bottomUpRoute(const RegisterPage(startAtLogin: true)),
     );
     if (!mounted) return;
-    await _bootstrap();
+    final token = await DeviceCredentialStore.getUserExternalToken();
+    setState(() {
+      _currentToken = token;
+      _accounts = _withCurrentFirst(_accounts);
+    });
+    await _refreshPage();
   }
 }

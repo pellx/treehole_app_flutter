@@ -1,41 +1,39 @@
 /// 注册页尺寸、间距、字号、弧度、动画参数
 ///
-/// UI 控件的 `*Top` 为距 Stack 顶端。
-/// 椭圆/插图仍用相对垂直中心的 `*VOffset`（与原先画法一致，避免被屏宽压扁）。
+/// 竖直定位一律为相对 Stack 垂直中心的 `*VOffset`（负值向上），
+/// 水平为 `*HOffset`（负值向左）。Stack `clipBehavior: Clip.none`。
 /// 修改后需检查亮色/暗色模式下各阶段显示效果。
 class RegisterDimens {
   const RegisterDimens._();
 
   // ── 页面内容 ──
   static const double contentHPadding = 40;
-  static const double phaseTitleTop = 345; // 阶段标题距顶端
+  /// 阶段标题相对垂直中心
+  static const double phaseTitleVOffset = -44;
+  static const double phaseTitleHOffset = 0;
   static const double phaseTitleFontSize = 22;
 
   // ── 白色椭圆背景 ──
   static const double ellipseWidth = 1100;
   static const double ellipseHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double ellipseVOffset = -580;
   static const double ellipseHOffset = 0;
 
-  // ── 注册页图片 — think（加载中/验证中）──
+  // ── 注册页图片 — think（加载中/验证中；宽高为 max，框内等比缩放）──
   static const double thinkWidth = 270;
   static const double thinkHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double thinkVOffset = -137;
   static const double thinkHOffset = 10;
 
   // ── 注册页图片 — true（可以注册）──
   static const double trueWidth = 270;
   static const double trueHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double trueVOffset = -137;
   static const double trueHOffset = 6;
 
   // ── 注册页图片 — flase（已注册）──
   static const double flaseWidth = 270;
   static const double flaseHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double flaseVOffset = -137;
   static const double flaseHOffset = 15;
 
@@ -45,18 +43,18 @@ class RegisterDimens {
   static const double errorRetryGap = 24;
 
   // ── 已注册提示 ──
-  static const double registeredTop = 380; // 距顶部距离
+  static const double registeredVOffset = -7;
+  static const double registeredHOffset = 0;
   static const double registeredFontSize = 16;
   static const double registeredAlpha = 0.8;
   static const double registeredLineHeight = 1.6;
 
   // ── 已注册 — 登录按钮 ──
-  static const double registeredLoginButtonTop = 440;
   static const double registeredLoginButtonWidth = 88;
   static const double registeredLoginButtonHeight = 37;
   static const double registeredLoginButtonPaddingH = 0;
   static const double registeredLoginButtonPaddingV = 0;
-  static const double registeredLoginButtonVOffset = 0;
+  static const double registeredLoginButtonVOffset = 58.5;
   static const double registeredLoginButtonHOffset = -60;
   static const double registeredLoginButtonRadius = 15;
   static const double registeredLoginButtonBorderWidth = 3;
@@ -64,55 +62,54 @@ class RegisterDimens {
   static const double registeredLoginButtonLetterSpacing = 0;
 
   // ── 已注册 — 联系我们按钮 ──
-  static const double registeredContactButtonTop = 439.9;
   static const double registeredContactButtonWidth = 110;
   static const double registeredContactButtonHeight = 37.8;
   static const double registeredContactButtonPaddingH = 0;
   static const double registeredContactButtonPaddingV = 0;
-  static const double registeredContactButtonVOffset = 0;
+  static const double registeredContactButtonVOffset = 58.8;
   static const double registeredContactButtonHOffset = 50;
   static const double registeredContactButtonRadius = 16;
   static const double registeredContactButtonBorderWidth = 3;
   static const double registeredContactButtonFontSize = 19;
   static const double registeredContactButtonLetterSpacing = 0;
 
-  // ── 注册按钮 ──
+  // ── 注册按钮（相对垂直中心；0 约等于原距顶 380）──
   static const double buttonHeight = 40;
   static const double buttonWidth = 100;
-  static const double buttonTop = 39;
-  static const double buttonVOffset = 0; // 距顶部距离
+  static const double buttonVOffset = 0;
+  static const double buttonHOffset = 0;
   static const double buttonRadius = 13;
   static const double buttonBorderWidth = 3;
   static const double buttonFontSize = 19;
   static const double buttonLetterSpacing = 6;
 
   // ── 验证步骤行（registering 阶段）──
-  static const double stepTop = 380; // 距顶部距离
+  static const double stepVOffset = 0;
+  static const double stepHOffset = 0;
   static const double stepGap = 12; // 两行步骤间距
   static const double stepIconSize = 16;
   static const double stepIconGap = 10; // 图标和文字间距
   static const double stepFontSize = 13;
   static const double stepLoadingStrokeWidth = 2;
-  static const double stepPendingAlpha =  .4;
+  static const double stepPendingAlpha = .4;
   static const double stepDefaultAlpha = 0.6;
   static const double stepErrorGap = 16; // 步骤区和错误信息间距
 
   // ── 注册页图片 — flower（输入用户名）──
   static const double flowerWidth = 270;
   static const double flowerHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double flowerVOffset = -140;
   static const double flowerHOffset = 6;
 
   // ── 注册页图片 — login（登录令牌输入）──
   static const double loginImageWidth = 270;
   static const double loginImageHeight = 1000;
-  /// 相对垂直中心的竖直偏移（负值向上）
   static const double loginImageVOffset = -137;
   static const double loginImageHOffset = 6;
 
   // ── 取名阶段（naming）──
-  static const double namingInputTop = 390; // 输入框+按钮距顶部距离
+  static const double namingInputVOffset = 15;
+  static const double namingInputHOffset = 0;
   static const double namingInputHeight = 20;
   static const double namingInputWidth = 200;
   static const double namingInputFontSize = 14;
@@ -136,7 +133,8 @@ class RegisterDimens {
   static const double namingErrorGap = 12;
 
   // ── 登录阶段（login）──
-  static const double loginInputTop = 390; // 输入框距顶部距离
+  static const double loginInputVOffset = 15;
+  static const double loginInputHOffset = 0;
   static const double loginInputHeight = 20;
   static const double loginInputWidth = 200;
   static const double loginInputFontSize = 17;
@@ -170,10 +168,16 @@ class RegisterDimens {
 
   static const double loginRecoverGap = 2; // 输入框和"找回用户"间距（保留）
   static const double loginRecoverFontSize = 12;
-  /// 「找回用户」相对页面顶部（与 loginInputTop 配套，独立 Positioned）
-  static const double loginRecoverTop = 430;
+  /// 「找回用户」相对垂直中心
+  static const double loginRecoverVOffset = 44;
+  static const double loginRecoverHOffset = 0;
   static const double loginRecoverHitPaddingH = 12;
   static const double loginRecoverHitPaddingV = 8;
+
+  // ── 右上角重新加载（相对右上角）──
+  static const double refreshHOffset = -8;
+  static const double refreshVOffset = 4;
+  static const double refreshIconSize = 22;
 
   // ── 账户切换「登录用户」输入栏下方提示 ──
   static const double loginTransferTipGap = 16;

@@ -113,4 +113,11 @@ class AccentDimens {
   static const double accountCardCurrentDotSize = 10; // 当前账户绿点直径
   static const double accountCardCurrentDotRight = 10; // 绿点距卡片右
   static const double accountCardCurrentDotBottom = 10; // 绿点距卡片底
+  /// 切号冷却中非当前账户卡片透明度
+  static const double accountCardDisabledOpacity = 0.45;
+  static const double switchLockTipFontSize = 12;
+  static const double switchLockTipAlpha = 0.45;
+  static const double switchLockTipBottom = 20;
+  static const double switchLockTipHPadding = 24;
+  static const double switchLockTipLineHeight = 1.4;
 }

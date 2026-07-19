@@ -33,17 +33,13 @@ class SessionCreateResult {
   const SessionCreateResult({required this.sessionId, required this.sessionSecret});
 }
 
-/// POST /user/login 返回的 session + 轮换后的 device_secret
+/// POST /user/login 返回轮换后的 device_secret（不签发 session）
 class LoginResult {
-  final int sessionId;
-  final String sessionSecret;
   final String deviceSecret;
   final int bindingId;
   final int deviceId;
 
   const LoginResult({
-    required this.sessionId,
-    required this.sessionSecret,
     required this.deviceSecret,
     required this.bindingId,
     required this.deviceId,
@@ -55,11 +51,53 @@ class LoginResult {
       throw FormatException('响应缺少 device_secret');
     }
     return LoginResult(
-      sessionId: (json['session_id'] as num).toInt(),
-      sessionSecret: json['session_secret'] as String,
       deviceSecret: secret,
       bindingId: (json['binding_id'] as num).toInt(),
       deviceId: (json['device_id'] as num).toInt(),
+    );
+  }
+}
+
+/// POST /user/binding/create 响应
+class BindingCreateResult {
+  final int bindingId;
+  final int deviceId;
+
+  const BindingCreateResult({
+    required this.bindingId,
+    required this.deviceId,
+  });
+
+  factory BindingCreateResult.fromJson(Map<String, dynamic> json) {
+    return BindingCreateResult(
+      bindingId: (json['binding_id'] as num).toInt(),
+      deviceId: (json['device_id'] as num).toInt(),
+    );
+  }
+}
+
+/// POST /user/binding/last-switch 本机切号锁状态
+class LastSwitchResult {
+  final DateTime? switchedAt;
+  final int? ownerUserId;
+  final DateTime? expiresAt;
+
+  const LastSwitchResult({
+    this.switchedAt,
+    this.ownerUserId,
+    this.expiresAt,
+  });
+
+  bool get isLocked {
+    final exp = expiresAt;
+    return exp != null && exp.isAfter(DateTime.now());
+  }
+
+  factory LastSwitchResult.fromJson(Map<String, dynamic> json) {
+    return LastSwitchResult(
+      switchedAt: _parseApiDateTime(json['switched_at']),
+      ownerUserId: (json['owner_user_id'] as num?)?.toInt(),
+      expiresAt: _parseApiDateTime(json['expires_at']),
     );
   }
 }
@@ -630,8 +668,8 @@ class ApiService {
     }
   }
 
-  /// POST /user/login — 已有账户登录本机（可新建/复活绑定、轮换 device_secret、签发 session）
-  /// 请求不带旧 secret；成功后须用响应中的新 device_secret 覆盖本地。
+  /// POST /user/login — 建绑并轮换 device_secret（**不**签发 session）
+  /// 请求不带旧 secret；成功后须用响应中的新 device_secret 覆盖本地，再调 session/create。
   static Future<LoginResult?> login({
     required String userToken,
     required String fingerprintHash,
@@ -666,8 +704,46 @@ class ApiService {
     }
   }
 
-  /// POST /user/session/create — 申请 session
-  /// 需要注册时获得的 user_token + device_secret + fingerprint_hash
+  /// POST /user/binding/create — 建绑并校验现有 device_secret（不轮换、不签发 session）
+  static Future<BindingCreateResult?> createBinding({
+    required String userToken,
+    required String fingerprintHash,
+    required String deviceSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/create'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_token': userToken,
+                'fingerprint_hash': fingerprintHash,
+                'device_secret': deviceSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        try {
+          return BindingCreateResult.fromJson(data);
+        } catch (e) {
+          debugPrint(
+              '[ApiService] createBinding parse error: $e body=${res.body}');
+          lastError = '建绑响应解析失败';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] createBinding status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] createBinding error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/session/create — 申请 session（一设备一有效 session；异用户切号写 2 天锁）
+  /// 需要 user_token + device_secret + fingerprint_hash
   static Future<SessionCreateResult?> createSession({
     required String userToken,
     required String deviceSecret,
@@ -698,6 +774,35 @@ class ApiService {
       return null;
     } catch (e) {
       debugPrint('[ApiService] createSession error: $e');
+      return null;
+    }
+  }
+
+  /// POST /user/binding/last-switch — 本机上次切号锁（需有效 session）
+  static Future<LastSwitchResult?> getLastSwitch({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/last-switch'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return LastSwitchResult.fromJson(data);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] getLastSwitch status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] getLastSwitch error: $e');
+      lastError = '网络连接失败';
       return null;
     }
   }

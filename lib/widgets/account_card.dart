@@ -15,6 +15,8 @@ class AccountCardData {
   final String userToken;
   /// 是否为当前登录账户
   final bool isCurrent;
+  /// 是否可交互（切号冷却中他户为 false）
+  final bool enabled;
 
   const AccountCardData({
     required this.bindingId,
@@ -24,6 +26,7 @@ class AccountCardData {
     this.createdAt,
     required this.userToken,
     this.isCurrent = false,
+    this.enabled = true,
   });
 }
 
@@ -72,11 +75,11 @@ class AccountCard extends StatelessWidget {
       fontWeight: FontWeight.w500,
     );
 
-    return Material(
+    final card = Material(
       color: colors.common.surface,
       borderRadius: BorderRadius.circular(AccentDimens.deviceCardRadius),
       child: InkWell(
-        onTap: onTap,
+        onTap: data.enabled ? onTap : null,
         borderRadius: BorderRadius.circular(AccentDimens.deviceCardRadius),
         child: Container(
           width: double.infinity,
@@ -139,6 +142,12 @@ class AccountCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+
+    if (data.enabled) return card;
+    return Opacity(
+      opacity: AccentDimens.accountCardDisabledOpacity,
+      child: card,
     );
   }
 }

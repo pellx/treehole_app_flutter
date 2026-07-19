@@ -73,7 +73,26 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// [vOffset] 相对垂直中心；布局时换算为距顶。水平 [hOffset] 不变。
+  /// Stack 内相对中心偏移定位（与椭圆/插图同一套坐标系）
+  Widget _offsetLayer({
+    required double vOffset,
+    double hOffset = 0,
+    bool ignorePointer = false,
+    required Widget child,
+  }) {
+    final layer = Align(
+      alignment: Alignment.center,
+      child: Transform.translate(
+        offset: Offset(hOffset, vOffset),
+        child: child,
+      ),
+    );
+    return Positioned.fill(
+      child: ignorePointer ? IgnorePointer(child: layer) : layer,
+    );
+  }
+
+  /// 阶段插图：[vOffset] 相对垂直中心，[hOffset] 水平偏移
   ({String path, double width, double height, double vOffset, double hOffset})
       get _phaseImageConfig {
     switch (_phase) {
@@ -325,8 +344,14 @@ class _RegisterPageState extends State<RegisterPage> {
       await PostStorage.saveDisplayName(name);
       await PostStorage.setRegistered(true);
 
-      // 注册成功后立即申请 session
-      await SessionService.instance.ensureSession();
+      // 注册未写 binding：建绑后再申请 session
+      final activated =
+          await SessionService.instance.activateAfterRegister(result.userToken);
+      if (!activated) {
+        setState(() =>
+            _renameError = ApiService.lastError ?? '建绑或申请会话失败');
+        return;
+      }
 
       setState(() => _phase = 'done');
       Navigator.pop(context);
@@ -386,6 +411,7 @@ class _RegisterPageState extends State<RegisterPage> {
       'REBIND_COOLDOWN' => '解绑冷却中，请 2 天后再登录此账户',
       'TRANSFER_REQUIRED' => '需先在原设备发起转移申请（15 分钟内有效）',
       'TRANSFER_INVALID' => '转移申请无效或已过期，请在原设备重新申请',
+      'DEVICE_SESSION_LOCKED' => '本机切号锁定中（约 2 天），暂不可切换到其他账户',
       'RATE_LIMITED' => '操作过于频繁，请稍后再试',
       _ => (raw == null || raw.isEmpty) ? '登录失败' : raw,
     };
@@ -435,285 +461,280 @@ class _RegisterPageState extends State<RegisterPage> {
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
         child: SafeArea(
           bottom: false,
-          child: Stack(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // 中心 + V/HOffset → Positioned 左上角；定宽高避免 Image 无界约束崩溃
+              double centerLeft(double width, double hOffset) =>
+                  constraints.maxWidth / 2 - width / 2 + hOffset;
+              double centerTop(double height, double vOffset) =>
+                  constraints.maxHeight / 2 - height / 2 + vOffset;
+              final img = _phaseImageConfig;
+              return Stack(
             clipBehavior: Clip.none,
             children: [
-            // 白色椭圆 — 居中 + VOffset（与原先一致，避免被屏宽约束缩小）
-            IgnorePointer(
-              child: Center(
-                child: OverflowBox(
-                  maxWidth: double.infinity,
-                  maxHeight: double.infinity,
-                  child: Transform.translate(
-                    offset: Offset(RegisterDimens.ellipseHOffset,
-                        RegisterDimens.ellipseVOffset),
-                    child: ClipOval(
-                      child: Container(
-                        width: RegisterDimens.ellipseWidth,
-                        height: RegisterDimens.ellipseHeight,
-                        color: colors.register.ellipseBg,
-                      ),
-                    ),
-                  ),
+            // 白色椭圆 — 相对中心偏移
+            Positioned(
+              left: centerLeft(
+                RegisterDimens.ellipseWidth,
+                RegisterDimens.ellipseHOffset,
+              ),
+              top: centerTop(
+                RegisterDimens.ellipseHeight,
+                RegisterDimens.ellipseVOffset,
+              ),
+              width: RegisterDimens.ellipseWidth,
+              height: RegisterDimens.ellipseHeight,
+              child: IgnorePointer(
+                child: ClipOval(
+                  child: ColoredBox(color: colors.register.ellipseBg),
                 ),
               ),
             ),
-            // 隐藏的 WebView 用于 Turnstile（暂移出树，排查触摸拦截）
-            // WebView 平台视图可能在 Android 层面拦截触摸事件
-            // TODO: 确认按钮可点击后恢复 WebView
-            // 悬浮图片 — 居中 + VOffset，宽高按 RegisterDimens 原样绘制
+            // 悬浮图片 — 宽高为 max 约束，框内等比缩放不拉伸
             if (_phase != 'done')
-              Positioned.fill(
+              Positioned(
+                left: centerLeft(img.width, img.hOffset),
+                top: centerTop(img.height, img.vOffset),
+                width: img.width,
+                height: img.height,
                 child: IgnorePointer(
-                  child: Align(
+                  child: Image.asset(
+                    img.path,
+                    fit: BoxFit.contain,
                     alignment: Alignment.center,
-                    child: Transform.translate(
-                      offset: Offset(_phaseImageConfig.hOffset,
-                          _phaseImageConfig.vOffset),
-                      child: Image.asset(
-                        _phaseImageConfig.path,
-                        width: _phaseImageConfig.width,
-                        height: _phaseImageConfig.height,
-                      ),
-                    ),
+                    filterQuality: FilterQuality.medium,
                   ),
                 ),
               ),
-            // 阶段标题 — 每个阶段显示不同的大文本
+            // 阶段标题
             if (_phase != 'done' && _phaseTitle.isNotEmpty)
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.phaseTitleTop,
-                child: Center(
-                  child: Text(_phaseTitle,
-                      style: TextStyle(
-                        fontSize: RegisterDimens.phaseTitleFontSize,
-                        fontWeight: FontWeight.bold,
-                        color: onSurface,
-                      )),
-                ),
+              _offsetLayer(
+                vOffset: RegisterDimens.phaseTitleVOffset,
+                hOffset: RegisterDimens.phaseTitleHOffset,
+                child: Text(_phaseTitle,
+                    style: TextStyle(
+                      fontSize: RegisterDimens.phaseTitleFontSize,
+                      fontWeight: FontWeight.bold,
+                      color: onSurface,
+                    )),
               ),
-            // 已注册提示文字 — 独立 Positioned，可控制位置
+            // 已注册提示文字
             if (_phase == 'registered')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.registeredTop,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
-                    child: _buildRegistered(colors),
-                  ),
+              _offsetLayer(
+                vOffset: RegisterDimens.registeredVOffset,
+                hOffset: RegisterDimens.registeredHOffset,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.contentHPadding),
+                  child: _buildRegistered(colors),
                 ),
               ),
             // 已注册 — 登录按钮
             if (_phase == 'registered')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.registeredLoginButtonTop +
-                    RegisterDimens.registeredLoginButtonVOffset,
-                child: Center(
-                  child: Transform.translate(
-                    offset: Offset(
-                        RegisterDimens.registeredLoginButtonHOffset, 0),
-                    child: SizedBox(
-                      width: RegisterDimens.registeredLoginButtonWidth,
-                      height: RegisterDimens.registeredLoginButtonHeight,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _phase = 'login';
-                            _renameError = null;
-                          });
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.register.buttonBg,
-                          foregroundColor: colors.register.buttonText,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: RegisterDimens.registeredLoginButtonPaddingH,
-                            vertical: RegisterDimens.registeredLoginButtonPaddingV,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(RegisterDimens.registeredLoginButtonRadius),
-                            side: BorderSide(
-                              color: colors.register.buttonBorderColor,
-                              width: RegisterDimens.registeredLoginButtonBorderWidth,
-                            ),
-                          ),
+              _offsetLayer(
+                vOffset: RegisterDimens.registeredLoginButtonVOffset,
+                hOffset: RegisterDimens.registeredLoginButtonHOffset,
+                child: SizedBox(
+                  width: RegisterDimens.registeredLoginButtonWidth,
+                  height: RegisterDimens.registeredLoginButtonHeight,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _phase = 'login';
+                        _renameError = null;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.register.buttonBg,
+                      foregroundColor: colors.register.buttonText,
+                      padding: EdgeInsets.symmetric(
+                        horizontal:
+                            RegisterDimens.registeredLoginButtonPaddingH,
+                        vertical:
+                            RegisterDimens.registeredLoginButtonPaddingV,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                            RegisterDimens.registeredLoginButtonRadius),
+                        side: BorderSide(
+                          color: colors.register.buttonBorderColor,
+                          width: RegisterDimens
+                              .registeredLoginButtonBorderWidth,
                         ),
-                        child: Text('登录',
-                            style: TextStyle(
-                              fontSize: RegisterDimens.registeredLoginButtonFontSize,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: RegisterDimens.registeredLoginButtonLetterSpacing,
-                            )),
                       ),
                     ),
+                    child: Text('登录',
+                        style: TextStyle(
+                          fontSize: RegisterDimens
+                              .registeredLoginButtonFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: RegisterDimens
+                              .registeredLoginButtonLetterSpacing,
+                        )),
                   ),
                 ),
               ),
             // 已注册 — 联系我们按钮
             if (_phase == 'registered')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.registeredContactButtonTop +
-                    RegisterDimens.registeredContactButtonVOffset,
-                child: Center(
-                  child: Transform.translate(
-                    offset: Offset(
-                        RegisterDimens.registeredContactButtonHOffset, 0),
-                    child: SizedBox(
-                      width: RegisterDimens.registeredContactButtonWidth,
-                      height: RegisterDimens.registeredContactButtonHeight,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // TODO: 导航到联系我们页
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.register.buttonBg,
-                          foregroundColor: colors.register.buttonText,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: RegisterDimens.registeredContactButtonPaddingH,
-                            vertical: RegisterDimens.registeredContactButtonPaddingV,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(RegisterDimens.registeredContactButtonRadius),
-                            side: BorderSide(
-                              color: colors.register.buttonBorderColor,
-                              width: RegisterDimens.registeredContactButtonBorderWidth,
-                            ),
-                          ),
+              _offsetLayer(
+                vOffset: RegisterDimens.registeredContactButtonVOffset,
+                hOffset: RegisterDimens.registeredContactButtonHOffset,
+                child: SizedBox(
+                  width: RegisterDimens.registeredContactButtonWidth,
+                  height: RegisterDimens.registeredContactButtonHeight,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // TODO: 导航到联系我们页
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.register.buttonBg,
+                      foregroundColor: colors.register.buttonText,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: RegisterDimens
+                            .registeredContactButtonPaddingH,
+                        vertical: RegisterDimens
+                            .registeredContactButtonPaddingV,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                            RegisterDimens.registeredContactButtonRadius),
+                        side: BorderSide(
+                          color: colors.register.buttonBorderColor,
+                          width: RegisterDimens
+                              .registeredContactButtonBorderWidth,
                         ),
-                        child: Text('联系我们',
-                            style: TextStyle(
-                              fontSize: RegisterDimens.registeredContactButtonFontSize,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: RegisterDimens.registeredContactButtonLetterSpacing,
-                            )),
                       ),
                     ),
+                    child: Text('联系我们',
+                        style: TextStyle(
+                          fontSize: RegisterDimens
+                              .registeredContactButtonFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: RegisterDimens
+                              .registeredContactButtonLetterSpacing,
+                        )),
                   ),
                 ),
               ),
             // 交互内容 — 按钮/输入框等
             if (_phase == 'unregistered' && _error == null)
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.buttonTop + RegisterDimens.buttonVOffset,
-                child: Center(
-                  child: SizedBox(
-                    width: RegisterDimens.buttonWidth,
-                    height: RegisterDimens.buttonHeight,
-                    child: ElevatedButton(
-                      onPressed: _startRegister,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: colors.register.buttonBg,
-                        foregroundColor: colors.register.buttonText,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(RegisterDimens.buttonRadius),
-                          side: BorderSide(
-                            color: colors.register.buttonBorderColor,
-                            width: RegisterDimens.buttonBorderWidth,
-                          ),
+              _offsetLayer(
+                vOffset: RegisterDimens.buttonVOffset,
+                hOffset: RegisterDimens.buttonHOffset,
+                child: SizedBox(
+                  width: RegisterDimens.buttonWidth,
+                  height: RegisterDimens.buttonHeight,
+                  child: ElevatedButton(
+                    onPressed: _startRegister,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.register.buttonBg,
+                      foregroundColor: colors.register.buttonText,
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(RegisterDimens.buttonRadius),
+                        side: BorderSide(
+                          color: colors.register.buttonBorderColor,
+                          width: RegisterDimens.buttonBorderWidth,
                         ),
                       ),
-                      child: Text('注册',
-                          style: TextStyle(
-                            fontSize: RegisterDimens.buttonFontSize,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: RegisterDimens.buttonLetterSpacing,
-                          )),
                     ),
+                    child: Text('注册',
+                        style: TextStyle(
+                          fontSize: RegisterDimens.buttonFontSize,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: RegisterDimens.buttonLetterSpacing,
+                        )),
                   ),
                 ),
               )
             else if (_phase == 'registering')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.stepTop,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
-                    child: _buildRegistering(colors, onSurface),
-                  ),
+              _offsetLayer(
+                vOffset: RegisterDimens.stepVOffset,
+                hOffset: RegisterDimens.stepHOffset,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.contentHPadding),
+                  child: _buildRegistering(colors, onSurface),
                 ),
               )
             else if (_phase == 'naming')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.namingInputTop,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
-                    child: _buildNamingInput(colors, onSurface),
-                  ),
+              _offsetLayer(
+                vOffset: RegisterDimens.namingInputVOffset,
+                hOffset: RegisterDimens.namingInputHOffset,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.contentHPadding),
+                  child: _buildNamingInput(colors, onSurface),
                 ),
               )
             else if (_phase == 'login')
-              Positioned(
-                left: 0, right: 0,
-                top: RegisterDimens.loginInputTop,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
-                    child: _buildLoginInput(colors, onSurface),
-                  ),
+              _offsetLayer(
+                vOffset: RegisterDimens.loginInputVOffset,
+                hOffset: RegisterDimens.loginInputHOffset,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.contentHPadding),
+                  child: _buildLoginInput(colors, onSurface),
                 ),
               )
             else
-              Positioned(
-                left: 0,
-                right: 0,
-                top: RegisterDimens.stepTop,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: RegisterDimens.contentHPadding),
-                    child: _buildPhase(colors, onSurface),
-                  ),
+              _offsetLayer(
+                vOffset: RegisterDimens.stepVOffset,
+                hOffset: RegisterDimens.stepHOffset,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.contentHPadding),
+                  child: _buildPhase(colors, onSurface),
                 ),
               ),
             // 登录 — 找回用户（账户切换进入的登录不显示）
             if (_phase == 'login' && !widget.startAtLogin)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: RegisterDimens.loginRecoverTop,
-                child: Center(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      // TODO: 找回用户逻辑
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: RegisterDimens.loginRecoverHitPaddingH,
-                        vertical: RegisterDimens.loginRecoverHitPaddingV,
-                      ),
-                      child: Text(
-                        '找回用户',
-                        style: TextStyle(
-                          fontSize: RegisterDimens.loginRecoverFontSize,
-                          color: colors.register.loginRecoverColor,
-                        ),
+              _offsetLayer(
+                vOffset: RegisterDimens.loginRecoverVOffset,
+                hOffset: RegisterDimens.loginRecoverHOffset,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    // TODO: 找回用户逻辑
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: RegisterDimens.loginRecoverHitPaddingH,
+                      vertical: RegisterDimens.loginRecoverHitPaddingV,
+                    ),
+                    child: Text(
+                      '找回用户',
+                      style: TextStyle(
+                        fontSize: RegisterDimens.loginRecoverFontSize,
+                        color: colors.register.loginRecoverColor,
                       ),
                     ),
                   ),
                 ),
               ),
-            // 右上角重新加载按钮（账户切换「登录用户」入口不显示）
+            // 右上角重新加载（相对右上角偏移）
             if (!widget.startAtLogin)
-              Positioned(
-                right: 8, top: 4,
-                child: IconButton(
-                  icon: Icon(Icons.refresh, size: 22,
-                      color: onSurface.withValues(alpha: 0.35)),
-                  tooltip: '重新加载',
-                  onPressed: _reset,
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Transform.translate(
+                    offset: Offset(RegisterDimens.refreshHOffset,
+                        RegisterDimens.refreshVOffset),
+                    child: IconButton(
+                      icon: Icon(Icons.refresh,
+                          size: RegisterDimens.refreshIconSize,
+                          color: onSurface.withValues(alpha: 0.35)),
+                      tooltip: '重新加载',
+                      onPressed: _reset,
+                    ),
+                  ),
                 ),
               ),
           ],
+              );
+            },
+          ),
         ),
-      ),
       ),
     );
   }

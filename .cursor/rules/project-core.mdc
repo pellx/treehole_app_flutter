@@ -10,4 +10,5 @@ alwaysApply: true
 - 后端 API 契约以服务器 `/var/www/treehole-nest/README.md` 为准（本仓库不再维护 `api.md`）；改动请求/响应结构须同步更新该 README
 - 已知问题与待办记录在根目录 `todo.md`，完成后更新状态而非删除
 - `fingerprint.ts` 等根目录 `.ts` 文件是后端 NestJS 源码的参考副本，修改后需提醒用户手动同步部署到后端
-- 不要主动 git commit；`.hermes/`、`tmp_verification/` 已 gitignore，不要再往里加需要版本控制的文件
+- 每次对话完成须提交 git（详见 `git-commit-on-done.mdc`）；`.hermes/`、`tmp_verification/` 已 gitignore，不要再往里加需要版本控制的文件
+- 不要提交 `tmp_*` / `tmp_backend_patch/` 等临时目录与密钥文件

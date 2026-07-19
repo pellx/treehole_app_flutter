@@ -113,6 +113,8 @@ class SessionService {
             ApiService.lastError == 'DEVICE_SECRET_INVALID') {
           final loginOk = await loginWithToken(userToken);
           if (loginOk) return true;
+        } else if (ApiService.lastError == 'DEVICE_SESSION_LOCKED') {
+          return false;
         } else {
           return false;
         }
@@ -226,6 +228,7 @@ class SessionService {
 
     await DeviceCredentialStore.saveUserExternalToken(userToken);
     await DeviceCredentialStore.mergeKnownUserTokens([userToken]);
+    await DeviceCredentialStore.clearAccountSessions();
     await DeviceCredentialStore.saveSessionId(createResult.sessionId);
     await DeviceCredentialStore.saveSessionSecret(createResult.sessionSecret);
     await DeviceCredentialStore.saveAccountSession(
@@ -237,7 +240,42 @@ class SessionService {
     return true;
   }
 
-  /// 已有账户登录本机：`POST /user/login`（可新建/复活绑定并轮换 device_secret）
+  /// 本机已有 secret 时建绑（不轮换）；失败再降级 login
+  Future<bool> _bindWithExistingSecret(String userToken) async {
+    final secret = await DeviceCredentialStore.getDeviceSecret();
+    if (secret == null) return loginWithToken(userToken);
+
+    final fingerprint = await DeviceFingerprintService.collect();
+    final fingerprintHash = _computeFingerprintHash(fingerprint);
+    final bound = await ApiService.createBinding(
+      userToken: userToken,
+      fingerprintHash: fingerprintHash,
+      deviceSecret: secret,
+    );
+    if (bound == null) {
+      if (ApiService.lastError == 'DEVICE_SESSION_LOCKED') return false;
+      // secret 无效等 → login 轮换
+      if (ApiService.lastError == 'DEVICE_SECRET_INVALID' ||
+          ApiService.lastError == 'DEVICE_NOT_FOUND' ||
+          ApiService.lastError == 'FINGERPRINT_MISMATCH') {
+        return loginWithToken(userToken);
+      }
+      // 其他建绑错误（含 transfer）直接失败，避免误轮换
+      if (ApiService.lastError == 'TRANSFER_REQUIRED' ||
+          ApiService.lastError == 'TRANSFER_INVALID' ||
+          ApiService.lastError == 'REBIND_COOLDOWN') {
+        return false;
+      }
+      return loginWithToken(userToken);
+    }
+
+    await DeviceCredentialStore.saveDeviceId(bound.deviceId);
+    await DeviceCredentialStore.saveUserExternalToken(userToken);
+    await DeviceCredentialStore.mergeKnownUserTokens([userToken]);
+    return _tryCreateSession(userToken: userToken, deviceSecret: secret);
+  }
+
+  /// 已有账户登录本机：`POST /user/login`（轮换 secret）后再 `session/create`
   Future<bool> loginWithToken(String userToken) async {
     final token = userToken.trim();
     if (token.isEmpty) {
@@ -259,22 +297,16 @@ class SessionService {
     await DeviceCredentialStore.saveUserExternalToken(token);
     await DeviceCredentialStore.mergeKnownUserTokens([token]);
     await DeviceCredentialStore.saveDeviceId(result.deviceId);
-    await DeviceCredentialStore.saveSessionId(result.sessionId);
-    await DeviceCredentialStore.saveSessionSecret(result.sessionSecret);
-    await DeviceCredentialStore.saveAccountSession(
-      token,
-      result.sessionId,
-      result.sessionSecret,
+    await DeviceCredentialStore.clearSession();
+    return _tryCreateSession(
+      userToken: token,
+      deviceSecret: result.deviceSecret,
     );
-    _lastValidatedAt = DateTime.now();
-    return true;
   }
 
   /// 切换到本机已绑定的其他账户。
   ///
-  /// 1. 离开前把当前 session 按 token 缓存  
-  /// 2. 目标账户若有缓存且校验有效 → 直接复用（不申请，避免 RATE_LIMITED）  
-  /// 3. 否则再 `session/create`；绑定类错误才降级 `login`
+  /// 一设备一 session：不可复用他户旧 session；走 session/create（必要时先建绑）。
   Future<bool> switchToAccount(String userToken) async {
     final token = userToken.trim();
     if (token.isEmpty) {
@@ -286,28 +318,6 @@ class SessionService {
         (await DeviceCredentialStore.getUserExternalToken())?.trim();
     if (current != null && current == token) {
       return ensureSession();
-    }
-
-    // 切走前缓存当前账户 session，供之后切回复用
-    await _stashCurrentSession(current);
-
-    // 优先复用目标账户已缓存且仍有效的 session
-    final cached = await DeviceCredentialStore.getAccountSession(token);
-    if (cached != null) {
-      final validated = await ApiService.validateSession(
-        sessionId: cached.id,
-        sessionSecret: cached.secret,
-      );
-      if (validated != null && validated.valid) {
-        await DeviceCredentialStore.saveUserExternalToken(token);
-        await DeviceCredentialStore.mergeKnownUserTokens([token]);
-        await DeviceCredentialStore.saveSessionId(cached.id);
-        await DeviceCredentialStore.saveSessionSecret(cached.secret);
-        _lastValidatedAt = DateTime.now();
-        await _resetAccountDisplayCache();
-        return true;
-      }
-      await DeviceCredentialStore.removeAccountSession(token);
     }
 
     final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
@@ -322,8 +332,13 @@ class SessionService {
       }
 
       final err = ApiService.lastError;
-      final needLogin = err == 'DEVICE_NOT_BOUND' ||
-          err == 'DEVICE_SECRET_INVALID' ||
+      if (err == 'DEVICE_SESSION_LOCKED') return false;
+      if (err == 'DEVICE_NOT_BOUND') {
+        final boundOk = await _bindWithExistingSecret(token);
+        if (boundOk) await _resetAccountDisplayCache();
+        return boundOk;
+      }
+      final needLogin = err == 'DEVICE_SECRET_INVALID' ||
           err == 'DEVICE_NOT_FOUND' ||
           err == 'FINGERPRINT_MISMATCH';
       if (!needLogin) return false;
@@ -334,13 +349,9 @@ class SessionService {
     return loginOk;
   }
 
-  /// 将当前活跃 session 写入该 token 的缓存槽
-  Future<void> _stashCurrentSession(String? token) async {
-    if (token == null || token.isEmpty) return;
-    final id = await DeviceCredentialStore.getSessionId();
-    final secret = await DeviceCredentialStore.getSessionSecret();
-    if (id == null || secret == null || secret.isEmpty) return;
-    await DeviceCredentialStore.saveAccountSession(token, id, secret);
+  /// 注册后：用现有 secret 建绑再申请 session
+  Future<bool> activateAfterRegister(String userToken) async {
+    return _bindWithExistingSecret(userToken.trim());
   }
 
   /// 切换账户后清展示缓存（不影响 session / token，失败路径勿调用）
