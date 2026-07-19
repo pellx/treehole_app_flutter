@@ -403,7 +403,15 @@ class _UserPageState extends State<UserPage> {
       } catch (_) {}
     }
     if (!mounted) return;
-    Navigator.of(context).push(topDownRoute(const SwitchAccountPage()));
+    await Navigator.of(context).push(topDownRoute(const SwitchAccountPage()));
+    if (!mounted) return;
+    // 切号后立刻用本地已写入的昵称刷新，再拉 profile/令牌/头像
+    _nameController.text =
+        PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    _loadExternalToken();
+    _loadAvatar();
+    _loadProfile();
+    _prefetchFuture = BindingCache.prefetchAll();
   }
 
   @override

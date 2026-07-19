@@ -308,7 +308,11 @@ class SessionService {
   /// 切换到本机已绑定的其他账户。
   ///
   /// 一设备一 session：不可复用他户旧 session；走 session/create（必要时先建绑）。
-  Future<bool> switchToAccount(String userToken) async {
+  /// [displayNameHint] 列表里已知昵称，成功后立刻写入，再拉 profile 校正。
+  Future<bool> switchToAccount(
+    String userToken, {
+    String? displayNameHint,
+  }) async {
     final token = userToken.trim();
     if (token.isEmpty) {
       ApiService.lastError = 'TOKEN_EMPTY';
@@ -328,7 +332,7 @@ class SessionService {
         deviceSecret: deviceSecret,
       );
       if (created) {
-        await _resetAccountDisplayCache();
+        await _applySwitchedAccountDisplay(displayNameHint);
         return true;
       }
 
@@ -336,7 +340,7 @@ class SessionService {
       if (err == 'DEVICE_SESSION_LOCKED') return false;
       if (err == 'DEVICE_NOT_BOUND') {
         final boundOk = await _bindWithExistingSecret(token);
-        if (boundOk) await _resetAccountDisplayCache();
+        if (boundOk) await _applySwitchedAccountDisplay(displayNameHint);
         return boundOk;
       }
       final needLogin = err == 'DEVICE_SECRET_INVALID' ||
@@ -346,7 +350,7 @@ class SessionService {
     }
 
     final loginOk = await loginWithToken(token);
-    if (loginOk) await _resetAccountDisplayCache();
+    if (loginOk) await _applySwitchedAccountDisplay(displayNameHint);
     return loginOk;
   }
 
@@ -355,13 +359,27 @@ class SessionService {
     return _bindWithExistingSecret(userToken.trim());
   }
 
-  /// 切换账户后清展示缓存（不影响 session / token，失败路径勿调用）
-  Future<void> _resetAccountDisplayCache() async {
-    await PostStorage.saveDisplayName('');
+  /// 切换成功后：清头像 → 立刻写入提示昵称 → 拉 profile 校正显示名
+  Future<void> _applySwitchedAccountDisplay(String? displayNameHint) async {
     try {
       await AvatarStorage.clear();
     } catch (e) {
       debugPrint('[SessionService] 清除头像失败: $e');
+    }
+
+    final hint = displayNameHint?.trim() ?? '';
+    await PostStorage.saveDisplayName(hint);
+
+    final id = await DeviceCredentialStore.getSessionId();
+    final secret = await DeviceCredentialStore.getSessionSecret();
+    if (id == null || secret == null) return;
+
+    final profile = await ApiService.getUserProfile(
+      sessionId: id,
+      sessionSecret: secret,
+    );
+    if (profile != null && profile.userDisplayId.isNotEmpty) {
+      await PostStorage.saveDisplayName(profile.userDisplayId);
     }
   }
 
