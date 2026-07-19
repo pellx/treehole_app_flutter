@@ -164,7 +164,7 @@ class _UserPageState extends State<UserPage> {
           if (next == null) return '改名冷却中，每两周可改一次';
           return '改名冷却中，每两周可改一次\n下一次可更改日期：${_formatRenameDate(next)}';
         }(),
-      'NAME_TAKEN' => '该名字已被使用',
+      'NAME_TAKEN' => '用户名被占用',
       null => '改名失败',
       _ => raw,
     };

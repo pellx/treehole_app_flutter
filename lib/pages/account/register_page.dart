@@ -334,9 +334,7 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       if (result == null) {
-        // 此处多为 POST /user/register；Internal Server Error = 服务端未捕获异常(500)
-        setState(() => _renameError =
-            '注册失败：${ApiService.lastError ?? '未知错误'}');
+        setState(() => _renameError = _mapRegisterError(ApiService.lastError));
         return;
       }
 
@@ -402,6 +400,15 @@ class _RegisterPageState extends State<RegisterPage> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _mapRegisterError(String? raw) {
+    return switch (raw) {
+      'NAME_TAKEN' => '用户名被占用',
+      'NAME_EMPTY' => '名字不能为空',
+      null || '' => '注册失败',
+      final code => '注册失败：$code',
+    };
   }
 
   String _mapLoginError(String? raw) {
