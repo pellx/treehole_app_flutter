@@ -330,34 +330,21 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
         ),
       );
     } else {
-      body = Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: _loadAccounts,
-            child: ListView.separated(
-              padding: const EdgeInsets.all(AccentDimens.pagePadding),
-              itemCount: _accounts.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: AccentDimens.deviceCardGap),
-              itemBuilder: (context, index) {
-                final a = _accounts[index];
-                return AccountCard(
-                  data: _toCard(a),
-                  onTap: () => _onAccountTap(a),
-                );
-              },
-            ),
-          ),
-          if (_switching)
-            Positioned.fill(
-              child: AbsorbPointer(
-                child: ColoredBox(
-                  color: onSurface.withValues(alpha: 0.08),
-                  child: const Center(child: _loadingGif),
-                ),
-              ),
-            ),
-        ],
+      body = RefreshIndicator(
+        onRefresh: _loadAccounts,
+        child: ListView.separated(
+          padding: const EdgeInsets.all(AccentDimens.pagePadding),
+          itemCount: _accounts.length,
+          separatorBuilder: (_, __) =>
+              const SizedBox(height: AccentDimens.deviceCardGap),
+          itemBuilder: (context, index) {
+            final a = _accounts[index];
+            return AccountCard(
+              data: _toCard(a),
+              onTap: () => _onAccountTap(a),
+            );
+          },
+        ),
       );
     }
 
