@@ -920,7 +920,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget _buildLoginInput(AppColors colors, Color onSurface) {
     final token = _tokenController.text.trim();
     final hasToken = token.isNotEmpty;
-    // 超过首末可见位数后，未聚焦时掩码；聚焦可编辑明文
+    // 失焦且超过 8 字才掩码；一旦聚焦/输入则始终明文
     final showMask = !_loginTokenFocused &&
         token.length > AccentDimens.tokenHeadChars + AccentDimens.tokenTailChars;
     // 空：粘贴；有内容：确认登录
@@ -938,61 +938,79 @@ class _RegisterPageState extends State<RegisterPage> {
             SizedBox(
               width: RegisterDimens.loginInputWidth,
               height: RegisterDimens.loginInputHeight,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (showMask)
-                    Transform.translate(
-                      offset: Offset(
-                        RegisterDimens.loginMaskedHOffset,
-                        RegisterDimens.loginMaskedVOffset,
+              child: showMask
+                  ? GestureDetector(
+                      onTap: _submitting
+                          ? null
+                          : () {
+                              setState(() => _loginTokenFocused = true);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) _tokenFocusNode.requestFocus();
+                              });
+                            },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: onSurface, width: 1),
+                          ),
+                        ),
+                        child: Transform.translate(
+                          offset: Offset(
+                            RegisterDimens.loginMaskedHOffset,
+                            RegisterDimens.loginMaskedVOffset,
+                          ),
+                          child: Text(
+                            _maskLoginToken(token),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: RegisterDimens.loginMaskedFontSize,
+                              color: onSurface.withValues(
+                                  alpha: RegisterDimens.loginMaskedAlpha),
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        _maskLoginToken(token),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: RegisterDimens.loginMaskedFontSize,
+                    )
+                  : TextField(
+                      controller: _tokenController,
+                      focusNode: _tokenFocusNode,
+                      enabled: !_submitting,
+                      autofocus: !hasToken || _loginTokenFocused,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: RegisterDimens.loginInputFontSize,
+                        color: onSurface,
+                      ),
+                      cursorColor: onSurface,
+                      onTap: () {
+                        if (!_loginTokenFocused) {
+                          setState(() => _loginTokenFocused = true);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: '请输入令牌',
+                        hintStyle: TextStyle(
+                          fontSize: RegisterDimens.loginHintFontSize,
                           color: onSurface.withValues(
-                              alpha: RegisterDimens.loginMaskedAlpha),
+                              alpha: RegisterDimens.loginHintAlpha),
+                        ),
+                        counterText: '',
+                        border: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        enabledBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: onSurface, width: 1),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: RegisterDimens.loginInputPaddingH,
+                          vertical: RegisterDimens.loginInputPaddingV,
                         ),
                       ),
                     ),
-                  TextField(
-                    controller: _tokenController,
-                    focusNode: _tokenFocusNode,
-                    enabled: !_submitting,
-                    autofocus: !hasToken,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: RegisterDimens.loginInputFontSize,
-                      color: showMask ? Colors.transparent : onSurface,
-                    ),
-                    cursorColor: onSurface,
-                    decoration: InputDecoration(
-                      hintText: '请输入令牌',
-                      hintStyle: TextStyle(
-                        fontSize: RegisterDimens.loginHintFontSize,
-                        color: onSurface.withValues(
-                            alpha: RegisterDimens.loginHintAlpha),
-                      ),
-                      counterText: '',
-                      border: UnderlineInputBorder(
-                        borderSide: BorderSide(color: onSurface, width: 1),
-                      ),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: onSurface, width: 1),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: onSurface, width: 1),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: RegisterDimens.loginInputPaddingH,
-                        vertical: RegisterDimens.loginInputPaddingV,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
             SizedBox(width: RegisterDimens.loginButtonGap),
             SizedBox(
