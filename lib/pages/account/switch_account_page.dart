@@ -41,6 +41,8 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     if (cached.isNotEmpty) {
       _accounts = cached;
     }
+    // 用户页已预取：首帧即用缓存锁状态，避免可点→锁定闪一下
+    _switchLockExpiresAt = BindingCache.getSwitchLockExpiresAt();
     _bootstrap();
   }
 
@@ -102,20 +104,9 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
   }
 
   Future<void> _loadSwitchLock() async {
-    final ok = await SessionService.instance.ensureSession();
-    if (!ok || !mounted) return;
-    final id = await DeviceCredentialStore.getSessionId();
-    final secret = await DeviceCredentialStore.getSessionSecret();
-    if (id == null || secret == null) return;
-
-    final last = await ApiService.getLastSwitch(
-      sessionId: id,
-      sessionSecret: secret,
-    );
+    final exp = await BindingCache.refreshSwitchLock();
     if (!mounted) return;
-    setState(() {
-      _switchLockExpiresAt = last?.isLocked == true ? last!.expiresAt : null;
-    });
+    setState(() => _switchLockExpiresAt = exp);
   }
 
   bool _isCurrent(BoundAccountInfo a) {

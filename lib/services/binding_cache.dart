@@ -11,7 +11,12 @@ import 'session_service.dart';
 class BindingCache {
   static const _devicesKey = 'devices2user';
   static const _accountsKey = 'user2device';
+  /// 切号锁过期时刻（ISO8601）；无键或已过期表示可切换
+  static const _switchLockExpiresKey = 'last_switch_expires_at';
   static late Box _box;
+
+  static DateTime? _switchLockExpiresAt;
+  static bool _switchLockLoaded = false;
 
   static Future<void> init() async {
     _box = await Hive.openBox('binding_cache');
@@ -111,7 +116,36 @@ class BindingCache {
     return (id: id, secret: secret);
   }
 
-  /// 用户页打开时预取，写入本地缓存
+  /// 当前切号锁过期时间；未锁定或已过期返回 null
+  static DateTime? getSwitchLockExpiresAt() {
+    if (!_switchLockLoaded) {
+      _switchLockLoaded = true;
+      final raw = _box.get(_switchLockExpiresKey);
+      if (raw is String && raw.isNotEmpty) {
+        _switchLockExpiresAt = DateTime.tryParse(raw)?.toLocal();
+      }
+    }
+    final exp = _switchLockExpiresAt;
+    if (exp == null) return null;
+    if (!exp.isAfter(DateTime.now())) {
+      _switchLockExpiresAt = null;
+      return null;
+    }
+    return exp;
+  }
+
+  static Future<void> saveSwitchLock(LastSwitchResult? last) async {
+    final exp = last?.isLocked == true ? last!.expiresAt : null;
+    _switchLockExpiresAt = exp;
+    _switchLockLoaded = true;
+    if (exp == null) {
+      await _box.delete(_switchLockExpiresKey);
+    } else {
+      await _box.put(_switchLockExpiresKey, exp.toUtc().toIso8601String());
+    }
+  }
+
+  /// 用户页打开时预取，写入本地缓存（含切号锁，避免进切换页闪烁）
   static Future<void> prefetchAll() async {
     final session = await _readySession();
     if (session == null) {
@@ -121,7 +155,25 @@ class BindingCache {
     await Future.wait([
       _prefetchDevices(session.id, session.secret),
       _prefetchAccounts(session.id, session.secret),
+      _prefetchSwitchLock(session.id, session.secret),
     ]);
+  }
+
+  static Future<DateTime?> _prefetchSwitchLock(
+      int sessionId, String sessionSecret) async {
+    final last = await ApiService.getLastSwitch(
+      sessionId: sessionId,
+      sessionSecret: sessionSecret,
+    );
+    if (last != null) await saveSwitchLock(last);
+    return getSwitchLockExpiresAt();
+  }
+
+  /// 刷新切号锁；失败保留旧缓存
+  static Future<DateTime?> refreshSwitchLock() async {
+    final session = await _readySession();
+    if (session == null) return getSwitchLockExpiresAt();
+    return _prefetchSwitchLock(session.id, session.secret);
   }
 
   static Future<List<BoundDeviceInfo>?> _prefetchDevices(

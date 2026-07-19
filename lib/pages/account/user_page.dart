@@ -35,6 +35,8 @@ class _UserPageState extends State<UserPage> {
   Uint8List? _avatarBytes;
   DateTime? _tokenResetAt;
   DateTime? _displayIdChangedAt;
+  /// 用户页打开时预取绑定列表 + 切号锁；进切换页前等待完成以免闪烁
+  Future<void>? _prefetchFuture;
 
   /// 两月内有重置 → 绿；否则红（从未重置则用注册时间，由后端 token_reset_at 给出）
   bool get _tokenRecent {
@@ -51,8 +53,8 @@ class _UserPageState extends State<UserPage> {
     _loadExternalToken();
     _loadAvatar();
     _loadProfile();
-    // 预取绑定列表，进入子页时可先展示缓存
-    BindingCache.prefetchAll();
+    // 预取绑定列表与切号锁，进入子页时首帧即可正确展示
+    _prefetchFuture = BindingCache.prefetchAll();
   }
 
   /// 点到输入框外导致失焦时退出编辑；延后一帧以免与「提交」按钮抢序
@@ -400,7 +402,14 @@ class _UserPageState extends State<UserPage> {
     Navigator.of(context).push(topDownRoute(const DeviceBindingPage()));
   }
 
-  void _openLoginOther() {
+  Future<void> _openLoginOther() async {
+    final pending = _prefetchFuture;
+    if (pending != null) {
+      try {
+        await pending.timeout(const Duration(seconds: 3));
+      } catch (_) {}
+    }
+    if (!mounted) return;
     Navigator.of(context).push(topDownRoute(const SwitchAccountPage()));
   }
 
