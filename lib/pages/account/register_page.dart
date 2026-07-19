@@ -700,16 +700,17 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
               ),
-            // 右上角重新加载按钮
-            Positioned(
-              right: 8, top: 4,
-              child: IconButton(
-                icon: Icon(Icons.refresh, size: 22,
-                    color: onSurface.withValues(alpha: 0.35)),
-                tooltip: '重新加载',
-                onPressed: _reset,
+            // 右上角重新加载按钮（账户切换「登录用户」入口不显示）
+            if (!widget.startAtLogin)
+              Positioned(
+                right: 8, top: 4,
+                child: IconButton(
+                  icon: Icon(Icons.refresh, size: 22,
+                      color: onSurface.withValues(alpha: 0.35)),
+                  tooltip: '重新加载',
+                  onPressed: _reset,
+                ),
               ),
-            ),
           ],
         ),
       ),
