@@ -124,15 +124,6 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// 将「相对中心」偏移换算为距 Stack 顶端的 top
-  static double _topFromCenterOffset({
-    required double stackHeight,
-    required double childHeight,
-    required double centerVOffset,
-  }) {
-    return stackHeight / 2 - childHeight / 2 + centerVOffset;
-  }
-
   String get _phaseTitle {
     switch (_phase) {
       case 'checking':
@@ -434,36 +425,18 @@ class _RegisterPageState extends State<RegisterPage> {
       backgroundColor: colors.register.pageBg,
       body: SafeArea(
         bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final stackH = constraints.maxHeight;
-            final ellipseTop = _topFromCenterOffset(
-              stackHeight: stackH,
-              childHeight: RegisterDimens.ellipseHeight,
-              centerVOffset: RegisterDimens.ellipseVOffset,
-            );
-            final img = _phaseImageConfig;
-            final imageTop = _topFromCenterOffset(
-              stackHeight: stackH,
-              childHeight: img.height,
-              centerVOffset: img.vOffset,
-            );
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-            // 白色椭圆：VOffset 相对中心 → 换算为 top；显式 height 防止塌缩
-            Positioned(
-              top: ellipseTop,
-              left: 0,
-              right: 0,
-              height: RegisterDimens.ellipseHeight,
-              child: IgnorePointer(
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 白色椭圆 — 居中 + VOffset（与原先一致，避免被屏宽约束缩小）
+            IgnorePointer(
+              child: Center(
                 child: OverflowBox(
-                  alignment: Alignment.center,
                   maxWidth: double.infinity,
-                  maxHeight: RegisterDimens.ellipseHeight,
+                  maxHeight: double.infinity,
                   child: Transform.translate(
-                    offset: Offset(RegisterDimens.ellipseHOffset, 0),
+                    offset: Offset(RegisterDimens.ellipseHOffset,
+                        RegisterDimens.ellipseVOffset),
                     child: ClipOval(
                       child: Container(
                         width: RegisterDimens.ellipseWidth,
@@ -478,22 +451,20 @@ class _RegisterPageState extends State<RegisterPage> {
             // 隐藏的 WebView 用于 Turnstile（暂移出树，排查触摸拦截）
             // WebView 平台视图可能在 Android 层面拦截触摸事件
             // TODO: 确认按钮可点击后恢复 WebView
-            // 悬浮图片：同上，距顶定位且可超出屏宽
+            // 悬浮图片 — 居中 + VOffset，宽高按 RegisterDimens 原样绘制
             if (_phase != 'done')
-              Positioned(
-                top: imageTop,
-                left: 0,
-                right: 0,
-                height: img.height,
+              Positioned.fill(
                 child: IgnorePointer(
-                  child: OverflowBox(
+                  child: Align(
                     alignment: Alignment.center,
-                    maxWidth: double.infinity,
-                    maxHeight: img.height,
                     child: Transform.translate(
-                      offset: Offset(img.hOffset, 0),
-                      child: Image.asset(img.path,
-                          width: img.width, height: img.height),
+                      offset: Offset(_phaseImageConfig.hOffset,
+                          _phaseImageConfig.vOffset),
+                      child: Image.asset(
+                        _phaseImageConfig.path,
+                        width: _phaseImageConfig.width,
+                        height: _phaseImageConfig.height,
+                      ),
                     ),
                   ),
                 ),
@@ -729,9 +700,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 onPressed: _reset,
               ),
             ),
-              ],
-            );
-          },
+          ],
         ),
       ),
     );
