@@ -33,7 +33,6 @@ class _UserPageState extends State<UserPage> {
   String? _error;
   String _externalToken = '';
   Uint8List? _avatarBytes;
-  DateTime? _tokenResetAt;
   DateTime? _displayIdChangedAt;
   /// 用户页打开时预取绑定列表 + 切号锁；进切换页前等待完成以免闪烁
   Future<void>? _prefetchFuture;
@@ -117,7 +116,6 @@ class _UserPageState extends State<UserPage> {
       if (profile.userDisplayId.isNotEmpty) {
         _nameController.text = profile.userDisplayId;
       }
-      _tokenResetAt = profile.tokenResetAt;
       _displayIdChangedAt = profile.displayIdChangedAt;
     });
     if (profile.userDisplayId.isNotEmpty) {
@@ -363,10 +361,7 @@ class _UserPageState extends State<UserPage> {
       }
       await DeviceCredentialStore.saveUserExternalToken(result.userToken);
       await DeviceCredentialStore.mergeKnownUserTokens([result.userToken]);
-      setState(() {
-        _externalToken = result.userToken;
-        _tokenResetAt = result.tokenResetAt ?? DateTime.now();
-      });
+      setState(() => _externalToken = result.userToken);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('用户令牌已重置'), duration: Duration(seconds: 2)),
       );
@@ -379,16 +374,6 @@ class _UserPageState extends State<UserPage> {
     } finally {
       if (mounted) setState(() => _resettingToken = false);
     }
-  }
-
-  String _formatTokenResetAt() {
-    final at = _tokenResetAt;
-    if (at == null) return '加载中…';
-    final local = at.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
   }
 
   void _openDeviceBinding() {
@@ -639,7 +624,7 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  // ---- 更改用户 token（右侧上次更改时间） ----
+  // ---- 令牌重置 ----
 
   Widget _changeTokenRow(AppColors colors, Color onSurface) {
     return GestureDetector(
@@ -648,7 +633,7 @@ class _UserPageState extends State<UserPage> {
       child: _itemRow(
         Row(
           children: [
-            Text('更改用户令牌',
+            Text('令牌重置',
                 style: TextStyle(
                     fontSize: AccentDimens.itemFontSize, color: onSurface)),
             const Spacer(),
@@ -657,16 +642,6 @@ class _UserPageState extends State<UserPage> {
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              Padding(
-                padding:
-                    const EdgeInsets.only(right: AccentDimens.dotRightInset),
-                child: Text(_formatTokenResetAt(),
-                    style: TextStyle(
-                        fontSize: AccentDimens.lastChangedFontSize,
-                        color: onSurface.withValues(
-                            alpha: AccentDimens.lastChangedAlpha))),
               ),
           ],
         ),
