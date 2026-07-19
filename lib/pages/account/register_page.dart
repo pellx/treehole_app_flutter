@@ -67,8 +67,8 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// [top] 为距 Stack 顶端；[hOffset] 水平不变
-  ({String path, double width, double height, double top, double hOffset})
+  /// [vOffset] 相对垂直中心；布局时换算为距顶。水平 [hOffset] 不变。
+  ({String path, double width, double height, double vOffset, double hOffset})
       get _phaseImageConfig {
     switch (_phase) {
       case 'checking':
@@ -77,7 +77,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-think.png',
           width: RegisterDimens.thinkWidth,
           height: RegisterDimens.thinkHeight,
-          top: RegisterDimens.thinkVOffset,
+          vOffset: RegisterDimens.thinkVOffset,
           hOffset: RegisterDimens.thinkHOffset,
         );
       case 'unregistered':
@@ -85,7 +85,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-true.png',
           width: RegisterDimens.trueWidth,
           height: RegisterDimens.trueHeight,
-          top: RegisterDimens.trueVOffset,
+          vOffset: RegisterDimens.trueVOffset,
           hOffset: RegisterDimens.trueHOffset,
         );
       case 'registered':
@@ -94,7 +94,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-flase.png',
           width: RegisterDimens.flaseWidth,
           height: RegisterDimens.flaseHeight,
-          top: RegisterDimens.flaseVOffset,
+          vOffset: RegisterDimens.flaseVOffset,
           hOffset: RegisterDimens.flaseHOffset,
         );
       case 'naming':
@@ -102,7 +102,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-flower.png',
           width: RegisterDimens.flowerWidth,
           height: RegisterDimens.flowerHeight,
-          top: RegisterDimens.flowerVOffset,
+          vOffset: RegisterDimens.flowerVOffset,
           hOffset: RegisterDimens.flowerHOffset,
         );
       case 'login':
@@ -110,7 +110,7 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-login.png',
           width: RegisterDimens.loginImageWidth,
           height: RegisterDimens.loginImageHeight,
-          top: RegisterDimens.loginImageVOffset,
+          vOffset: RegisterDimens.loginImageVOffset,
           hOffset: RegisterDimens.loginImageHOffset,
         );
       default:
@@ -118,10 +118,19 @@ class _RegisterPageState extends State<RegisterPage> {
           path: 'assets/mu/mu-think.png',
           width: RegisterDimens.thinkWidth,
           height: RegisterDimens.thinkHeight,
-          top: RegisterDimens.thinkVOffset,
+          vOffset: RegisterDimens.thinkVOffset,
           hOffset: RegisterDimens.thinkHOffset,
         );
     }
+  }
+
+  /// 将「相对中心」偏移换算为距 Stack 顶端的 top
+  static double _topFromCenterOffset({
+    required double stackHeight,
+    required double childHeight,
+    required double centerVOffset,
+  }) {
+    return stackHeight / 2 - childHeight / 2 + centerVOffset;
   }
 
   String get _phaseTitle {
@@ -425,27 +434,41 @@ class _RegisterPageState extends State<RegisterPage> {
       backgroundColor: colors.register.pageBg,
       body: SafeArea(
         bottom: false,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 白色椭圆 — 距顶端；OverflowBox 保证宽度可超出屏幕
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stackH = constraints.maxHeight;
+            final ellipseTop = _topFromCenterOffset(
+              stackHeight: stackH,
+              childHeight: RegisterDimens.ellipseHeight,
+              centerVOffset: RegisterDimens.ellipseVOffset,
+            );
+            final img = _phaseImageConfig;
+            final imageTop = _topFromCenterOffset(
+              stackHeight: stackH,
+              childHeight: img.height,
+              centerVOffset: img.vOffset,
+            );
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+            // 白色椭圆：VOffset 相对中心 → 换算为 top；显式 height 防止塌缩
             Positioned(
-              top: RegisterDimens.ellipseVOffset,
+              top: ellipseTop,
               left: 0,
               right: 0,
+              height: RegisterDimens.ellipseHeight,
               child: IgnorePointer(
-                child: Center(
-                  child: OverflowBox(
-                    maxWidth: double.infinity,
-                    maxHeight: double.infinity,
-                    child: Transform.translate(
-                      offset: Offset(RegisterDimens.ellipseHOffset, 0),
-                      child: ClipOval(
-                        child: Container(
-                          width: RegisterDimens.ellipseWidth,
-                          height: RegisterDimens.ellipseHeight,
-                          color: colors.register.ellipseBg,
-                        ),
+                child: OverflowBox(
+                  alignment: Alignment.center,
+                  maxWidth: double.infinity,
+                  maxHeight: RegisterDimens.ellipseHeight,
+                  child: Transform.translate(
+                    offset: Offset(RegisterDimens.ellipseHOffset, 0),
+                    child: ClipOval(
+                      child: Container(
+                        width: RegisterDimens.ellipseWidth,
+                        height: RegisterDimens.ellipseHeight,
+                        color: colors.register.ellipseBg,
                       ),
                     ),
                   ),
@@ -455,23 +478,22 @@ class _RegisterPageState extends State<RegisterPage> {
             // 隐藏的 WebView 用于 Turnstile（暂移出树，排查触摸拦截）
             // WebView 平台视图可能在 Android 层面拦截触摸事件
             // TODO: 确认按钮可点击后恢复 WebView
-            // 悬浮图片 — 距顶端定位（纯装饰）
+            // 悬浮图片：同上，距顶定位且可超出屏宽
             if (_phase != 'done')
               Positioned(
-                top: _phaseImageConfig.top,
+                top: imageTop,
                 left: 0,
                 right: 0,
+                height: img.height,
                 child: IgnorePointer(
-                  child: Center(
-                    child: OverflowBox(
-                      maxWidth: double.infinity,
-                      maxHeight: double.infinity,
-                      child: Transform.translate(
-                        offset: Offset(_phaseImageConfig.hOffset, 0),
-                        child: Image.asset(_phaseImageConfig.path,
-                            width: _phaseImageConfig.width,
-                            height: _phaseImageConfig.height),
-                      ),
+                  child: OverflowBox(
+                    alignment: Alignment.center,
+                    maxWidth: double.infinity,
+                    maxHeight: img.height,
+                    child: Transform.translate(
+                      offset: Offset(img.hOffset, 0),
+                      child: Image.asset(img.path,
+                          width: img.width, height: img.height),
                     ),
                   ),
                 ),
@@ -707,7 +729,9 @@ class _RegisterPageState extends State<RegisterPage> {
                 onPressed: _reset,
               ),
             ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
