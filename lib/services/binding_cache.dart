@@ -79,7 +79,7 @@ class BindingCache {
           a[i].brand != b[i].brand ||
           a[i].model != b[i].model ||
           a[i].os != b[i].os ||
-          a[i].memory != b[i].memory) {
+          a[i].abi != b[i].abi) {
         return false;
       }
     }
@@ -94,6 +94,7 @@ class BindingCache {
           a[i].status != b[i].status ||
           a[i].unbindRequestedAt != b[i].unbindRequestedAt ||
           a[i].userDisplayId != b[i].userDisplayId ||
+          a[i].createdAt != b[i].createdAt ||
           a[i].userToken != b[i].userToken) {
         return false;
       }

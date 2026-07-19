@@ -440,7 +440,7 @@ class _UserPageState extends State<UserPage> {
                   _itemDivider(colors),
                   _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
                   _itemDivider(colors),
-                  _navRow(colors, onSurface, '登录其他账户', _openLoginOther),
+                  _navRow(colors, onSurface, '账户切换', _openLoginOther),
                   _itemDivider(colors),
                 ],
               ),

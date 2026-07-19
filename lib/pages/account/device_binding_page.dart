@@ -20,8 +20,11 @@ class DeviceBindingPage extends StatefulWidget {
 
 class _DeviceBindingPageState extends State<DeviceBindingPage> {
   List<DeviceCardData> _devices = [];
+  /// 本机 device_id，用于置顶与绿点
+  int? _localDeviceId;
   /// 仅在无缓存且首次请求未完成时显示加载
   bool _loading = false;
+  bool _transferring = false;
   String? _error;
 
   @override
@@ -33,7 +36,18 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     } else {
       _loading = true;
     }
-    _loadDevices();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    final localId = await DeviceCredentialStore.getDeviceId();
+    if (mounted) {
+      setState(() {
+        _localDeviceId = localId;
+        _devices = _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList());
+      });
+    }
+    await _loadDevices();
   }
 
   Future<({int id, String secret})?> _readySession() async {
@@ -60,9 +74,30 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       brand: info.brand?.trim().isNotEmpty == true ? info.brand!.trim() : '未知',
       model: info.model?.trim().isNotEmpty == true ? info.model!.trim() : '未知',
       os: info.os?.trim().isNotEmpty == true ? info.os!.trim() : '未知',
-      memory:
-          info.memory?.trim().isNotEmpty == true ? info.memory!.trim() : '未知',
+      abi: info.abi?.trim().isNotEmpty == true ? info.abi!.trim() : '未知',
+      isCurrent: _localDeviceId != null && info.deviceId == _localDeviceId,
     );
+  }
+
+  DeviceCardData _refreshCurrentFlag(DeviceCardData d) {
+    return d.copyWith(
+      isCurrent: _localDeviceId != null && d.deviceId == _localDeviceId,
+    );
+  }
+
+  /// 本机设备置顶，其余保持相对顺序
+  List<DeviceCardData> _withCurrentFirst(List<DeviceCardData> list) {
+    if (list.isEmpty) return list;
+    final current = <DeviceCardData>[];
+    final others = <DeviceCardData>[];
+    for (final d in list) {
+      if (d.isCurrent) {
+        current.add(d);
+      } else {
+        others.add(d);
+      }
+    }
+    return [...current, ...others];
   }
 
   bool _cardListEqual(List<DeviceCardData> a, List<DeviceCardData> b) {
@@ -78,7 +113,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
           a[i].brand != b[i].brand ||
           a[i].model != b[i].model ||
           a[i].os != b[i].os ||
-          a[i].memory != b[i].memory) {
+          a[i].abi != b[i].abi ||
+          a[i].isCurrent != b[i].isCurrent) {
         return false;
       }
     }
@@ -99,13 +135,15 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                 brand: d.brand,
                 model: d.model,
                 os: d.os,
-                memory: d.memory,
+                abi: d.abi,
               ))
           .toList(),
     );
   }
 
   Future<void> _loadDevices() async {
+    // 刷新时同步本机 id，避免缓存阶段绿点/排序缺失
+    _localDeviceId ??= await DeviceCredentialStore.getDeviceId();
     final list = await BindingCache.refreshDevices();
     if (!mounted) return;
 
@@ -114,12 +152,15 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
         _loading = false;
         if (_devices.isEmpty) {
           _error = ApiService.lastError ?? '加载设备失败';
+        } else {
+          _devices =
+              _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList());
         }
       });
       return;
     }
 
-    final next = list.map(_toCard).toList();
+    final next = _withCurrentFirst(list.map(_toCard).toList());
     final changed = !_cardListEqual(_devices, next);
     setState(() {
       _loading = false;
@@ -205,14 +246,152 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       );
       return;
     }
-    setState(() {
-      _devices[index] = device.copyWith(
-        status: result.status,
-        unbindRequestedAt: result.unbindRequestedAt,
-        unbindExecuteAt: result.unbindExecuteAt,
+    // 其他设备立刻 unbound：移出列表；本机则进入等待态
+    if (result.status == 'unbound') {
+      setState(() => _devices.removeAt(index));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已解绑该设备'),
+          duration: Duration(seconds: 1),
+        ),
       );
-    });
+    } else {
+      setState(() {
+        _devices[index] = device.copyWith(
+          status: result.status,
+          unbindRequestedAt: result.unbindRequestedAt,
+          unbindExecuteAt: result.unbindExecuteAt,
+        );
+      });
+    }
     await _persistDevicesFromCards();
+  }
+
+  Future<bool> _confirmTransfer() async {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: colors.common.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AccentDimens.dialogRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AccentDimens.dialogPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '发起转移后，15 分钟内可在其他设备用本账户登录并绑定。是否继续？',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AccentDimens.dialogMessageFontSize,
+                  height: AccentDimens.dialogMessageLineHeight,
+                  color: onSurface,
+                ),
+              ),
+              const SizedBox(height: AccentDimens.dialogActionsTopGap),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: onSurface.withValues(
+                              alpha: AccentDimens.dialogCancelTextAlpha),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AccentDimens.dialogActionGap),
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.postCreate.submitBg,
+                          foregroundColor: colors.postCreate.submitText,
+                          elevation: 0,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('确认'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _onTransferRequest() async {
+    if (_transferring) return;
+    final ok = await _confirmTransfer();
+    if (!ok || !mounted) return;
+
+    final session = await _readySession();
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    setState(() => _transferring = true);
+    final result = await ApiService.requestBindingTransfer(
+      sessionId: session.id,
+      sessionSecret: session.secret,
+    );
+    if (!mounted) return;
+    setState(() => _transferring = false);
+
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ApiService.lastError ?? '转移申请失败'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final minutes = (result.expiresIn / 60).ceil();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('转移申请已创建，${minutes}分钟内有效'),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> _onCancelDelete(int index) async {
@@ -321,6 +500,44 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       );
     }
 
-    return UserSubPageShell(title: '设备绑定', body: body);
+    return UserSubPageShell(
+      title: '设备绑定',
+      body: body,
+      trailing: Padding(
+        padding: const EdgeInsets.only(
+            right: AppDimens.postCreateSubmitMarginRight),
+        child: SizedBox(
+          height: AppDimens.postCreateSubmitHeight,
+          child: ElevatedButton(
+            onPressed: _transferring ? null : _onTransferRequest,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.postCreate.submitBg,
+              foregroundColor: colors.postCreate.submitText,
+              elevation: 0,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimens.postCreateSubmitHPadding, vertical: 0),
+              shape: RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(AppDimens.postCreateSubmitRadius),
+              ),
+              textStyle:
+                  const TextStyle(fontSize: AppDimens.postCreateSubmitFontSize),
+            ),
+            child: _transferring
+                ? SizedBox(
+                    width: AccentDimens.submitSpinnerSize,
+                    height: AccentDimens.submitSpinnerSize,
+                    child: CircularProgressIndicator(
+                      strokeWidth: AccentDimens.submitSpinnerStroke,
+                      color: colors.postCreate.submitText,
+                    ),
+                  )
+                : const Text('转移申请'),
+          ),
+        ),
+      ),
+    );
   }
 }

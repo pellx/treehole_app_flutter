@@ -138,13 +138,13 @@ class RegisterDimens {
   static const double loginInputPaddingV = 10;
 
   /// 粘贴后掩码令牌（首末四位）字号
-  static const double loginMaskedFontSize = 14;
+  static const double loginMaskedFontSize = 17;
   /// 掩码令牌透明度
   static const double loginMaskedAlpha = 0.6;
   /// 掩码令牌相对输入框水平偏移（负值向左）
   static const double loginMaskedHOffset = 0;
   /// 掩码令牌相对输入框竖直偏移（负值向上）
-  static const double loginMaskedVOffset = 0;
+  static const double loginMaskedVOffset = -4;
 
   static const double loginButtonGap = 10;
   static const double loginConfirmButtonWidth = 50;
@@ -160,6 +160,10 @@ class RegisterDimens {
   static const double loginButtonStrokeWidth = 2;
   static const double loginErrorGap = 12;
 
-  static const double loginRecoverGap = 2; // 输入框和"找回用户"间距
+  static const double loginRecoverGap = 2; // 输入框和"找回用户"间距（保留）
   static const double loginRecoverFontSize = 12;
+  /// 「找回用户」相对页面顶部（与 loginInputTop 配套，独立 Positioned）
+  static const double loginRecoverTop = 430;
+  static const double loginRecoverHitPaddingH = 12;
+  static const double loginRecoverHitPaddingV = 8;
 }

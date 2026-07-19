@@ -18,7 +18,9 @@ class DeviceCardData {
   final String brand;
   final String model;
   final String os;
-  final String memory;
+  final String abi;
+  /// 是否为当前登录本机
+  final bool isCurrent;
 
   const DeviceCardData({
     required this.bindingId,
@@ -31,7 +33,8 @@ class DeviceCardData {
     required this.brand,
     required this.model,
     required this.os,
-    required this.memory,
+    required this.abi,
+    this.isCurrent = false,
   });
 
   bool get isUnbindPending => status == 'unbind_pending';
@@ -62,7 +65,8 @@ class DeviceCardData {
     String? brand,
     String? model,
     String? os,
-    String? memory,
+    String? abi,
+    bool? isCurrent,
   }) {
     return DeviceCardData(
       bindingId: bindingId ?? this.bindingId,
@@ -77,7 +81,8 @@ class DeviceCardData {
       brand: brand ?? this.brand,
       model: model ?? this.model,
       os: os ?? this.os,
-      memory: memory ?? this.memory,
+      abi: abi ?? this.abi,
+      isCurrent: isCurrent ?? this.isCurrent,
     );
   }
 }
@@ -179,9 +184,10 @@ class _DeviceCardState extends State<DeviceCard> {
   }
 
   Future<void> _confirmDelete() async {
-    final ok = await _confirmDialog(
-      message: '是否确认申请解绑该设备？将于2天后解绑，期间仍可登录，解绑后可凭用户令牌登录',
-    );
+    final message = widget.data.isCurrent
+        ? '是否确认申请解绑本机？将于2天后解绑，期间仍可登录，解绑后可凭用户令牌登录'
+        : '是否确认立即解绑该设备？解绑后该设备将无法继续使用本账户';
+    final ok = await _confirmDialog(message: message);
     if (ok && mounted) widget.onDelete?.call();
   }
 
@@ -303,7 +309,6 @@ class _DeviceCardState extends State<DeviceCard> {
         borderRadius: BorderRadius.circular(AccentDimens.deviceCardRadius),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(AccentDimens.deviceCardPadding),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AccentDimens.deviceCardRadius),
             border: Border.all(
@@ -311,82 +316,106 @@ class _DeviceCardState extends State<DeviceCard> {
               width: AccentDimens.deviceCardBorderWidth,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Transform.translate(
-                    offset: Offset(0, AccentDimens.deviceCardIconTopInset),
-                    child: Icon(
-                      Icons.smartphone_outlined,
-                      size: AccentDimens.deviceCardIconSize,
-                      color: onSurface.withValues(
-                          alpha: AccentDimens.deviceCardMetaAlpha),
-                    ),
-                  ),
-                  const SizedBox(width: AccentDimens.deviceCardIconGap),
-                  if (!_editing) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _nameField(onSurface),
-                        Transform.translate(
-                          offset: Offset(AccentDimens.deviceCardRenameGap, 0),
-                          child: _editButton(onSurface),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    Transform.translate(
-                      offset:
-                          Offset(0, AccentDimens.deviceCardDeleteTopInset),
-                      child: _unbindActions(colors, onSurface),
-                    ),
-                  ] else ...[
-                    Expanded(child: _nameField(onSurface)),
-                    Transform.translate(
-                      offset: Offset(AccentDimens.deviceCardRenameGap, 0),
-                      child: _editButton(onSurface),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: AccentDimens.deviceCardTitleBottom),
               Padding(
-                padding: const EdgeInsets.only(
-                    left: AccentDimens.deviceCardMetaLeftInset),
+                padding: const EdgeInsets.all(AccentDimens.deviceCardPadding),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                            child:
-                                Text('品牌：${widget.data.brand}', style: metaStyle)),
-                        const SizedBox(
-                            width: AccentDimens.deviceCardMetaColGap),
-                        Expanded(
-                            child:
-                                Text('型号：${widget.data.model}', style: metaStyle)),
+                        Transform.translate(
+                          offset:
+                              Offset(0, AccentDimens.deviceCardIconTopInset),
+                          child: Icon(
+                            Icons.smartphone_outlined,
+                            size: AccentDimens.deviceCardIconSize,
+                            color: onSurface.withValues(
+                                alpha: AccentDimens.deviceCardMetaAlpha),
+                          ),
+                        ),
+                        const SizedBox(width: AccentDimens.deviceCardIconGap),
+                        if (!_editing) ...[
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _nameField(onSurface),
+                              Transform.translate(
+                                offset: Offset(
+                                    AccentDimens.deviceCardRenameGap, 0),
+                                child: _editButton(onSurface),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Transform.translate(
+                            offset: Offset(
+                                0, AccentDimens.deviceCardDeleteTopInset),
+                            child: _unbindActions(colors, onSurface),
+                          ),
+                        ] else ...[
+                          Expanded(child: _nameField(onSurface)),
+                          Transform.translate(
+                            offset:
+                                Offset(AccentDimens.deviceCardRenameGap, 0),
+                            child: _editButton(onSurface),
+                          ),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: AccentDimens.deviceCardMetaGap),
-                    Row(
-                      children: [
-                        Expanded(
-                            child: Text('系统：${widget.data.os}',
-                                style: metaStyle)),
-                        const SizedBox(
-                            width: AccentDimens.deviceCardMetaColGap),
-                        Expanded(
-                            child: Text('内存：${widget.data.memory}',
-                                style: metaStyle)),
-                      ],
+                    const SizedBox(height: AccentDimens.deviceCardTitleBottom),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          left: AccentDimens.deviceCardMetaLeftInset),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: Text('品牌：${widget.data.brand}',
+                                      style: metaStyle)),
+                              const SizedBox(
+                                  width: AccentDimens.deviceCardMetaColGap),
+                              Expanded(
+                                  child: Text('型号：${widget.data.model}',
+                                      style: metaStyle)),
+                            ],
+                          ),
+                          const SizedBox(
+                              height: AccentDimens.deviceCardMetaGap),
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: Text('系统：${widget.data.os}',
+                                      style: metaStyle)),
+                              const SizedBox(
+                                  width: AccentDimens.deviceCardMetaColGap),
+                              Expanded(
+                                  child: Text('架构：${widget.data.abi}',
+                                      style: metaStyle)),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
+              if (widget.data.isCurrent)
+                Positioned(
+                  right: AccentDimens.accountCardCurrentDotRight,
+                  bottom: AccentDimens.accountCardCurrentDotBottom,
+                  child: Container(
+                    width: AccentDimens.accountCardCurrentDotSize,
+                    height: AccentDimens.accountCardCurrentDotSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: colors.common.green,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

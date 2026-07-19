@@ -130,7 +130,8 @@ class BoundDeviceInfo {
   final String? brand;
   final String? model;
   final String? os;
-  final String? memory;
+  /// CPU 架构（如 arm64-v8a；iOS 为 machine）
+  final String? abi;
 
   const BoundDeviceInfo({
     required this.bindingId,
@@ -144,7 +145,7 @@ class BoundDeviceInfo {
     this.brand,
     this.model,
     this.os,
-    this.memory,
+    this.abi,
   });
 
   bool get isUnbindPending => status == 'unbind_pending';
@@ -178,7 +179,7 @@ class BoundDeviceInfo {
       brand: json['brand'] as String?,
       model: json['model'] as String?,
       os: json['os'] as String?,
-      memory: json['memory'] as String?,
+      abi: json['abi'] as String?,
     );
   }
 
@@ -194,7 +195,7 @@ class BoundDeviceInfo {
         'brand': brand,
         'model': model,
         'os': os,
-        'memory': memory,
+        'abi': abi,
       };
 }
 
@@ -207,6 +208,8 @@ class BoundAccountInfo {
   final DateTime? unbindRequestedAt;
   final String userToken;
   final String? userDisplayId;
+  /// 用户注册时间
+  final DateTime? createdAt;
 
   const BoundAccountInfo({
     required this.bindingId,
@@ -215,30 +218,69 @@ class BoundAccountInfo {
     this.unbindRequestedAt,
     required this.userToken,
     this.userDisplayId,
+    this.createdAt,
   });
 
   bool get isUnbindPending => status == 'unbind_pending';
 
   factory BoundAccountInfo.fromJson(Map<String, dynamic> json) {
     final bindingRaw = json['id'] ?? json['binding_id'];
+    // 缓存仅存遮罩预览；接口返回完整 token
+    final token = (json['user_token'] as String?)?.trim() ?? '';
+    final preview = (json['user_token_preview'] as String?)?.trim() ?? '';
     return BoundAccountInfo(
       bindingId: (bindingRaw as num).toInt(),
       deviceId: (json['device_id'] as num).toInt(),
       status: json['status'] as String? ?? 'active',
       unbindRequestedAt: _parseApiDateTime(json['unbind_requested_at']),
-      userToken: json['user_token'] as String? ?? '',
+      userToken: token.isNotEmpty ? token : preview,
       userDisplayId: json['user_display_id'] as String?,
+      createdAt: _parseApiDateTime(json['created_at']),
     );
   }
 
-  /// 本地缓存用：不含 user_token
-  Map<String, dynamic> toCacheJson() => {
-        'id': bindingId,
-        'device_id': deviceId,
-        'status': status,
-        'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
-        'user_display_id': userDisplayId,
-      };
+  /// 本地缓存用：不含完整 user_token，仅留遮罩预览供列表展示
+  Map<String, dynamic> toCacheJson() {
+    final token = userToken.trim();
+    String? preview;
+    if (token.isNotEmpty) {
+      const head = 4;
+      const tail = 4;
+      preview = token.length > head + tail
+          ? '${token.substring(0, head)}...${token.substring(token.length - tail)}'
+          : token;
+    }
+    return {
+      'id': bindingId,
+      'device_id': deviceId,
+      'status': status,
+      'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
+      'user_display_id': userDisplayId,
+      'created_at': createdAt?.toIso8601String(),
+      if (preview != null) 'user_token_preview': preview,
+    };
+  }
+}
+
+/// POST /user/binding/transfer-request 成功响应
+class BindingTransferResult {
+  final int fromDeviceId;
+  final int expiresIn;
+  final DateTime? expiresAt;
+
+  const BindingTransferResult({
+    required this.fromDeviceId,
+    required this.expiresIn,
+    this.expiresAt,
+  });
+
+  factory BindingTransferResult.fromJson(Map<String, dynamic> json) {
+    return BindingTransferResult(
+      fromDeviceId: (json['from_device_id'] as num).toInt(),
+      expiresIn: (json['expires_in'] as num?)?.toInt() ?? 0,
+      expiresAt: _parseApiDateTime(json['expires_at']),
+    );
+  }
 }
 
 /// POST /user/binding/delete 成功响应
@@ -884,6 +926,42 @@ class ApiService {
       return null;
     } catch (e) {
       debugPrint('[ApiService] listBoundAccounts error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/transfer-request — 本机发起跨设备转移申请（15 分钟有效）
+  static Future<BindingTransferResult?> requestBindingTransfer({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/transfer-request'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        try {
+          return BindingTransferResult.fromJson(data);
+        } catch (e) {
+          debugPrint(
+              '[ApiService] requestBindingTransfer parse error: $e body=${res.body}');
+          lastError = '转移申请响应解析失败';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] requestBindingTransfer status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] requestBindingTransfer error: $e');
       lastError = '网络连接失败';
       return null;
     }

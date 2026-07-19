@@ -7,11 +7,14 @@ import '../../theme/app_dimens_accent.dart';
 class UserSubPageShell extends StatelessWidget {
   final String title;
   final Widget body;
+  /// 顶栏右上角操作（如发帖页「发布」位）
+  final Widget? trailing;
 
   const UserSubPageShell({
     super.key,
     required this.title,
     required this.body,
+    this.trailing,
   });
 
   @override
@@ -46,7 +49,10 @@ class UserSubPageShell extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: AccentDimens.barTrailingWidth),
+                    if (trailing != null)
+                      trailing!
+                    else
+                      const SizedBox(width: AccentDimens.barTrailingWidth),
                   ],
                 ),
               ),

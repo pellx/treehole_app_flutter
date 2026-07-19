@@ -19,7 +19,10 @@ import '../../theme/app_dimens_register.dart';
 enum _StepStatus { pending, loading, completed, failed }
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+  /// 为 true 时直接进入令牌登录（供账户切换页「登录用户」）
+  final bool startAtLogin;
+
+  const RegisterPage({super.key, this.startAtLogin = false});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -56,8 +59,12 @@ class _RegisterPageState extends State<RegisterPage> {
     _tokenController.addListener(() {
       if (mounted) setState(() {});
     });
-    _check();
-    _preFetchVerification();
+    if (widget.startAtLogin) {
+      _phase = 'login';
+    } else {
+      _check();
+      _preFetchVerification();
+    }
   }
 
   ({String path, double width, double height, double vOffset, double hOffset}) get _phaseImageConfig {
@@ -369,6 +376,8 @@ class _RegisterPageState extends State<RegisterPage> {
       'FINGERPRINT_MISMATCH' => '设备指纹不匹配',
       'DEVICE_NOT_FOUND' => '本机设备未找到，请先在本机完成注册',
       'REBIND_COOLDOWN' => '解绑冷却中，请 2 天后再登录此账户',
+      'TRANSFER_REQUIRED' => '需先在原设备发起转移申请（15 分钟内有效）',
+      'TRANSFER_INVALID' => '转移申请无效或已过期，请在原设备重新申请',
       'RATE_LIMITED' => '操作过于频繁，请稍后再试',
       _ => (raw == null || raw.isEmpty) ? '登录失败' : raw,
     };
@@ -636,6 +645,34 @@ class _RegisterPageState extends State<RegisterPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: RegisterDimens.contentHPadding),
                     child: _buildPhase(colors, onSurface),
+                  ),
+                ),
+              ),
+            // 登录 — 找回用户（账户切换进入的登录不显示）
+            if (_phase == 'login' && !widget.startAtLogin)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: RegisterDimens.loginRecoverTop,
+                child: Center(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      // TODO: 找回用户逻辑
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: RegisterDimens.loginRecoverHitPaddingH,
+                        vertical: RegisterDimens.loginRecoverHitPaddingV,
+                      ),
+                      child: Text(
+                        '找回用户',
+                        style: TextStyle(
+                          fontSize: RegisterDimens.loginRecoverFontSize,
+                          color: colors.register.loginRecoverColor,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1004,19 +1041,6 @@ class _RegisterPageState extends State<RegisterPage> {
             textAlign: TextAlign.center,
           ),
         ],
-        SizedBox(height: RegisterDimens.loginRecoverGap),
-        GestureDetector(
-          onTap: () {
-            // TODO: 找回用户逻辑
-          },
-          child: Text(
-            '找回用户',
-            style: TextStyle(
-              fontSize: RegisterDimens.loginRecoverFontSize,
-              color: colors.register.loginRecoverColor,
-            ),
-          ),
-        ),
       ],
     );
   }
