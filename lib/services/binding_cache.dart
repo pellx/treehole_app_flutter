@@ -13,10 +13,14 @@ class BindingCache {
   static const _accountsKey = 'user2device';
   /// 切号锁过期时刻（ISO8601）；无键或已过期表示可切换
   static const _switchLockExpiresKey = 'last_switch_expires_at';
+  static const _primaryTransferExecuteKey = 'primary_transfer_execute_at';
+  static const _primaryPendingDeviceKey = 'primary_device_pending_id';
   static late Box _box;
 
   static DateTime? _switchLockExpiresAt;
   static bool _switchLockLoaded = false;
+  static DateTime? _primaryTransferExecuteAt;
+  static int? _primaryPendingDeviceId;
 
   static Future<void> init() async {
     _box = await Hive.openBox('binding_cache');
@@ -40,6 +44,46 @@ class BindingCache {
   static Future<void> saveDevices(List<BoundDeviceInfo> devices) async {
     final encoded = jsonEncode(devices.map((d) => d.toJson()).toList());
     await _box.put(_devicesKey, encoded);
+  }
+
+  static Future<void> saveDevicesResult(BoundDevicesResult result) async {
+    await saveDevices(result.devices);
+    _primaryPendingDeviceId = result.primaryDevicePendingId;
+    _primaryTransferExecuteAt = result.primaryTransferExecuteAt;
+    if (_primaryPendingDeviceId == null) {
+      await _box.delete(_primaryPendingDeviceKey);
+    } else {
+      await _box.put(_primaryPendingDeviceKey, _primaryPendingDeviceId);
+    }
+    final exp = _primaryTransferExecuteAt;
+    if (exp == null) {
+      await _box.delete(_primaryTransferExecuteKey);
+    } else {
+      await _box.put(
+          _primaryTransferExecuteKey, exp.toUtc().toIso8601String());
+    }
+  }
+
+  static int? getPrimaryPendingDeviceId() {
+    if (_primaryPendingDeviceId != null) return _primaryPendingDeviceId;
+    final raw = _box.get(_primaryPendingDeviceKey);
+    if (raw is int) {
+      _primaryPendingDeviceId = raw;
+    } else if (raw is num) {
+      _primaryPendingDeviceId = raw.toInt();
+    }
+    return _primaryPendingDeviceId;
+  }
+
+  static DateTime? getPrimaryTransferExecuteAt() {
+    if (_primaryTransferExecuteAt != null) {
+      return _primaryTransferExecuteAt;
+    }
+    final raw = _box.get(_primaryTransferExecuteKey);
+    if (raw is String && raw.isNotEmpty) {
+      _primaryTransferExecuteAt = DateTime.tryParse(raw)?.toLocal();
+    }
+    return _primaryTransferExecuteAt;
   }
 
   /// 缓存不含 user_token，仅展示用字段
@@ -84,7 +128,9 @@ class BindingCache {
           a[i].brand != b[i].brand ||
           a[i].model != b[i].model ||
           a[i].os != b[i].os ||
-          a[i].abi != b[i].abi) {
+          a[i].abi != b[i].abi ||
+          a[i].isPrimary != b[i].isPrimary ||
+          a[i].isPrimaryPending != b[i].isPrimaryPending) {
         return false;
       }
     }
@@ -180,16 +226,21 @@ class BindingCache {
   static void invalidateMemory() {
     _switchLockLoaded = false;
     _switchLockExpiresAt = null;
+    _primaryPendingDeviceId = null;
+    _primaryTransferExecuteAt = null;
   }
 
   static Future<List<BoundDeviceInfo>?> _prefetchDevices(
       int sessionId, String sessionSecret) async {
-    final list = await ApiService.listBoundDevices(
+    final result = await ApiService.listBoundDevices(
       sessionId: sessionId,
       sessionSecret: sessionSecret,
     );
-    if (list != null) await saveDevices(list);
-    return list;
+    if (result != null) {
+      await saveDevicesResult(result);
+      return result.devices;
+    }
+    return null;
   }
 
   static Future<List<BoundAccountInfo>?> _prefetchAccounts(

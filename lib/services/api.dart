@@ -170,6 +170,10 @@ class BoundDeviceInfo {
   final String? os;
   /// CPU 架构（如 arm64-v8a；iOS 为 machine）
   final String? abi;
+  /// 是否当前主设备
+  final bool isPrimary;
+  /// 是否主设备迁移目标（待生效）
+  final bool isPrimaryPending;
 
   const BoundDeviceInfo({
     required this.bindingId,
@@ -184,6 +188,8 @@ class BoundDeviceInfo {
     this.model,
     this.os,
     this.abi,
+    this.isPrimary = false,
+    this.isPrimaryPending = false,
   });
 
   bool get isUnbindPending => status == 'unbind_pending';
@@ -218,6 +224,8 @@ class BoundDeviceInfo {
       model: json['model'] as String?,
       os: json['os'] as String?,
       abi: json['abi'] as String?,
+      isPrimary: json['is_primary'] as bool? ?? false,
+      isPrimaryPending: json['is_primary_pending'] as bool? ?? false,
     );
   }
 
@@ -234,7 +242,73 @@ class BoundDeviceInfo {
         'model': model,
         'os': os,
         'abi': abi,
+        'is_primary': isPrimary,
+        'is_primary_pending': isPrimaryPending,
       };
+}
+
+/// POST /user/devices2user 完整响应
+class BoundDevicesResult {
+  final List<BoundDeviceInfo> devices;
+  final int? primaryDeviceId;
+  final int? primaryDevicePendingId;
+  final DateTime? primaryTransferRequestedAt;
+  final DateTime? primaryTransferExecuteAt;
+
+  const BoundDevicesResult({
+    required this.devices,
+    this.primaryDeviceId,
+    this.primaryDevicePendingId,
+    this.primaryTransferRequestedAt,
+    this.primaryTransferExecuteAt,
+  });
+
+  factory BoundDevicesResult.fromJson(Map<String, dynamic> json) {
+    final list = json['devices'];
+    if (list is! List) {
+      throw FormatException('响应缺少 devices');
+    }
+    return BoundDevicesResult(
+      devices: list
+          .whereType<Map>()
+          .map((e) => BoundDeviceInfo.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
+      primaryDevicePendingId:
+          (json['primary_device_pending_id'] as num?)?.toInt(),
+      primaryTransferRequestedAt:
+          _parseApiDateTime(json['primary_transfer_requested_at']),
+      primaryTransferExecuteAt:
+          _parseApiDateTime(json['primary_transfer_execute_at']),
+    );
+  }
+}
+
+/// POST /user/binding/primary-transfer 响应
+class PrimaryTransferResult {
+  final int? primaryDeviceId;
+  final int? primaryDevicePendingId;
+  final DateTime? primaryTransferRequestedAt;
+  final DateTime? primaryTransferExecuteAt;
+
+  const PrimaryTransferResult({
+    this.primaryDeviceId,
+    this.primaryDevicePendingId,
+    this.primaryTransferRequestedAt,
+    this.primaryTransferExecuteAt,
+  });
+
+  factory PrimaryTransferResult.fromJson(Map<String, dynamic> json) {
+    return PrimaryTransferResult(
+      primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
+      primaryDevicePendingId:
+          (json['primary_device_pending_id'] as num?)?.toInt(),
+      primaryTransferRequestedAt:
+          _parseApiDateTime(json['primary_transfer_requested_at']),
+      primaryTransferExecuteAt:
+          _parseApiDateTime(json['primary_transfer_execute_at']),
+    );
+  }
 }
 
 /// POST /user/user2device 单条账户绑定
@@ -957,8 +1031,8 @@ class ApiService {
     }
   }
 
-  /// POST /user/devices2user — 当前账户绑定的设备列表
-  static Future<List<BoundDeviceInfo>?> listBoundDevices({
+  /// POST /user/devices2user — 当前账户绑定的设备列表（含主设备字段）
+  static Future<BoundDevicesResult?> listBoundDevices({
     required int sessionId,
     required String sessionSecret,
   }) async {
@@ -972,20 +1046,12 @@ class ApiService {
               }))
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final list = data['devices'];
-        if (list is! List) {
-          lastError = '响应缺少 devices';
-          return null;
-        }
         try {
-          return list
-              .whereType<Map>()
-              .map((e) =>
-                  BoundDeviceInfo.fromJson(Map<String, dynamic>.from(e)))
-              .toList();
+          return BoundDevicesResult.fromJson(
+              jsonDecode(res.body) as Map<String, dynamic>);
         } catch (e) {
-          debugPrint('[ApiService] listBoundDevices parse error: $e body=${res.body}');
+          debugPrint(
+              '[ApiService] listBoundDevices parse error: $e body=${res.body}');
           lastError = '设备数据解析失败（后端可能未返回绑定 id，请重新编译部署）';
           return null;
         }
@@ -998,6 +1064,63 @@ class ApiService {
       debugPrint('[ApiService] listBoundDevices error: $e');
       lastError = '网络连接失败';
       return null;
+    }
+  }
+
+  /// POST /user/binding/primary-transfer — 主设备迁移（须在主设备 session 上发起）
+  static Future<PrimaryTransferResult?> requestPrimaryTransfer({
+    required int sessionId,
+    required String sessionSecret,
+    required int bindingId,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/primary-transfer'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'id': bindingId,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        return PrimaryTransferResult.fromJson(
+            jsonDecode(res.body) as Map<String, dynamic>);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] requestPrimaryTransfer status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] requestPrimaryTransfer error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/primary-transfer-cancel — 取消主设备迁移
+  static Future<bool> cancelPrimaryTransfer({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/primary-transfer-cancel'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) return true;
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] cancelPrimaryTransfer status=${res.statusCode} body=${res.body}');
+      return false;
+    } catch (e) {
+      debugPrint('[ApiService] cancelPrimaryTransfer error: $e');
+      lastError = '网络连接失败';
+      return false;
     }
   }
 

@@ -3,6 +3,22 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens_accent.dart';
 
+/// 设备卡片右侧主操作（解绑 / 主设备星标）
+enum DeviceCardAction {
+  /// 普通解绑垃圾桶
+  delete,
+  /// 取消解绑申请
+  cancelUnbind,
+  /// 主设备星标：发起迁移选目标
+  primaryStar,
+  /// 主设备取消样式：取消迁移 / 退出选目标
+  primaryCancel,
+  /// 选目标模式下的星标（迁移到此设备）
+  transferTarget,
+  /// 主设备星标（只读，非本机主设备时不可迁移）
+  primaryStarReadonly,
+}
+
 /// 设备绑定列表项展示数据
 class DeviceCardData {
   /// user_device_binding.id，解绑/改名用
@@ -21,6 +37,10 @@ class DeviceCardData {
   final String abi;
   /// 是否为当前登录本机
   final bool isCurrent;
+  final bool isPrimary;
+  final bool isPrimaryPending;
+  /// 右侧操作由页面按主设备/选目标态计算
+  final DeviceCardAction action;
 
   const DeviceCardData({
     required this.bindingId,
@@ -35,6 +55,9 @@ class DeviceCardData {
     required this.os,
     required this.abi,
     this.isCurrent = false,
+    this.isPrimary = false,
+    this.isPrimaryPending = false,
+    this.action = DeviceCardAction.delete,
   });
 
   bool get isUnbindPending => status == 'unbind_pending';
@@ -67,6 +90,9 @@ class DeviceCardData {
     String? os,
     String? abi,
     bool? isCurrent,
+    bool? isPrimary,
+    bool? isPrimaryPending,
+    DeviceCardAction? action,
   }) {
     return DeviceCardData(
       bindingId: bindingId ?? this.bindingId,
@@ -83,6 +109,9 @@ class DeviceCardData {
       os: os ?? this.os,
       abi: abi ?? this.abi,
       isCurrent: isCurrent ?? this.isCurrent,
+      isPrimary: isPrimary ?? this.isPrimary,
+      isPrimaryPending: isPrimaryPending ?? this.isPrimaryPending,
+      action: action ?? this.action,
     );
   }
 }
@@ -94,6 +123,9 @@ class DeviceCard extends StatefulWidget {
   final ValueChanged<String>? onRenameSubmit;
   final VoidCallback? onDelete;
   final VoidCallback? onCancelDelete;
+  final VoidCallback? onPrimaryStar;
+  final VoidCallback? onPrimaryCancel;
+  final VoidCallback? onTransferTarget;
 
   const DeviceCard({
     super.key,
@@ -102,6 +134,9 @@ class DeviceCard extends StatefulWidget {
     this.onRenameSubmit,
     this.onDelete,
     this.onCancelDelete,
+    this.onPrimaryStar,
+    this.onPrimaryCancel,
+    this.onTransferTarget,
   });
 
   @override
@@ -194,6 +229,24 @@ class _DeviceCardState extends State<DeviceCard> {
   Future<void> _confirmCancelDelete() async {
     final ok = await _confirmDialog(message: '是否确认取消解绑申请？');
     if (ok && mounted) widget.onCancelDelete?.call();
+  }
+
+  Future<void> _confirmPrimaryStar() async {
+    final ok = await _confirmDialog(message: '是否进行主设备迁移？');
+    if (ok && mounted) widget.onPrimaryStar?.call();
+  }
+
+  Future<void> _confirmPrimaryCancel() async {
+    final ok = await _confirmDialog(message: '是否取消主设备迁移？');
+    if (ok && mounted) widget.onPrimaryCancel?.call();
+  }
+
+  Future<void> _confirmTransferTarget() async {
+    final ok = await _confirmDialog(
+      message:
+          '是否迁移到「${widget.data.displayName}」？\n该更改将于两天后生效',
+    );
+    if (ok && mounted) widget.onTransferTarget?.call();
   }
 
   Future<bool> _confirmDialog({required String message}) async {
@@ -479,23 +532,80 @@ class _DeviceCardState extends State<DeviceCard> {
           const SizedBox(width: AccentDimens.deviceCardUnbindTimeGap),
         ],
         if (pending)
-          _cancelUnbindButton(onSurface)
+          _iconAction(
+            icon: Icons.undo,
+            color: onSurface.withValues(
+                alpha: AccentDimens.deviceCardRenameAlpha),
+            onPressed: _confirmCancelDelete,
+          )
         else
-          _deleteButton(colors),
+          _trailingAction(colors, onSurface),
       ],
     );
   }
 
-  Widget _cancelUnbindButton(Color onSurface) {
+  Widget _trailingAction(AppColors colors, Color onSurface) {
+    switch (widget.data.action) {
+      case DeviceCardAction.delete:
+        return _iconAction(
+          icon: Icons.delete_outline,
+          color: colors.common.deviceDeleteIcon,
+          onPressed: _confirmDelete,
+        );
+      case DeviceCardAction.cancelUnbind:
+        return _iconAction(
+          icon: Icons.undo,
+          color: onSurface.withValues(
+              alpha: AccentDimens.deviceCardRenameAlpha),
+          onPressed: _confirmCancelDelete,
+        );
+      case DeviceCardAction.primaryStar:
+        return _iconAction(
+          icon: Icons.star,
+          color: colors.common.green,
+          onPressed: _confirmPrimaryStar,
+        );
+      case DeviceCardAction.primaryCancel:
+        return _iconAction(
+          icon: Icons.star_border,
+          color: onSurface.withValues(
+              alpha: AccentDimens.deviceCardPrimaryCancelAlpha),
+          onPressed: _confirmPrimaryCancel,
+        );
+      case DeviceCardAction.transferTarget:
+        return _iconAction(
+          icon: Icons.star_outline,
+          color: colors.common.green,
+          onPressed: _confirmTransferTarget,
+        );
+      case DeviceCardAction.primaryStarReadonly:
+        return _iconAction(
+          icon: Icons.star,
+          color: colors.common.green
+              .withValues(alpha: AccentDimens.deviceCardPrimaryReadonlyAlpha),
+          onPressed: null,
+        );
+    }
+  }
+
+  Widget _iconAction({
+    required IconData icon,
+    required Color color,
+    required Future<void> Function()? onPressed,
+  }) {
     return IconButton(
-      onPressed: _editing ? null : _confirmCancelDelete,
+      onPressed: _editing || onPressed == null
+          ? null
+          : () {
+              onPressed();
+            },
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       icon: Icon(
-        Icons.undo,
+        icon,
         size: AccentDimens.deviceCardDeleteSize,
-        color: onSurface.withValues(alpha: AccentDimens.deviceCardRenameAlpha),
+        color: color,
       ),
     );
   }
@@ -510,20 +620,6 @@ class _DeviceCardState extends State<DeviceCard> {
         _editing ? Icons.check : Icons.edit_outlined,
         size: AccentDimens.deviceCardRenameSize,
         color: onSurface.withValues(alpha: AccentDimens.deviceCardRenameAlpha),
-      ),
-    );
-  }
-
-  Widget _deleteButton(AppColors colors) {
-    return IconButton(
-      onPressed: _editing ? null : _confirmDelete,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      icon: Icon(
-        Icons.delete_outline,
-        size: AccentDimens.deviceCardDeleteSize,
-        color: colors.common.deviceDeleteIcon,
       ),
     );
   }

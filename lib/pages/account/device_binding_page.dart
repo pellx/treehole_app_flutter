@@ -25,14 +25,23 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
   /// 仅在无缓存且首次请求未完成时显示加载
   bool _loading = false;
   bool _transferring = false;
+  /// 已确认「进行主设备迁移」、等待点选目标
+  bool _pickingPrimaryTarget = false;
+  int? _primaryPendingDeviceId;
+  DateTime? _primaryTransferExecuteAt;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _primaryPendingDeviceId = BindingCache.getPrimaryPendingDeviceId();
+    _primaryTransferExecuteAt = BindingCache.getPrimaryTransferExecuteAt();
+    if (_primaryPendingDeviceId != null) {
+      _pickingPrimaryTarget = true;
+    }
     final cached = BindingCache.getDevices();
     if (cached.isNotEmpty) {
-      _devices = cached.map(_toCard).toList();
+      _devices = _decorate(cached.map(_toCard).toList());
     } else {
       _loading = true;
     }
@@ -44,7 +53,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     if (mounted) {
       setState(() {
         _localDeviceId = localId;
-        _devices = _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList());
+        _devices = _decorate(
+            _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList()));
       });
     }
     await _loadDevices();
@@ -76,6 +86,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       os: info.os?.trim().isNotEmpty == true ? info.os!.trim() : '未知',
       abi: info.abi?.trim().isNotEmpty == true ? info.abi!.trim() : '未知',
       isCurrent: _localDeviceId != null && info.deviceId == _localDeviceId,
+      isPrimary: info.isPrimary,
+      isPrimaryPending: info.isPrimaryPending,
     );
   }
 
@@ -83,6 +95,44 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     return d.copyWith(
       isCurrent: _localDeviceId != null && d.deviceId == _localDeviceId,
     );
+  }
+
+  /// 按主设备 / 选目标态刷新右侧操作
+  List<DeviceCardData> _decorate(List<DeviceCardData> list) {
+    final localIsPrimary = list.any((d) => d.isCurrent && d.isPrimary);
+    final serverPending = _primaryPendingDeviceId != null ||
+        list.any((d) => d.isPrimaryPending);
+    final showCancelOnPrimary = _pickingPrimaryTarget || serverPending;
+    // 仅本地选目标且尚未提交时，其它卡显示星标；已提交待生效则只留取消
+    final showTransferStars =
+        _pickingPrimaryTarget && !serverPending && localIsPrimary;
+    return list
+        .map((d) => d.copyWith(
+              action: _actionFor(
+                d,
+                localIsPrimary: localIsPrimary,
+                showCancelOnPrimary: showCancelOnPrimary,
+                showTransferStars: showTransferStars,
+              ),
+            ))
+        .toList();
+  }
+
+  DeviceCardAction _actionFor(
+    DeviceCardData d, {
+    required bool localIsPrimary,
+    required bool showCancelOnPrimary,
+    required bool showTransferStars,
+  }) {
+    if (d.isUnbindPending) return DeviceCardAction.cancelUnbind;
+    if (d.isPrimary) {
+      if (showCancelOnPrimary) return DeviceCardAction.primaryCancel;
+      if (localIsPrimary) return DeviceCardAction.primaryStar;
+      return DeviceCardAction.primaryStarReadonly;
+    }
+    if (d.isPrimaryPending) return DeviceCardAction.primaryStarReadonly;
+    if (showTransferStars) return DeviceCardAction.transferTarget;
+    return DeviceCardAction.delete;
   }
 
   /// 本机设备置顶，其余保持相对顺序
@@ -114,7 +164,10 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
           a[i].model != b[i].model ||
           a[i].os != b[i].os ||
           a[i].abi != b[i].abi ||
-          a[i].isCurrent != b[i].isCurrent) {
+          a[i].isCurrent != b[i].isCurrent ||
+          a[i].isPrimary != b[i].isPrimary ||
+          a[i].isPrimaryPending != b[i].isPrimaryPending ||
+          a[i].action != b[i].action) {
         return false;
       }
     }
@@ -136,6 +189,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                 model: d.model,
                 os: d.os,
                 abi: d.abi,
+                isPrimary: d.isPrimary,
+                isPrimaryPending: d.isPrimaryPending,
               ))
           .toList(),
     );
@@ -153,20 +208,164 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
         if (_devices.isEmpty) {
           _error = ApiService.lastError ?? '加载设备失败';
         } else {
-          _devices =
-              _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList());
+          _devices = _decorate(_withCurrentFirst(
+              _devices.map(_refreshCurrentFlag).toList()));
         }
       });
       return;
     }
 
-    final next = _withCurrentFirst(list.map(_toCard).toList());
+    final pendingId = BindingCache.getPrimaryPendingDeviceId();
+    final executeAt = BindingCache.getPrimaryTransferExecuteAt();
+    final next = _decorate(_withCurrentFirst(list.map(_toCard).toList()));
     final changed = !_cardListEqual(_devices, next);
     setState(() {
       _loading = false;
       _error = null;
-      if (changed) _devices = next;
+      _primaryPendingDeviceId = pendingId;
+      _primaryTransferExecuteAt = executeAt;
+      if (pendingId != null) _pickingPrimaryTarget = true;
+      if (changed || pendingId != null) _devices = next;
+      else _devices = _decorate(_devices);
     });
+  }
+
+  String _primaryErrorText(String? raw) {
+    return switch (raw) {
+      'PRIMARY_DEVICE_PROTECTED' => '主设备不可解绑，请先迁移主设备',
+      'PRIMARY_TRANSFER_REQUIRES_PRIMARY_DEVICE' => '仅可在主设备上发起迁移',
+      'PRIMARY_TRANSFER_ALREADY_PENDING' => '已有主设备迁移进行中',
+      'ALREADY_PRIMARY_DEVICE' => '该设备已是主设备',
+      'DEVICE_NOT_BOUND' => '设备未绑定',
+      null || '' => '操作失败',
+      _ => raw,
+    };
+  }
+
+  Future<void> _onPrimaryStar() async {
+    setState(() {
+      _pickingPrimaryTarget = true;
+      _devices = _decorate(_devices);
+    });
+  }
+
+  Future<void> _onPrimaryCancel() async {
+    final hasServerPending = _primaryPendingDeviceId != null ||
+        _devices.any((d) => d.isPrimaryPending);
+    if (!hasServerPending) {
+      setState(() {
+        _pickingPrimaryTarget = false;
+        _devices = _decorate(_devices);
+      });
+      return;
+    }
+
+    final session = await _readySession();
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+    final ok = await ApiService.cancelPrimaryTransfer(
+      sessionId: session.id,
+      sessionSecret: session.secret,
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_primaryErrorText(ApiService.lastError)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _pickingPrimaryTarget = false;
+      _primaryPendingDeviceId = null;
+      _primaryTransferExecuteAt = null;
+    });
+    await BindingCache.saveDevicesResult(BoundDevicesResult(
+      devices: _devices
+          .map((d) => BoundDeviceInfo(
+                bindingId: d.bindingId,
+                deviceId: d.deviceId,
+                status: d.status,
+                unbindRequestedAt: d.unbindRequestedAt,
+                unbindExecuteAt: d.unbindExecuteAt,
+                deviceDisplayName: d.customName,
+                deviceName: d.deviceName,
+                brand: d.brand,
+                model: d.model,
+                os: d.os,
+                abi: d.abi,
+                isPrimary: d.isPrimary,
+                isPrimaryPending: false,
+              ))
+          .toList(),
+    ));
+    await _loadDevices();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已取消主设备迁移'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _onTransferTarget(int index) async {
+    final device = _devices[index];
+    final session = await _readySession();
+    if (session == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+    final result = await ApiService.requestPrimaryTransfer(
+      sessionId: session.id,
+      sessionSecret: session.secret,
+      bindingId: device.bindingId,
+    );
+    if (!mounted) return;
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_primaryErrorText(ApiService.lastError)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _pickingPrimaryTarget = true;
+      _primaryPendingDeviceId = result.primaryDevicePendingId;
+      _primaryTransferExecuteAt = result.primaryTransferExecuteAt;
+    });
+    await _loadDevices();
+    if (!mounted) return;
+    final tip = result.primaryTransferExecuteAt != null
+        ? '主设备迁移已申请，将于 ${_formatTransferTime(result.primaryTransferExecuteAt!)} 生效'
+        : '主设备迁移已申请，将于两天后生效';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(tip), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  String _formatTransferTime(DateTime dt) {
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '$y/$m/$d $hh:$mm';
   }
 
   Future<void> _onRename(int index, String name) async {
@@ -240,7 +439,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     if (result == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(ApiService.lastError ?? '解绑失败'),
+          content: Text(_primaryErrorText(ApiService.lastError)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -248,7 +447,10 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     }
     // 其他设备立刻 unbound：移出列表；本机则进入等待态
     if (result.status == 'unbound') {
-      setState(() => _devices.removeAt(index));
+      setState(() {
+        _devices.removeAt(index);
+        _devices = _decorate(_devices);
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('已解绑该设备'),
@@ -262,6 +464,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
           unbindRequestedAt: result.unbindRequestedAt,
           unbindExecuteAt: result.unbindExecuteAt,
         );
+        _devices = _decorate(_devices);
       });
     }
     await _persistDevicesFromCards();
@@ -426,6 +629,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
         status: 'active',
         clearUnbind: true,
       );
+      _devices = _decorate(_devices);
     });
     await _persistDevicesFromCards();
   }
@@ -493,11 +697,42 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                 onRenameSubmit: (name) => _onRename(index, name),
                 onDelete: () => _onDelete(index),
                 onCancelDelete: () => _onCancelDelete(index),
+                onPrimaryStar: _onPrimaryStar,
+                onPrimaryCancel: _onPrimaryCancel,
+                onTransferTarget: () => _onTransferTarget(index),
               );
             },
           ),
         ),
       );
+
+      if (_primaryTransferExecuteAt != null) {
+        final tip =
+            '主设备迁移将于 ${_formatTransferTime(_primaryTransferExecuteAt!)} 生效';
+        body = Column(
+          children: [
+            Expanded(child: body),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AccentDimens.pagePadding,
+                0,
+                AccentDimens.pagePadding,
+                AccentDimens.deviceCardPrimaryTipBottom,
+              ),
+              child: Text(
+                tip,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AccentDimens.deviceCardPrimaryTipFontSize,
+                  height: 1.4,
+                  color: onSurface.withValues(
+                      alpha: AccentDimens.deviceCardPrimaryTipAlpha),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
     }
 
     return UserSubPageShell(

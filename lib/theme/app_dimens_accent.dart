@@ -108,6 +108,11 @@ class AccentDimens {
   static const double deviceCardUnbindTimeAlpha = 0.5; // 解绑预计时间透明度
   static const double deviceCardUnbindTimeGap = 6;  // 时间与删除/取消按钮间距
   static const double deviceCardCancelFontSize = 13; // 「取消」文字字号
+  static const double deviceCardPrimaryCancelAlpha = 0.45; // 主设备取消星标透明度
+  static const double deviceCardPrimaryReadonlyAlpha = 0.55; // 非本机主设备星标
+  static const double deviceCardPrimaryTipFontSize = 12; // 迁移生效提示字号
+  static const double deviceCardPrimaryTipAlpha = 0.5;
+  static const double deviceCardPrimaryTipBottom = 12;
 
   // ── 账户切换卡片 ──
   static const double accountCardCurrentDotSize = 10; // 当前账户绿点直径
