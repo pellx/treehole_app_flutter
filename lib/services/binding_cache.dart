@@ -176,6 +176,12 @@ class BindingCache {
     return _prefetchSwitchLock(session.id, session.secret);
   }
 
+  /// Hive 整盒清空后调用，避免内存仍持有旧锁
+  static void invalidateMemory() {
+    _switchLockLoaded = false;
+    _switchLockExpiresAt = null;
+  }
+
   static Future<List<BoundDeviceInfo>?> _prefetchDevices(
       int sessionId, String sessionSecret) async {
     final list = await ApiService.listBoundDevices(

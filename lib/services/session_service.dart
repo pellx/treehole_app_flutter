@@ -8,6 +8,7 @@ import 'package:hive/hive.dart';
 import '../models/device_fingerprint.dart';
 import 'api.dart';
 import 'avatar_storage.dart';
+import 'binding_cache.dart';
 import 'device_credential_store.dart';
 import 'device_fingerprint.dart';
 import 'storage.dart';
@@ -381,6 +382,7 @@ class SessionService {
       if (Hive.isBoxOpen('binding_cache')) {
         await Hive.box('binding_cache').clear();
       }
+      BindingCache.invalidateMemory();
     } catch (e) {
       debugPrint('[SessionService] 清除绑定缓存失败: $e');
     }
