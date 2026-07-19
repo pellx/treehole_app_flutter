@@ -690,6 +690,29 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
               ),
+            // 账户切换「登录用户」：底部转移申请提示
+            if (_phase == 'login' && widget.startAtLogin)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: RegisterDimens.loginTransferTipBottom,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: RegisterDimens.loginTransferTipHPadding,
+                  ),
+                  child: Text(
+                    '请在已登录账户设备的 [用户]=>[设备绑定] 页面中点击 [转移申请] 发出登录许可后进行登录',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: RegisterDimens.loginTransferTipFontSize,
+                      height: RegisterDimens.loginTransferTipLineHeight,
+                      color: onSurface.withValues(
+                        alpha: RegisterDimens.loginTransferTipAlpha,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             // 右上角重新加载按钮
             Positioned(
               right: 8, top: 4,
