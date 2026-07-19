@@ -228,6 +228,11 @@ class SessionService {
     await DeviceCredentialStore.mergeKnownUserTokens([userToken]);
     await DeviceCredentialStore.saveSessionId(createResult.sessionId);
     await DeviceCredentialStore.saveSessionSecret(createResult.sessionSecret);
+    await DeviceCredentialStore.saveAccountSession(
+      userToken,
+      createResult.sessionId,
+      createResult.sessionSecret,
+    );
     _lastValidatedAt = DateTime.now();
     return true;
   }
@@ -256,15 +261,20 @@ class SessionService {
     await DeviceCredentialStore.saveDeviceId(result.deviceId);
     await DeviceCredentialStore.saveSessionId(result.sessionId);
     await DeviceCredentialStore.saveSessionSecret(result.sessionSecret);
+    await DeviceCredentialStore.saveAccountSession(
+      token,
+      result.sessionId,
+      result.sessionSecret,
+    );
     _lastValidatedAt = DateTime.now();
     return true;
   }
 
   /// 切换到本机已绑定的其他账户。
   ///
-  /// - **不预先删除**仍有效的本地 session；仅在校验失效时清掉失效 session
-  /// - 已有 device_secret 时优先 `session/create`（成功才覆盖本地 session）
-  /// - 无 secret、或 create 表明需复活绑定时，再走 `login`
+  /// 1. 离开前把当前 session 按 token 缓存  
+  /// 2. 目标账户若有缓存且校验有效 → 直接复用（不申请，避免 RATE_LIMITED）  
+  /// 3. 否则再 `session/create`；绑定类错误才降级 `login`
   Future<bool> switchToAccount(String userToken) async {
     final token = userToken.trim();
     if (token.isEmpty) {
@@ -272,24 +282,32 @@ class SessionService {
       return false;
     }
 
-    final current = (await DeviceCredentialStore.getUserExternalToken())?.trim();
+    final current =
+        (await DeviceCredentialStore.getUserExternalToken())?.trim();
     if (current != null && current == token) {
-      // 已是目标账户：校验本地 session，失效再申请
       return ensureSession();
     }
 
-    // 先检查本地 session：有效则保留至新会话写入；失效才清 session（不动 token/secret）
-    final sessionId = await DeviceCredentialStore.getSessionId();
-    final sessionSecret = await DeviceCredentialStore.getSessionSecret();
-    if (sessionId != null && sessionSecret != null) {
+    // 切走前缓存当前账户 session，供之后切回复用
+    await _stashCurrentSession(current);
+
+    // 优先复用目标账户已缓存且仍有效的 session
+    final cached = await DeviceCredentialStore.getAccountSession(token);
+    if (cached != null) {
       final validated = await ApiService.validateSession(
-        sessionId: sessionId,
-        sessionSecret: sessionSecret,
+        sessionId: cached.id,
+        sessionSecret: cached.secret,
       );
-      if (validated == null || !validated.valid) {
-        invalidate();
-        await DeviceCredentialStore.clearSession();
+      if (validated != null && validated.valid) {
+        await DeviceCredentialStore.saveUserExternalToken(token);
+        await DeviceCredentialStore.mergeKnownUserTokens([token]);
+        await DeviceCredentialStore.saveSessionId(cached.id);
+        await DeviceCredentialStore.saveSessionSecret(cached.secret);
+        _lastValidatedAt = DateTime.now();
+        await _resetAccountDisplayCache();
+        return true;
       }
+      await DeviceCredentialStore.removeAccountSession(token);
     }
 
     final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
@@ -314,6 +332,15 @@ class SessionService {
     final loginOk = await loginWithToken(token);
     if (loginOk) await _resetAccountDisplayCache();
     return loginOk;
+  }
+
+  /// 将当前活跃 session 写入该 token 的缓存槽
+  Future<void> _stashCurrentSession(String? token) async {
+    if (token == null || token.isEmpty) return;
+    final id = await DeviceCredentialStore.getSessionId();
+    final secret = await DeviceCredentialStore.getSessionSecret();
+    if (id == null || secret == null || secret.isEmpty) return;
+    await DeviceCredentialStore.saveAccountSession(token, id, secret);
   }
 
   /// 切换账户后清展示缓存（不影响 session / token，失败路径勿调用）
@@ -351,6 +378,7 @@ class SessionService {
   Future<void> _markLoggedOutFully() async {
     await PostStorage.setRegistered(false);
     await DeviceCredentialStore.saveKnownUserTokens([]);
+    await DeviceCredentialStore.clearAccountSessions();
   }
 
   /// 计算设备指纹的 SHA-256 hex（每次 session 申请实时采集后计算，不持久化）

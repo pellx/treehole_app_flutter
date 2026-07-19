@@ -25,6 +25,8 @@ class DeviceCredentialStore {
   static const _kRegisteredFingerprint = 'registered_fingerprint';
   /// 本机曾见过的其他账户 user_token（JSON 字符串数组），用于解绑后切号
   static const _kKnownUserTokens = 'known_user_tokens';
+  /// 各账户缓存的 session：`{ user_token: { session_id, session_secret } }`
+  static const _kAccountSessions = 'account_sessions';
 
   /// 保存注册时使用的设备指纹数据（JSON），用于后续 session 创建时不因设备状态变化导致指纹不匹配
   static Future<void> saveRegisteredFingerprint(String fpJson) async {
@@ -151,21 +153,91 @@ class DeviceCredentialStore {
     final current = await getKnownUserTokens();
     current.removeWhere((t) => t == token);
     await saveKnownUserTokens(current);
+    await removeAccountSession(token);
+  }
+
+  // ── 按账户缓存的 session（切号复用，避免反复 session/create 触发限流）──
+
+  static Future<Map<String, dynamic>> _readAccountSessionsMap() async {
+    final raw = await _storage.read(key: _kAccountSessions);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _writeAccountSessionsMap(Map<String, dynamic> map) async {
+    if (map.isEmpty) {
+      await _storage.delete(key: _kAccountSessions);
+      return;
+    }
+    await _storage.write(key: _kAccountSessions, value: jsonEncode(map));
+  }
+
+  /// 读取某账户缓存的 session；无效或缺字段返回 null
+  static Future<({int id, String secret})?> getAccountSession(
+      String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) return null;
+    final map = await _readAccountSessionsMap();
+    final entry = map[token];
+    if (entry is! Map) return null;
+    final idRaw = entry['session_id'];
+    final secret = entry['session_secret'];
+    final id = idRaw is num ? idRaw.toInt() : int.tryParse('$idRaw');
+    if (id == null || secret is! String || secret.isEmpty) return null;
+    return (id: id, secret: secret);
+  }
+
+  static Future<void> saveAccountSession(
+    String userToken,
+    int sessionId,
+    String sessionSecret,
+  ) async {
+    final token = userToken.trim();
+    if (token.isEmpty || sessionSecret.isEmpty) return;
+    final map = await _readAccountSessionsMap();
+    map[token] = {
+      'session_id': sessionId,
+      'session_secret': sessionSecret,
+    };
+    await _writeAccountSessionsMap(map);
+  }
+
+  static Future<void> removeAccountSession(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) return;
+    final map = await _readAccountSessionsMap();
+    if (map.remove(token) != null) {
+      await _writeAccountSessionsMap(map);
+    }
+  }
+
+  static Future<void> clearAccountSessions() async {
+    await _storage.delete(key: _kAccountSessions);
   }
 
   // ── 清除 ──
 
-  /// 退出登录：只清 session，保留设备和用户凭证
+  /// 退出登录：只清当前 session，保留设备和用户凭证
   static Future<void> clearSession() async {
+    final token = await getUserExternalToken();
     await _storage.delete(key: _kSessionId);
     await _storage.delete(key: _kSessionSecret);
+    if (token != null) await removeAccountSession(token);
   }
 
   /// 当前账号已解绑：清该账号令牌与 session，保留 device_id / device_secret
   static Future<void> clearUserAccount() async {
+    final token = await getUserExternalToken();
     await _storage.delete(key: _kUserExternalToken);
     await _storage.delete(key: _kSessionId);
     await _storage.delete(key: _kSessionSecret);
+    if (token != null) await removeAccountSession(token);
   }
 
   /// 调试用：清除全部凭证（模拟卸载重装）
@@ -177,5 +249,6 @@ class DeviceCredentialStore {
     await _storage.delete(key: _kSessionSecret);
     await _storage.delete(key: _kFingerprintHash);
     await _storage.delete(key: _kKnownUserTokens);
+    await _storage.delete(key: _kAccountSessions);
   }
 }
