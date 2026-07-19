@@ -430,11 +430,14 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: colors.register.pageBg,
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: SafeArea(
+          bottom: false,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
             // 白色椭圆 — 居中 + VOffset（与原先一致，避免被屏宽约束缩小）
             IgnorePointer(
               child: Center(
@@ -709,6 +712,7 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
