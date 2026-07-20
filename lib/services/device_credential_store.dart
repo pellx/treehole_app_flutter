@@ -27,6 +27,9 @@ class DeviceCredentialStore {
   static const _kKnownUserTokens = 'known_user_tokens';
   /// 各账户缓存的 session：`{ user_token: { session_id, session_secret } }`
   static const _kAccountSessions = 'account_sessions';
+  /// 各账户最近一次成功建 session 的时间（仅排序用，不存 secret）
+  /// `{ user_token: { last_session_at: ISO8601 } }`
+  static const _kAccountSessionMeta = 'account_session_meta';
 
   /// 保存注册时使用的设备指纹数据（JSON），用于后续 session 创建时不因设备状态变化导致指纹不匹配
   static Future<void> saveRegisteredFingerprint(String fpJson) async {
@@ -154,6 +157,98 @@ class DeviceCredentialStore {
     current.removeWhere((t) => t == token);
     await saveKnownUserTokens(current);
     await removeAccountSession(token);
+    await removeAccountSessionMeta(token);
+  }
+
+  // ── 账户建 session 时间元数据（解绑 failover 排序）──
+
+  static Future<Map<String, dynamic>> _readAccountSessionMetaMap() async {
+    final raw = await _storage.read(key: _kAccountSessionMeta);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _writeAccountSessionMetaMap(
+      Map<String, dynamic> map) async {
+    if (map.isEmpty) {
+      await _storage.delete(key: _kAccountSessionMeta);
+      return;
+    }
+    await _storage.write(key: _kAccountSessionMeta, value: jsonEncode(map));
+  }
+
+  /// 记录该账户最近一次成功建立 session 的时间
+  static Future<void> touchLastSessionAt(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) return;
+    final map = await _readAccountSessionMetaMap();
+    map[token] = {
+      'last_session_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    await _writeAccountSessionMetaMap(map);
+  }
+
+  static Future<DateTime?> getLastSessionAt(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) return null;
+    final map = await _readAccountSessionMetaMap();
+    final entry = map[token];
+    if (entry is! Map) return null;
+    final raw = entry['last_session_at'];
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toUtc();
+  }
+
+  static Future<void> removeAccountSessionMeta(String userToken) async {
+    final token = userToken.trim();
+    if (token.isEmpty) return;
+    final map = await _readAccountSessionMetaMap();
+    if (map.remove(token) != null) {
+      await _writeAccountSessionMetaMap(map);
+    }
+  }
+
+  static Future<void> clearAccountSessionMeta() async {
+    await _storage.delete(key: _kAccountSessionMeta);
+  }
+
+  /// 按最近建 session 时间降序；无记录的排在后面并保持原相对顺序
+  static Future<List<String>> sortTokensByLastSession(
+      Iterable<String> tokens) async {
+    final list = tokens
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (list.length <= 1) return list;
+
+    final meta = await _readAccountSessionMetaMap();
+    DateTime? at(String token) {
+      final entry = meta[token];
+      if (entry is! Map) return null;
+      final raw = entry['last_session_at'];
+      if (raw is! String || raw.isEmpty) return null;
+      return DateTime.tryParse(raw)?.toUtc();
+    }
+
+    final indexed = <({String token, int index, DateTime? at})>[];
+    for (var i = 0; i < list.length; i++) {
+      indexed.add((token: list[i], index: i, at: at(list[i])));
+    }
+    indexed.sort((a, b) {
+      final aAt = a.at;
+      final bAt = b.at;
+      if (aAt != null && bAt != null) return bAt.compareTo(aAt);
+      if (aAt != null) return -1;
+      if (bAt != null) return 1;
+      return a.index.compareTo(b.index);
+    });
+    return indexed.map((e) => e.token).toList();
   }
 
   // ── 按账户缓存的 session（切号复用，避免反复 session/create 触发限流）──
@@ -237,7 +332,10 @@ class DeviceCredentialStore {
     await _storage.delete(key: _kUserExternalToken);
     await _storage.delete(key: _kSessionId);
     await _storage.delete(key: _kSessionSecret);
-    if (token != null) await removeAccountSession(token);
+    if (token != null) {
+      await removeAccountSession(token);
+      await removeAccountSessionMeta(token);
+    }
   }
 
   /// 调试用：清除全部凭证（模拟卸载重装）
@@ -250,5 +348,6 @@ class DeviceCredentialStore {
     await _storage.delete(key: _kFingerprintHash);
     await _storage.delete(key: _kKnownUserTokens);
     await _storage.delete(key: _kAccountSessions);
+    await _storage.delete(key: _kAccountSessionMeta);
   }
 }

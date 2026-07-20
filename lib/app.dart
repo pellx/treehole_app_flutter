@@ -21,16 +21,32 @@ class TreeholeApp extends StatefulWidget {
   State<TreeholeApp> createState() => TreeholeAppState();
 }
 
-class TreeholeAppState extends State<TreeholeApp> {
+class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
   void refresh() => setState(() {});
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ensureSession();
   }
 
-  /// 启动时检测 session 有效性
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // 后台期间他机可能已解绑本机，回前台尽早清登录 / 切号
+      SessionService.instance.invalidate();
+      _ensureSession();
+    }
+  }
+
+  /// 启动与回前台时检测 session / 绑定有效性
   Future<void> _ensureSession() async {
     await SessionService.instance.ensureSession();
   }

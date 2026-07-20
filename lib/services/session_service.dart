@@ -96,22 +96,27 @@ class SessionService {
     return _createSessionOrFailover();
   }
 
-  /// 用当前/已知令牌申请 session；解绑则 login 复活或切其他账户
+  /// 用当前/已知令牌申请 session；正式 unbound 则按最近建 session 切其他账户
   Future<bool> _createSessionOrFailover() async {
     final userToken = await DeviceCredentialStore.getUserExternalToken();
     final deviceSecret = await DeviceCredentialStore.getDeviceSecret();
 
     if (userToken != null) {
-      // 日常：有 secret 时走 session/create
       if (deviceSecret != null) {
         final ok = await _tryCreateSession(
           userToken: userToken,
           deviceSecret: deviceSecret,
         );
         if (ok) return true;
-        // secret 失效或未绑定 → login 可复活并轮换 secret
-        if (ApiService.lastError == 'DEVICE_NOT_BOUND' ||
-            ApiService.lastError == 'DEVICE_SECRET_INVALID') {
+        // 正式解绑：不再 login 复活当前账户，直接切其他已保存用户
+        if (ApiService.lastError == 'DEVICE_NOT_BOUND') {
+          return _failoverAfterUnbound(
+            failedToken: userToken,
+            extraCandidates: const [],
+          );
+        }
+        // secret 失效：login 轮换 secret
+        if (ApiService.lastError == 'DEVICE_SECRET_INVALID') {
           final loginOk = await loginWithToken(userToken);
           if (loginOk) return true;
         } else if (ApiService.lastError == 'DEVICE_SESSION_LOCKED') {
@@ -120,7 +125,6 @@ class SessionService {
           return false;
         }
       } else {
-        // 无本地 secret：直接 login
         final loginOk = await loginWithToken(userToken);
         if (loginOk) return true;
       }
@@ -133,7 +137,9 @@ class SessionService {
 
     final known = await DeviceCredentialStore.getKnownUserTokens();
     if (known.isEmpty) return false;
-    return _tryCandidateLogins(known);
+    final ordered =
+        await DeviceCredentialStore.sortTokensByLastSession(known);
+    return _tryCandidateLogins(ordered);
   }
 
   /// session 有效时确认当前账号仍在本机 live 绑定列表中
@@ -165,9 +171,7 @@ class SessionService {
         // active 与 unbind_pending 均保持登录态
         return true;
       }
-      // 不在 live 列表：先 login 尝试复活绑定
-      final revived = await loginWithToken(current);
-      if (revived) return true;
+      // 不在 live：正式 unbound，不再 login 复活
     }
 
     final others = tokens.where((t) => t != current).toList();
@@ -195,7 +199,10 @@ class SessionService {
       return false;
     }
 
-    final ok = await _tryCandidateLogins(candidates.toList());
+    final ordered = await DeviceCredentialStore.sortTokensByLastSession(
+      candidates,
+    );
+    final ok = await _tryCandidateLogins(ordered);
     if (!ok) await _markLoggedOutFully();
     return ok;
   }
@@ -237,6 +244,7 @@ class SessionService {
       createResult.sessionId,
       createResult.sessionSecret,
     );
+    await DeviceCredentialStore.touchLastSessionAt(userToken);
     _lastValidatedAt = DateTime.now();
     return true;
   }
@@ -410,6 +418,7 @@ class SessionService {
     await PostStorage.setRegistered(false);
     await DeviceCredentialStore.saveKnownUserTokens([]);
     await DeviceCredentialStore.clearAccountSessions();
+    await DeviceCredentialStore.clearAccountSessionMeta();
   }
 
   /// 计算设备指纹的 SHA-256 hex（每次 session 申请实时采集后计算，不持久化）
