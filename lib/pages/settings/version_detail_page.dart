@@ -11,6 +11,7 @@ import 'package:open_filex/open_filex.dart';
 import '../../models/version_info.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../theme/app_dimens_accent.dart';
 
 class VersionDetailPage extends StatefulWidget {
   final VersionInfo version;
@@ -63,17 +64,85 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
       debugPrint('[VersionDetail] canRequestPackageInstalls: $e');
     }
 
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     final go = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('需要安装权限'),
-        content: const Text(
-          '请允许本应用「安装未知应用」，否则无法完成更新。打开设置后请开启开关，再返回重试。',
+      builder: (ctx) => Dialog(
+        backgroundColor: colors.common.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AccentDimens.dialogRadius),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('去设置')),
-        ],
+        child: Padding(
+          padding: const EdgeInsets.all(AccentDimens.dialogPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '请允许本应用「安装未知应用」，否则无法完成更新。打开设置后请开启开关，再返回重试。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: AccentDimens.dialogMessageFontSize,
+                  height: AccentDimens.dialogMessageLineHeight,
+                  color: onSurface,
+                ),
+              ),
+              const SizedBox(height: AccentDimens.dialogActionsTopGap),
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        style: TextButton.styleFrom(
+                          foregroundColor: onSurface.withValues(
+                              alpha: AccentDimens.dialogCancelTextAlpha),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AccentDimens.dialogActionGap),
+                  Expanded(
+                    child: SizedBox(
+                      height: AccentDimens.dialogActionHeight,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.postCreate.submitBg,
+                          foregroundColor: colors.postCreate.submitText,
+                          elevation: 0,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AccentDimens.dialogActionHPadding),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                AccentDimens.dialogActionRadius),
+                          ),
+                          textStyle: const TextStyle(
+                              fontSize: AccentDimens.dialogActionFontSize),
+                        ),
+                        child: const Text('去设置'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
     if (go != true) return false;
