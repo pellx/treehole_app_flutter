@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,9 @@ class VersionDetailPage extends StatefulWidget {
 }
 
 class _VersionDetailPageState extends State<VersionDetailPage> {
+  static const _installChannel = MethodChannel('treehole/apk_install');
+  static const _downloadTimeout = Duration(minutes: 5);
+
   bool _downloading = false;
 
   Future<String?> _getApkUrl() async {
@@ -43,43 +47,104 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
     return '${base}treehole-v${v.versionNumber}.apk';
   }
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
+    );
+  }
+
+  Future<bool> _ensureInstallAllowed() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final allowed = await _installChannel.invokeMethod<bool>('canRequestPackageInstalls');
+      if (allowed == true) return true;
+    } catch (e) {
+      debugPrint('[VersionDetail] canRequestPackageInstalls: $e');
+    }
+
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('需要安装权限'),
+        content: const Text(
+          '请允许本应用「安装未知应用」，否则无法完成更新。打开设置后请开启开关，再返回重试。',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('去设置')),
+        ],
+      ),
+    );
+    if (go != true) return false;
+
+    try {
+      await _installChannel.invokeMethod('openUnknownAppSettings');
+    } catch (e) {
+      debugPrint('[VersionDetail] openUnknownAppSettings: $e');
+      _toast('无法打开设置，请手动在系统设置中允许安装未知应用');
+      return false;
+    }
+    _toast('开启权限后请再点一次「更新」');
+    return false;
+  }
+
   Future<void> _install() async {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
-      final url = await _getApkUrl();
-      if (url == null) return;
+      if (!await _ensureInstallAllowed()) return;
 
-      // 与初版一致：应用私有目录 + open_filex，无需存储权限
+      final url = await _getApkUrl();
+      if (url == null) {
+        _toast('未配置下载地址');
+        return;
+      }
+      debugPrint('[VersionDetail] 开始下载: $url');
+
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/treehole_update.apk');
-      await _downloadAndInstall(url, file);
+      await _downloadToFile(url, file);
+      if (!mounted) return;
+
+      final result = await OpenFilex.open(
+        file.path,
+        type: 'application/vnd.android.package-archive',
+      );
+      debugPrint('[VersionDetail] OpenFilex type=${result.type} message=${result.message}');
+      if (result.type == ResultType.done) {
+        _toast('已打开安装界面，请确认安装');
+      } else {
+        _toast(result.message.isNotEmpty ? result.message : '无法打开安装包');
+      }
     } catch (e, st) {
       debugPrint('[VersionDetail] 更新失败: $e\n$st');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新失败：$e')),
-        );
-      }
+      _toast('更新失败：$e');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
   }
 
-  Future<void> _downloadAndInstall(String url, File file) async {
-    final resp = await http.get(Uri.parse(url));
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      debugPrint('[VersionDetail] HTTP ${resp.statusCode} url=$url');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('下载失败（HTTP ${resp.statusCode}）')),
-        );
+  Future<void> _downloadToFile(String url, File file) async {
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', Uri.parse(url));
+      final streamed = await client.send(req).timeout(_downloadTimeout);
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        throw Exception('HTTP ${streamed.statusCode}');
       }
-      return;
+      final sink = file.openWrite();
+      try {
+        await streamed.stream.pipe(sink).timeout(_downloadTimeout);
+      } finally {
+        await sink.close();
+      }
+      final len = await file.length();
+      if (len <= 0) throw Exception('文件为空');
+      debugPrint('[VersionDetail] 已写入 ${file.path} ($len bytes)');
+    } finally {
+      client.close();
     }
-    await file.writeAsBytes(resp.bodyBytes);
-    if (!mounted) return;
-    await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
   }
 
   @override
