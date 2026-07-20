@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -22,6 +23,9 @@ class VersionDetailPage extends StatefulWidget {
 class _VersionDetailPageState extends State<VersionDetailPage> {
   bool _downloading = false;
 
+  /// APK 约 20MB+，给足超时避免中途断开却无提示
+  static const _downloadTimeout = Duration(minutes: 5);
+
   Future<String?> _getApkUrl() async {
     final v = widget.version;
     if (v.downloadUrl.isEmpty) return null;
@@ -42,36 +46,60 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
     return '${base}treehole-v${v.versionNumber}.apk';
   }
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
+    );
+  }
+
   Future<void> _install() async {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
       final url = await _getApkUrl();
-      if (url == null) return;
-
-      final dir = Platform.isAndroid
-          ? Directory('/storage/emulated/0/Download')
-          : await getApplicationDocumentsDirectory();
-      if (!await dir.exists() && Platform.isAndroid) {
-        // 降级
-        final tmp = await getApplicationDocumentsDirectory();
-        final file = File('${tmp.path}/treehole_update.apk');
-        await _downloadAndInstall(url, file);
+      if (url == null) {
+        _toast('未配置下载地址');
         return;
       }
+      debugPrint('[VersionDetail] 开始下载: $url');
+
+      // 写入应用私有目录，避免 Android 10+ 无法写公共 Download
+      final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/treehole_update.apk');
       await _downloadAndInstall(url, file);
+    } catch (e, st) {
+      debugPrint('[VersionDetail] 更新失败: $e\n$st');
+      _toast('更新失败：$e');
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
   }
 
   Future<void> _downloadAndInstall(String url, File file) async {
-    final resp = await http.get(Uri.parse(url));
-    if (resp.statusCode < 200 || resp.statusCode >= 300) return;
-    await file.writeAsBytes(resp.bodyBytes);
+    final resp = await http.get(Uri.parse(url)).timeout(_downloadTimeout);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      debugPrint('[VersionDetail] HTTP ${resp.statusCode} url=$url');
+      _toast('下载失败（HTTP ${resp.statusCode}）');
+      return;
+    }
+    if (resp.bodyBytes.isEmpty) {
+      _toast('下载失败：文件为空');
+      return;
+    }
+
+    await file.writeAsBytes(resp.bodyBytes, flush: true);
+    debugPrint('[VersionDetail] 已写入 ${file.path} (${resp.bodyBytes.length} bytes)');
     if (!mounted) return;
-    await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
+
+    final result = await OpenFilex.open(
+      file.path,
+      type: 'application/vnd.android.package-archive',
+    );
+    debugPrint('[VersionDetail] OpenFilex type=${result.type} message=${result.message}');
+    if (result.type != ResultType.done) {
+      _toast(result.message.isNotEmpty ? result.message : '无法打开安装包，请检查「安装未知应用」权限');
+    }
   }
 
   @override
