@@ -1,6 +1,66 @@
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+/// `binding.unbound` 推送摘要（含踢人设备）
+class BindingUnboundInfo {
+  final String reason;
+  final int? deviceId;
+  final int? bindingId;
+  final int? actorDeviceId;
+  final String? actorDeviceDisplayName;
+  final String? actorDeviceName;
+  final String? at;
+
+  const BindingUnboundInfo({
+    required this.reason,
+    this.deviceId,
+    this.bindingId,
+    this.actorDeviceId,
+    this.actorDeviceDisplayName,
+    this.actorDeviceName,
+    this.at,
+  });
+
+  /// 展示用踢人设备名：自定义名 → 系统名 → 设备 id
+  String get actorLabel {
+    final custom = actorDeviceDisplayName?.trim();
+    if (custom != null && custom.isNotEmpty) return custom;
+    final name = actorDeviceName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    if (actorDeviceId != null) return '设备 #$actorDeviceId';
+    return '未知设备';
+  }
+
+  bool get isRemoteUnbind => reason == 'remote_unbind';
+  bool get isLocalDue => reason == 'local_unbind_due';
+
+  static BindingUnboundInfo? fromPayload(dynamic data) {
+    if (data is! Map) return null;
+    final map = Map<String, dynamic>.from(data);
+    final reason = '${map['reason'] ?? ''}';
+    int? asInt(dynamic v) {
+      if (v is num) return v.toInt();
+      return int.tryParse('$v');
+    }
+
+    String? asStr(dynamic v) {
+      if (v == null) return null;
+      final s = '$v'.trim();
+      return s.isEmpty || s == 'null' ? null : s;
+    }
+
+    return BindingUnboundInfo(
+      reason: reason.isEmpty ? 'remote_unbind' : reason,
+      deviceId: asInt(map['device_id']),
+      bindingId: asInt(map['binding_id']),
+      actorDeviceId: asInt(map['actor_device_id']),
+      actorDeviceDisplayName: asStr(map['actor_device_display_name']),
+      actorDeviceName: asStr(map['actor_device_name']),
+      at: asStr(map['at']),
+    );
+  }
+}
+
 /// Socket.IO 实时通道（附录 E）
 ///
 /// 同源 path `/node/socket.io`，握手 auth：`session_id` + `session_secret`。
@@ -18,7 +78,7 @@ class RealtimeService {
   int? _connectedSessionId;
   bool _handlersBound = false;
 
-  VoidCallback? onBindingUnbound;
+  void Function(BindingUnboundInfo? info)? onBindingUnbound;
   VoidCallback? onSessionInvalidated;
 
   /// UI：连接状态文案（未连接 / 连接中 / 已连接 / 错误…）
@@ -90,7 +150,7 @@ class RealtimeService {
     socket.on('binding.unbound', (data) {
       if (_connectedSessionId != boundSessionId) return;
       debugPrint('[Realtime] binding.unbound: $data');
-      onBindingUnbound?.call();
+      onBindingUnbound?.call(BindingUnboundInfo.fromPayload(data));
     });
     socket.on('session.invalidated', (data) {
       if (_connectedSessionId != boundSessionId) return;
@@ -148,7 +208,7 @@ class RealtimeService {
 
   /// 仅绑一次业务回调，避免重复注册
   void bindHandlers({
-    required VoidCallback bindingUnbound,
+    required void Function(BindingUnboundInfo? info) bindingUnbound,
     required VoidCallback sessionInvalidated,
   }) {
     if (_handlersBound) return;

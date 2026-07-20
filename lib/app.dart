@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/square/square_page.dart';
+import 'app_navigator.dart';
 import 'services/session_service.dart';
 import 'theme/app_colors.dart';
 
@@ -55,6 +56,7 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '树通',
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: ThemeData.light().copyWith(

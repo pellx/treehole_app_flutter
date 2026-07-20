@@ -3,9 +3,13 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
 import '../models/device_fingerprint.dart';
+import '../app_navigator.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_dimens_accent.dart';
 import 'api.dart';
 import 'avatar_storage.dart';
 import 'binding_cache.dart';
@@ -45,8 +49,8 @@ class SessionService {
 
   SessionService._() {
     RealtimeService.instance.bindHandlers(
-      bindingUnbound: () {
-        unawaited(handleBindingUnboundFromWs());
+      bindingUnbound: (info) {
+        unawaited(handleBindingUnboundFromWs(info));
       },
       sessionInvalidated: () {
         unawaited(handleSessionInvalidatedFromWs());
@@ -85,12 +89,14 @@ class SessionService {
   }
 
   /// Socket.IO：他机解绑 / 本机到期解绑
-  Future<void> handleBindingUnboundFromWs() async {
+  Future<void> handleBindingUnboundFromWs([BindingUnboundInfo? info]) async {
     if (_wsHandling != null) return _wsHandling!.future;
     _wsHandling = Completer<void>();
     _insideWsHandler = true;
     try {
       debugPrint('[SessionService] WS binding.unbound → failover');
+      // 先弹窗再清凭证，避免导航重建后丢 context
+      unawaited(_showKickedDialog(info));
       invalidate();
       RealtimeService.instance.disconnect();
       final token = await DeviceCredentialStore.getUserExternalToken();
@@ -108,6 +114,73 @@ class SessionService {
       _wsHandling!.complete();
       _wsHandling = null;
     }
+  }
+
+  /// 被踢下线提示：说明踢人设备
+  Future<void> _showKickedDialog(BindingUnboundInfo? info) async {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+    final ctx = nav.overlay?.context;
+    if (ctx == null || !ctx.mounted) return;
+
+    final message = _kickedDialogMessage(info);
+    try {
+      final colors = Theme.of(ctx).extension<AppColors>()!;
+      final onSurface = Theme.of(ctx).colorScheme.onSurface;
+      await showDialog<void>(
+        context: ctx,
+        barrierDismissible: true,
+        builder: (dialogCtx) => Dialog(
+          backgroundColor: colors.common.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AccentDimens.dialogRadius),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AccentDimens.dialogPadding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: AccentDimens.dialogMessageFontSize,
+                    height: AccentDimens.dialogMessageLineHeight,
+                    color: onSurface,
+                  ),
+                ),
+                const SizedBox(height: AccentDimens.dialogActionsTopGap),
+                SizedBox(
+                  height: AccentDimens.dialogActionHeight,
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.common.green,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('知道了'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[SessionService] 被踢弹窗失败: $e');
+    }
+  }
+
+  static String _kickedDialogMessage(BindingUnboundInfo? info) {
+    if (info == null) {
+      return '你已被踢下线';
+    }
+    if (info.isLocalDue) {
+      return '本机解绑已生效\n你已被踢下线';
+    }
+    return '你已被踢下线\n操作设备：${info.actorLabel}';
   }
 
   /// Socket.IO：本机旧 session 被新签发顶掉
