@@ -1,8 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- 应用内下载 APK 后调起安装器 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- 刻意不申请存储 / REQUEST_INSTALL_PACKAGES：更新走应用私有目录 + FileProvider，失败则浏览器 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
