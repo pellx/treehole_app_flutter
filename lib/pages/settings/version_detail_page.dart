@@ -6,16 +6,11 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/version_info.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 
-/// 尽量少权限的更新：
-/// - 不申请存储权限：APK 写入应用临时目录
-/// - 不声明 REQUEST_INSTALL_PACKAGES：用 FileProvider 调起系统安装器
-/// - 失败则浏览器打开 APK 链接（仍只需 INTERNET）
 class VersionDetailPage extends StatefulWidget {
   final VersionInfo version;
 
@@ -27,8 +22,6 @@ class VersionDetailPage extends StatefulWidget {
 
 class _VersionDetailPageState extends State<VersionDetailPage> {
   bool _downloading = false;
-
-  static const _downloadTimeout = Duration(minutes: 5);
 
   Future<String?> _getApkUrl() async {
     final v = widget.version;
@@ -50,82 +43,43 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
     return '${base}treehole-v${v.versionNumber}.apk';
   }
 
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 4)),
-    );
-  }
-
-  /// 浏览器下载安装：应用侧除 INTERNET 外无额外权限
-  Future<bool> _openInBrowser(String url) async {
-    final uri = Uri.parse(url);
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    debugPrint('[VersionDetail] 浏览器打开 url=$url ok=$ok');
-    return ok;
-  }
-
   Future<void> _install() async {
     if (_downloading) return;
     setState(() => _downloading = true);
     try {
       final url = await _getApkUrl();
-      if (url == null) {
-        _toast('未配置下载地址');
-        return;
-      }
-      debugPrint('[VersionDetail] 开始下载: $url');
+      if (url == null) return;
 
-      final dir = await getTemporaryDirectory();
+      // 与初版一致：应用私有目录 + open_filex，无需存储权限
+      final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/treehole_update.apk');
-      final opened = await _downloadAndInstall(url, file);
-      if (opened) return;
-
-      // 应用内调起失败：交给系统浏览器（零存储/安装声明）
-      _toast('无法直接安装，已尝试用浏览器打开下载');
-      final browserOk = await _openInBrowser(url);
-      if (!browserOk) {
-        _toast('请手动打开：$url');
-      }
+      await _downloadAndInstall(url, file);
     } catch (e, st) {
       debugPrint('[VersionDetail] 更新失败: $e\n$st');
-      final url = await _getApkUrl();
-      if (url != null && await _openInBrowser(url)) {
-        _toast('下载异常，已改用浏览器打开');
-      } else {
-        _toast('更新失败：$e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新失败：$e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
   }
 
-  /// 返回是否已成功调起安装界面
-  Future<bool> _downloadAndInstall(String url, File file) async {
-    final resp = await http.get(Uri.parse(url)).timeout(_downloadTimeout);
+  Future<void> _downloadAndInstall(String url, File file) async {
+    final resp = await http.get(Uri.parse(url));
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       debugPrint('[VersionDetail] HTTP ${resp.statusCode} url=$url');
-      _toast('下载失败（HTTP ${resp.statusCode}）');
-      return false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('下载失败（HTTP ${resp.statusCode}）')),
+        );
+      }
+      return;
     }
-    if (resp.bodyBytes.isEmpty) {
-      _toast('下载失败：文件为空');
-      return false;
-    }
-
-    await file.writeAsBytes(resp.bodyBytes, flush: true);
-    debugPrint('[VersionDetail] 已写入 ${file.path} (${resp.bodyBytes.length} bytes)');
-    if (!mounted) return false;
-
-    final result = await OpenFilex.open(
-      file.path,
-      type: 'application/vnd.android.package-archive',
-    );
-    debugPrint('[VersionDetail] OpenFilex type=${result.type} message=${result.message}');
-    if (result.type == ResultType.done) return true;
-
-    debugPrint('[VersionDetail] 应用内安装未成功: ${result.message}');
-    return false;
+    await file.writeAsBytes(resp.bodyBytes);
+    if (!mounted) return;
+    await OpenFilex.open(file.path, type: 'application/vnd.android.package-archive');
   }
 
   @override
