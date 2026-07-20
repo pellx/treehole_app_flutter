@@ -9,7 +9,7 @@ class RegisterDimens {
   // ── 页面内容 ──
   static const double contentHPadding = 40;
   /// 阶段标题相对垂直中心
-  static const double phaseTitleVOffset = -44;
+  static const double phaseTitleVOffset = -22;
   static const double phaseTitleHOffset = 0;
   static const double phaseTitleFontSize = 22;
 
@@ -43,7 +43,7 @@ class RegisterDimens {
   static const double errorRetryGap = 24;
 
   // ── 已注册提示 ──
-  static const double registeredVOffset = -7;
+  static const double registeredVOffset = 21;
   static const double registeredHOffset = 0;
   static const double registeredFontSize = 16;
   static const double registeredAlpha = 0.8;
@@ -54,7 +54,7 @@ class RegisterDimens {
   static const double registeredLoginButtonHeight = 37;
   static const double registeredLoginButtonPaddingH = 0;
   static const double registeredLoginButtonPaddingV = 0;
-  static const double registeredLoginButtonVOffset = 58.5;
+  static const double registeredLoginButtonVOffset = 72.5;
   static const double registeredLoginButtonHOffset = -60;
   static const double registeredLoginButtonRadius = 15;
   static const double registeredLoginButtonBorderWidth = 3;
@@ -66,7 +66,7 @@ class RegisterDimens {
   static const double registeredContactButtonHeight = 37.8;
   static const double registeredContactButtonPaddingH = 0;
   static const double registeredContactButtonPaddingV = 0;
-  static const double registeredContactButtonVOffset = 58.8;
+  static const double registeredContactButtonVOffset = 72.8;
   static const double registeredContactButtonHOffset = 50;
   static const double registeredContactButtonRadius = 16;
   static const double registeredContactButtonBorderWidth = 3;
@@ -76,7 +76,7 @@ class RegisterDimens {
   // ── 注册按钮（相对垂直中心；0 约等于原距顶 380）──
   static const double buttonHeight = 40;
   static const double buttonWidth = 100;
-  static const double buttonVOffset = 0;
+  static const double buttonVOffset = 30;
   static const double buttonHOffset = 0;
   static const double buttonRadius = 13;
   static const double buttonBorderWidth = 3;
@@ -84,7 +84,7 @@ class RegisterDimens {
   static const double buttonLetterSpacing = 6;
 
   // ── 验证步骤行（registering 阶段）──
-  static const double stepVOffset = 0;
+  static const double stepVOffset = 30;
   static const double stepHOffset = 0;
   static const double stepGap = 12; // 两行步骤间距
   static const double stepIconSize = 16;
@@ -108,7 +108,7 @@ class RegisterDimens {
   static const double loginImageHOffset = 6;
 
   // ── 取名阶段（naming）──
-  static const double namingInputVOffset = 15;
+  static const double namingInputVOffset = 25;
   static const double namingInputHOffset = 0;
   static const double namingInputHeight = 20;
   static const double namingInputWidth = 200;
@@ -133,9 +133,12 @@ class RegisterDimens {
   static const double namingErrorGap = 12;
 
   // ── 登录阶段（login）──
-  static const double loginInputVOffset = 15;
+  static const double loginInputVOffset = 17;
   static const double loginInputHOffset = 0;
+  /// 注册流程进入 login 时的令牌输入栏高度
   static const double loginInputHeight = 20;
+  /// 用户侧（切换账户「登录用户」）唤出的令牌输入栏高度
+  static const double loginFromUserInputHeight = 20;
   static const double loginInputWidth = 200;
   static const double loginInputFontSize = 17;
   static const double loginHintFontSize = 17;
@@ -180,7 +183,7 @@ class RegisterDimens {
   static const double refreshIconSize = 22;
 
   // ── 账户切换「登录用户」输入栏下方提示 ──
-  static const double loginTransferTipGap = 16;
+  static const double loginTransferTipGap = 0;
   static const double loginTransferTipHPadding = 12;
   static const double loginTransferTipFontSize = 12;
   static const double loginTransferTipAlpha = 0.45;

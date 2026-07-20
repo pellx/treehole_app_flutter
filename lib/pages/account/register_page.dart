@@ -158,7 +158,7 @@ class _RegisterPageState extends State<RegisterPage> {
       case 'registered':
         return '设备环境无法注册';
       case 'failed':
-        return '测试未通过';
+        return '测试未通过，请重试';
       case 'registering':
         return '通过一些测试';
       case 'naming':
@@ -986,7 +986,9 @@ class _RegisterPageState extends State<RegisterPage> {
           children: [
             SizedBox(
               width: RegisterDimens.loginInputWidth,
-              height: RegisterDimens.loginInputHeight,
+              height: widget.startAtLogin
+                  ? RegisterDimens.loginFromUserInputHeight
+                  : RegisterDimens.loginInputHeight,
               child: showMask
                   ? GestureDetector(
                       onTap: _submitting
