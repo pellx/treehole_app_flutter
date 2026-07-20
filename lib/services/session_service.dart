@@ -178,9 +178,25 @@ class SessionService {
       return '你已被踢下线';
     }
     if (info.isLocalDue) {
-      return '本机解绑已生效\n你已被踢下线';
+      final lines = <String>['本机解绑已生效', '你已被踢下线'];
+      final hardware = info.actorHardwareLabel;
+      if (hardware != null) lines.add('设备：$hardware');
+      final ip = info.actorIp?.trim();
+      if (ip != null && ip.isNotEmpty) lines.add('IP：$ip');
+      return lines.join('\n');
     }
-    return '你已被踢下线\n操作设备：${info.actorLabel}';
+
+    final lines = <String>['你已被踢下线', '操作设备：${info.actorLabel}'];
+    final hardware = info.actorHardwareLabel;
+    // 备注名与硬件不同时再补一行型号
+    if (hardware != null && hardware != info.actorLabel) {
+      lines.add('型号：$hardware');
+    }
+    final ip = info.actorIp?.trim();
+    if (ip != null && ip.isNotEmpty) {
+      lines.add('IP：$ip');
+    }
+    return lines.join('\n');
   }
 
   /// Socket.IO：本机旧 session 被新签发顶掉

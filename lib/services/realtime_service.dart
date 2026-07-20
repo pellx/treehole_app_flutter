@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
-/// `binding.unbound` 推送摘要（含踢人设备）
+/// `binding.unbound` 推送摘要（含踢人设备，字段对齐 README 附录 E）
 class BindingUnboundInfo {
   final String reason;
   final int? deviceId;
@@ -9,6 +9,9 @@ class BindingUnboundInfo {
   final int? actorDeviceId;
   final String? actorDeviceDisplayName;
   final String? actorDeviceName;
+  final String? actorIp;
+  final String? actorBrand;
+  final String? actorModel;
   final String? at;
 
   const BindingUnboundInfo({
@@ -18,17 +21,39 @@ class BindingUnboundInfo {
     this.actorDeviceId,
     this.actorDeviceDisplayName,
     this.actorDeviceName,
+    this.actorIp,
+    this.actorBrand,
+    this.actorModel,
     this.at,
   });
 
-  /// 展示用踢人设备名：自定义名 → 系统名 → 设备 id
+  /// 展示用踢人设备名：自定义名 → 系统名 → 品牌型号 → 设备 id
   String get actorLabel {
     final custom = actorDeviceDisplayName?.trim();
     if (custom != null && custom.isNotEmpty) return custom;
     final name = actorDeviceName?.trim();
     if (name != null && name.isNotEmpty) return name;
+    final hardware = actorHardwareLabel;
+    if (hardware != null) return hardware;
     if (actorDeviceId != null) return '设备 #$actorDeviceId';
     return '未知设备';
+  }
+
+  /// 品牌 + 型号（有则拼一行）
+  String? get actorHardwareLabel {
+    final brand = actorBrand?.trim();
+    final model = actorModel?.trim();
+    if ((brand == null || brand.isEmpty) && (model == null || model.isEmpty)) {
+      return null;
+    }
+    if (brand != null &&
+        brand.isNotEmpty &&
+        model != null &&
+        model.isNotEmpty) {
+      if (model.toLowerCase().startsWith(brand.toLowerCase())) return model;
+      return '$brand $model';
+    }
+    return (model != null && model.isNotEmpty) ? model : brand;
   }
 
   bool get isRemoteUnbind => reason == 'remote_unbind';
@@ -56,6 +81,9 @@ class BindingUnboundInfo {
       actorDeviceId: asInt(map['actor_device_id']),
       actorDeviceDisplayName: asStr(map['actor_device_display_name']),
       actorDeviceName: asStr(map['actor_device_name']),
+      actorIp: asStr(map['actor_ip']),
+      actorBrand: asStr(map['actor_brand']),
+      actorModel: asStr(map['actor_model']),
       at: asStr(map['at']),
     );
   }
