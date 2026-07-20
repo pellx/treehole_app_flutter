@@ -11,6 +11,7 @@ import 'avatar_storage.dart';
 import 'binding_cache.dart';
 import 'device_credential_store.dart';
 import 'device_fingerprint.dart';
+import 'realtime_service.dart';
 import 'storage.dart';
 
 /// Session 管理服务
@@ -26,8 +27,6 @@ import 'storage.dart';
 ///   3. 无 session 或无效 → 用 user_token + device_secret 申请
 ///      - DEVICE_NOT_BOUND（正式解绑后）→ 同上，清账号并尝试其他账户
 class SessionService {
-  SessionService._();
-
   static final SessionService instance = SessionService._();
 
   /// 本机仍视为已登录的绑定状态（冷却期内不踢下线）
@@ -36,9 +35,24 @@ class SessionService {
   /// 正在进行的 ensureSession 调用，用于让并发调用者等待而非直接失败
   Completer<bool>? _pending;
 
+  /// WS 推送处理中，避免与 ensureSession 重入打架
+  Completer<void>? _wsHandling;
+  bool _insideWsHandler = false;
+
   /// 最近一次 session 校验通过的时间；短期内重复调用跳过网络校验
   DateTime? _lastValidatedAt;
   static const _validationCacheTtl = Duration(minutes: 5);
+
+  SessionService._() {
+    RealtimeService.instance.bindHandlers(
+      bindingUnbound: () {
+        unawaited(handleBindingUnboundFromWs());
+      },
+      sessionInvalidated: () {
+        unawaited(handleSessionInvalidatedFromWs());
+      },
+    );
+  }
 
   /// 使校验缓存失效（收到 401 等 session 失效信号时调用）
   void invalidate() => _lastValidatedAt = null;
@@ -47,18 +61,83 @@ class SessionService {
   ///
   /// 返回 true 表示 session 已就绪可用，false 表示无法获取 session。
   Future<bool> ensureSession() async {
+    if (!_insideWsHandler && _wsHandling != null) {
+      await _wsHandling!.future;
+    }
     if (_pending != null) return _pending!.future;
     _pending = Completer<bool>();
     try {
       final result = await _ensureSessionInternal();
+      if (result) {
+        await _syncRealtime();
+      } else {
+        RealtimeService.instance.disconnect();
+      }
       _pending!.complete(result);
       return result;
     } catch (e) {
+      RealtimeService.instance.disconnect();
       _pending!.complete(false);
       rethrow;
     } finally {
       _pending = null;
     }
+  }
+
+  /// Socket.IO：他机解绑 / 本机到期解绑
+  Future<void> handleBindingUnboundFromWs() async {
+    if (_wsHandling != null) return _wsHandling!.future;
+    _wsHandling = Completer<void>();
+    _insideWsHandler = true;
+    try {
+      debugPrint('[SessionService] WS binding.unbound → failover');
+      invalidate();
+      RealtimeService.instance.disconnect();
+      final token = await DeviceCredentialStore.getUserExternalToken();
+      await _failoverAfterUnbound(
+        failedToken: token,
+        extraCandidates: const [],
+      );
+      if (await DeviceCredentialStore.hasActiveSession()) {
+        await _syncRealtime();
+      }
+    } catch (e) {
+      debugPrint('[SessionService] handleBindingUnboundFromWs: $e');
+    } finally {
+      _insideWsHandler = false;
+      _wsHandling!.complete();
+      _wsHandling = null;
+    }
+  }
+
+  /// Socket.IO：本机旧 session 被新签发顶掉
+  Future<void> handleSessionInvalidatedFromWs() async {
+    if (_wsHandling != null) return _wsHandling!.future;
+    _wsHandling = Completer<void>();
+    _insideWsHandler = true;
+    try {
+      debugPrint('[SessionService] WS session.invalidated → recreate');
+      invalidate();
+      RealtimeService.instance.disconnect();
+      await DeviceCredentialStore.clearSession();
+      await ensureSession();
+    } catch (e) {
+      debugPrint('[SessionService] handleSessionInvalidatedFromWs: $e');
+    } finally {
+      _insideWsHandler = false;
+      _wsHandling!.complete();
+      _wsHandling = null;
+    }
+  }
+
+  Future<void> _syncRealtime() async {
+    final id = await DeviceCredentialStore.getSessionId();
+    final secret = await DeviceCredentialStore.getSessionSecret();
+    if (id == null || secret == null || secret.isEmpty) {
+      RealtimeService.instance.disconnect();
+      return;
+    }
+    RealtimeService.instance.connect(sessionId: id, sessionSecret: secret);
   }
 
   Future<bool> _ensureSessionInternal() async {
@@ -246,6 +325,7 @@ class SessionService {
     );
     await DeviceCredentialStore.touchLastSessionAt(userToken);
     _lastValidatedAt = DateTime.now();
+    await _syncRealtime();
     return true;
   }
 
@@ -394,6 +474,7 @@ class SessionService {
   /// 清当前账号本地凭证与展示缓存（保留 device_secret）
   Future<void> _evictCurrentAccount(String? token) async {
     invalidate();
+    RealtimeService.instance.disconnect();
     await DeviceCredentialStore.clearUserAccount();
     if (token != null && token.isNotEmpty) {
       await DeviceCredentialStore.removeKnownUserToken(token);
@@ -415,6 +496,7 @@ class SessionService {
   }
 
   Future<void> _markLoggedOutFully() async {
+    RealtimeService.instance.disconnect();
     await PostStorage.setRegistered(false);
     await DeviceCredentialStore.saveKnownUserTokens([]);
     await DeviceCredentialStore.clearAccountSessions();

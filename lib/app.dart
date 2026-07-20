@@ -40,7 +40,7 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // 后台期间他机可能已解绑本机，回前台尽早清登录 / 切号
+      // 后台期间他机可能已解绑本机，回前台尽早清登录 / 切号，并重连 WS
       SessionService.instance.invalidate();
       _ensureSession();
     }
