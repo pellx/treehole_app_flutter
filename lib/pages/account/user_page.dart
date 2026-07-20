@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
+import '../../services/account_display.dart';
 import '../../services/avatar_storage.dart';
 import '../../services/binding_cache.dart';
 import '../../services/session_service.dart';
@@ -42,11 +43,24 @@ class _UserPageState extends State<UserPage> {
     super.initState();
     _nameController.text = PostStorage.getDisplayName() ?? PostStorage.getUserName();
     _nameFocus.addListener(_onNameFocusChange);
+    _reloadAccountUi();
+    // 预取绑定列表与切号锁，进入子页时首帧即可正确展示
+    _prefetchFuture = BindingCache.prefetchAll();
+    accountDisplayEpoch.addListener(_onAccountDisplayChanged);
+  }
+
+  void _onAccountDisplayChanged() {
+    if (!mounted) return;
+    _reloadAccountUi();
+    _prefetchFuture = BindingCache.prefetchAll();
+  }
+
+  void _reloadAccountUi() {
+    _nameController.text =
+        PostStorage.getDisplayName() ?? PostStorage.getUserName();
     _loadExternalToken();
     _loadAvatar();
     _loadProfile();
-    // 预取绑定列表与切号锁，进入子页时首帧即可正确展示
-    _prefetchFuture = BindingCache.prefetchAll();
   }
 
   /// 点到输入框外导致失焦时退出编辑；延后一帧以免与「提交」按钮抢序
@@ -62,7 +76,7 @@ class _UserPageState extends State<UserPage> {
 
   Future<void> _loadAvatar() async {
     final bytes = await AvatarStorage.load();
-    if (mounted && bytes != null) setState(() => _avatarBytes = bytes);
+    if (mounted) setState(() => _avatarBytes = bytes);
   }
 
   /// 从存储选择一张图片作为头像并保存到本地（与发帖页相同的文件选择方式）
@@ -125,6 +139,7 @@ class _UserPageState extends State<UserPage> {
 
   @override
   void dispose() {
+    accountDisplayEpoch.removeListener(_onAccountDisplayChanged);
     _nameFocus.removeListener(_onNameFocusChange);
     _nameController.dispose();
     _nameFocus.dispose();
@@ -391,11 +406,7 @@ class _UserPageState extends State<UserPage> {
     await Navigator.of(context).push(topDownRoute(const SwitchAccountPage()));
     if (!mounted) return;
     // 切号后立刻用本地已写入的昵称刷新，再拉 profile/令牌/头像
-    _nameController.text =
-        PostStorage.getDisplayName() ?? PostStorage.getUserName();
-    _loadExternalToken();
-    _loadAvatar();
-    _loadProfile();
+    _reloadAccountUi();
     _prefetchFuture = BindingCache.prefetchAll();
   }
 

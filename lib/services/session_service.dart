@@ -10,6 +10,7 @@ import '../models/device_fingerprint.dart';
 import '../app_navigator.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens_accent.dart';
+import 'account_display.dart';
 import 'api.dart';
 import 'avatar_storage.dart';
 import 'binding_cache.dart';
@@ -95,8 +96,8 @@ class SessionService {
     _insideWsHandler = true;
     try {
       debugPrint('[SessionService] WS binding.unbound → failover');
-      // 先弹窗再清凭证，避免导航重建后丢 context
-      unawaited(_showKickedDialog(info));
+      // 立刻退回贴文页，避免停在用户/绑定子页
+      _popToPostsPage();
       invalidate();
       RealtimeService.instance.disconnect();
       final token = await DeviceCredentialStore.getUserExternalToken();
@@ -107,12 +108,28 @@ class SessionService {
       if (await DeviceCredentialStore.hasActiveSession()) {
         await _syncRealtime();
       }
+      // 切号或登出后刷新贴文页抽屉 / 用户页展示
+      notifyAccountDisplayChanged();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_showKickedDialog(info));
+      });
     } catch (e) {
       debugPrint('[SessionService] handleBindingUnboundFromWs: $e');
     } finally {
       _insideWsHandler = false;
       _wsHandling!.complete();
       _wsHandling = null;
+    }
+  }
+
+  /// 弹出到根路由（贴文 / SquarePage）
+  void _popToPostsPage() {
+    final nav = appNavigatorKey.currentState;
+    if (nav == null) return;
+    try {
+      nav.popUntil((route) => route.isFirst);
+    } catch (e) {
+      debugPrint('[SessionService] popToPostsPage: $e');
     }
   }
 

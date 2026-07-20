@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
+import '../../services/account_display.dart';
 import '../../services/avatar_storage.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
@@ -48,7 +49,13 @@ class _SquarePageState extends State<SquarePage> {
 
   Future<void> _loadAvatar() async {
     final bytes = await AvatarStorage.load();
-    if (mounted && bytes != null) setState(() => _avatarBytes = bytes);
+    if (mounted) setState(() => _avatarBytes = bytes);
+  }
+
+  void _onAccountDisplayChanged() {
+    if (!mounted) return;
+    _loadAvatar();
+    setState(() {});
   }
 
   void _onNeedCommentRefresh(int postId) {
@@ -64,10 +71,12 @@ class _SquarePageState extends State<SquarePage> {
     _loadAvatar();
     _initLoad();
     ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
+    accountDisplayEpoch.addListener(_onAccountDisplayChanged);
   }
 
   @override
   void dispose() {
+    accountDisplayEpoch.removeListener(_onAccountDisplayChanged);
     super.dispose();
   }
 
