@@ -32,3 +32,9 @@ alwaysApply: true
 - 简单问题不启动子代理、不建 todo list；工具调用能并行就并行，减少往返轮次
 - 总结控制在必要长度，不使用装饰性表格/标题堆砌
 - 对话收尾：有代码/规则改动时按 `git-commit-on-done.mdc` 提交，再结束回复
+
+## 禁止跑 Flutter CLI
+
+- **不要**执行 `flutter` / `dart pub` / `flutter pub get` / `flutter run` / `flutter test` / `flutter analyze` 等命令
+- 改 `pubspec.yaml` 后只改文件并提示用户自行 `flutter pub get`；Agent 不代跑
+- 依赖是否装好、能否编译，由用户在本机验证
