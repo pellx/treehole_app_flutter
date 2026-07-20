@@ -264,6 +264,10 @@ class _SquarePageState extends State<SquarePage> {
       setState(() {});
     }
 
+    // 已加载帖重新拉详情：署名/匿名可能已变（服务端返回当前 display 名）
+    final reloadedIds = await _reloadLoadedPostsFromApi();
+    freshIds.addAll(reloadedIds);
+
     for (final p in _posts) {
       _postsNeedCommentRefresh.add(p.id);
     }
@@ -273,7 +277,7 @@ class _SquarePageState extends State<SquarePage> {
       _postsNeedCommentRefresh.remove(p.id);
     }
     unawaited(Future.wait(top.map(
-      // 刚从 API 拉的新帖评论列表已最新，跳过重复 getPost
+      // 刚从 API 拉过的帖评论列表已最新，跳过重复 getPost
       (p) => _refreshPostComments(p, fetchLatest: !freshIds.contains(p.id)),
     )));
     final elapsed = stopwatch.elapsedMilliseconds;
@@ -283,6 +287,51 @@ class _SquarePageState extends State<SquarePage> {
     _loading = false;
   }
 
+  /// 对当前列表中的帖并行 getPost，作者变化则写回 UI / Hive
+  /// 返回成功拉到的帖 id，供评论刷新跳过二次请求
+  Future<Set<int>> _reloadLoadedPostsFromApi() async {
+    if (_posts.isEmpty) return {};
+    final snapshot = List<Post>.from(_posts);
+    final results = await Future.wait(snapshot.map((p) async {
+      try {
+        final post = await ApiService.getPost(p.id);
+        if (post != null) await PostStorage.savePost(post);
+        return post;
+      } catch (_) {
+        return null;
+      }
+    }));
+
+    final okIds = <int>{};
+    var uiChanged = false;
+    for (final fresh in results) {
+      if (fresh == null) continue;
+      okIds.add(fresh.id);
+      final idx = _posts.indexWhere((p) => p.id == fresh.id);
+      if (idx < 0) continue;
+      final old = _posts[idx];
+      if (old.author == fresh.author &&
+          old.isAnonymous == fresh.isAnonymous &&
+          old.updateAt == fresh.updateAt &&
+          _sameIntList(old.comments, fresh.comments)) {
+        continue;
+      }
+      _posts[idx] = fresh;
+      uiChanged = true;
+    }
+    if (uiChanged && mounted) setState(() {});
+    return okIds;
+  }
+
+  static bool _sameIntList(List<int> a, List<int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增
   // fetchLatest=false 时直接用 post.comments（帖子刚从 API 拉取，列表已最新，省一次 getPost）
   Future<void> _refreshPostComments(Post post, {bool fetchLatest = true}) async {
@@ -290,7 +339,13 @@ class _SquarePageState extends State<SquarePage> {
     if (fetchLatest) {
       try {
         final fresh = await ApiService.getPost(post.id);
-        newIds = fresh?.comments ?? post.comments;
+        if (fresh != null) {
+          await PostStorage.savePost(fresh);
+          _replaceLoadedPost(fresh);
+          newIds = fresh.comments;
+        } else {
+          newIds = post.comments;
+        }
       } catch (_) {
         newIds = post.comments;
       }
@@ -327,6 +382,21 @@ class _SquarePageState extends State<SquarePage> {
 
     await PostStorage.updatePostCommentIds(post.id, newIds);
     if (mounted) setState(() => _comments[post.id] = merged);
+  }
+
+  /// 用最新帖数据替换列表中同 id 项（署名变更时刷新 UI）
+  void _replaceLoadedPost(Post fresh) {
+    final idx = _posts.indexWhere((p) => p.id == fresh.id);
+    if (idx < 0) return;
+    final old = _posts[idx];
+    if (old.author == fresh.author &&
+        old.isAnonymous == fresh.isAnonymous &&
+        old.updateAt == fresh.updateAt &&
+        _sameIntList(old.comments, fresh.comments)) {
+      return;
+    }
+    _posts[idx] = fresh;
+    if (mounted) setState(() {});
   }
 
   Widget _drawerTile(IconData icon, String title, {VoidCallback? onTap}) {
