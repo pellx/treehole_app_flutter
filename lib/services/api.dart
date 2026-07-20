@@ -578,6 +578,7 @@ class ApiService {
     required int postId,
     required String content,
     String? author,
+    bool isAnonymous = false,
     int? toId,
   }) async {
     try {
@@ -586,6 +587,7 @@ class ApiService {
       final body = <String, dynamic>{
         'postId': postId,
         'content': content,
+        'is_anonymous': isAnonymous,
         'session_id': sessionId,
         'session_secret': sessionSecret,
       };

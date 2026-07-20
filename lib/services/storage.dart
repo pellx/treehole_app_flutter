@@ -90,6 +90,7 @@ class PostStorage {
       'title': post.title,
       'content': post.content,
       'author': post.author,
+      'is_anonymous': post.isAnonymous,
       'created_at': post.createdAt,
       'update_at': post.updateAt,
       'images': post.images.map((e) => {'file_name': e.fileName}).toList(),
@@ -203,6 +204,7 @@ class PostStorage {
       'post_id': comment.postId,
       'to_id': comment.toId,
       'author': comment.author,
+      'is_anonymous': comment.isAnonymous,
       'content': comment.content,
       'created_at': comment.createdAt,
     });

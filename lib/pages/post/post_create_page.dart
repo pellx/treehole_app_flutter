@@ -314,6 +314,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       title: title,
       content: _contentController.text,
       author: _hasAuthor ? _userName : '',
+      isAnonymous: !_hasAuthor,
       uploaded: _uploaded,
       sessionId: sessionId,
       sessionSecret: sessionSecret,

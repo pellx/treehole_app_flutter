@@ -769,6 +769,7 @@ class _PostCardState extends State<PostCard> {
       postId: widget.post.id,
       content: content,
       author: author,
+      isAnonymous: !_commentHasAuthor,
     );
     if (!mounted) return;
     if (result != null) {
@@ -827,26 +828,27 @@ class _PostCardState extends State<PostCard> {
           ),
         ),
         SizedBox(width: AppDimens.commentDateRightMargin),
-        GestureDetector(
-          onTap: () {
-            setState(() {
-              _expandedAuthorId = isExpanded ? null : comment.id;
-            });
-          },
-          child: SizedBox(
-            width: isExpanded ? null : AppDimens.commentAuthorWidth,
-            child: Text(
-              comment.author,
-              maxLines: isExpanded ? 1000 : 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontSize: AppDimens.commentAuthorFontSize,
-                color: pc.commentAuthor,
+        if (comment.displayAuthor.isNotEmpty)
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _expandedAuthorId = isExpanded ? null : comment.id;
+              });
+            },
+            child: SizedBox(
+              width: isExpanded ? null : AppDimens.commentAuthorWidth,
+              child: Text(
+                comment.displayAuthor,
+                maxLines: isExpanded ? 1000 : 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.left,
+                style: TextStyle(
+                  fontSize: AppDimens.commentAuthorFontSize,
+                  color: pc.commentAuthor,
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -1200,18 +1202,18 @@ class _TitleAuthorRow extends StatelessWidget {
         maxLines: 2,
         textDirection: TextDirection.ltr)..layout();
     final ap = TextPainter(
-        text: TextSpan(text: '@${post.author}', style: authorStyle),
+        text: TextSpan(text: '@${post.displayAuthor}', style: authorStyle),
         maxLines: 1,
         textDirection: TextDirection.ltr);
-    if (post.author.isNotEmpty) ap.layout();
+    if (post.displayAuthor.isNotEmpty) ap.layout();
 
     final titleW = tp.width;
-    final authorW = post.author.isEmpty ? 0 : ap.width + AppDimens.paddingLg;
+    final authorW = post.displayAuthor.isEmpty ? 0 : ap.width + AppDimens.paddingLg;
 
     return ConstrainedBox(
       constraints:
           BoxConstraints(maxWidth: AppDimens.titleAuthorMaxWidth),
-      child: post.author.isEmpty
+      child: post.displayAuthor.isEmpty
           ? Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle)
           : titleW + authorW <= AppDimens.titleAuthorMaxWidth
               // 不超宽：都 inline，不换行
@@ -1223,7 +1225,7 @@ class _TitleAuthorRow extends StatelessWidget {
                     SizedBox(width: AppDimens.paddingLg),
                     Text('@', style: atStyle),
                     SizedBox(width: AppDimens.authorAtGap),
-                    Text(post.author, style: authorStyle),
+                    Text(post.displayAuthor, style: authorStyle),
                   ],
                 )
               // 超宽
@@ -1252,7 +1254,7 @@ class _TitleAuthorRow extends StatelessWidget {
                           child: Text.rich(
                             TextSpan(children: [
                               TextSpan(text: '@', style: atStyle),
-                              TextSpan(text: post.author, style: authorStyle),
+                              TextSpan(text: post.displayAuthor, style: authorStyle),
                             ]),
                             softWrap: true,
                           ),
@@ -1285,7 +1287,7 @@ class _TitleAuthorRow extends StatelessWidget {
                             child: Text.rich(
                               TextSpan(children: [
                                 TextSpan(text: '@', style: atStyle),
-                                TextSpan(text: post.author, style: authorStyle),
+                                TextSpan(text: post.displayAuthor, style: authorStyle),
                               ]),
                             ),
                           )
@@ -1293,7 +1295,7 @@ class _TitleAuthorRow extends StatelessWidget {
                           Text.rich(
                             TextSpan(children: [
                               TextSpan(text: '@', style: atStyle),
-                              TextSpan(text: post.author, style: authorStyle),
+                              TextSpan(text: post.displayAuthor, style: authorStyle),
                             ]),
                           ),
                       ],
