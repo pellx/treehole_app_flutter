@@ -4,7 +4,7 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 /// Socket.IO 实时通道（附录 E）
 ///
 /// 同源 path `/node/socket.io`，握手 auth：`session_id` + `session_secret`。
-/// 事件：`binding.unbound` / `session.invalidated`。
+/// 事件：`binding.unbound` / `session.invalidated` / `test.tick`。
 class RealtimeService {
   RealtimeService._();
 
@@ -21,7 +21,19 @@ class RealtimeService {
   VoidCallback? onBindingUnbound;
   VoidCallback? onSessionInvalidated;
 
+  /// UI：连接状态文案（未连接 / 连接中 / 已连接 / 错误…）
+  final ValueNotifier<String> connectionLabel =
+      ValueNotifier<String>('未连接');
+
+  /// UI：最近一次 `test.tick` 展示文案；未测时为 null
+  final ValueNotifier<String?> lastTestTickLabel =
+      ValueNotifier<String?>(null);
+
+  /// UI：是否正在跑连通性测试
+  final ValueNotifier<bool> testRunning = ValueNotifier<bool>(false);
+
   bool get isConnected => _socket?.connected == true;
+  bool get isTestRunning => testRunning.value;
 
   /// 用当前 session 建连；同 session 已连接则跳过。
   void connect({
@@ -33,6 +45,7 @@ class RealtimeService {
 
     disconnect();
     _connectedSessionId = sessionId;
+    connectionLabel.value = '连接中…';
 
     final socket = io.io(
       _host,
@@ -57,12 +70,18 @@ class RealtimeService {
 
     socket.onConnect((_) {
       debugPrint('[Realtime] connected session=$boundSessionId');
+      connectionLabel.value = '已连接';
     });
     socket.onDisconnect((_) {
       debugPrint('[Realtime] disconnected session=$boundSessionId');
+      testRunning.value = false;
+      if (_connectedSessionId == boundSessionId) {
+        connectionLabel.value = '未连接';
+      }
     });
     socket.onConnectError((err) {
       debugPrint('[Realtime] connect error: $err');
+      connectionLabel.value = '连接失败';
     });
     socket.onError((err) {
       debugPrint('[Realtime] error: $err');
@@ -78,12 +97,22 @@ class RealtimeService {
       debugPrint('[Realtime] session.invalidated: $data');
       onSessionInvalidated?.call();
     });
+    socket.on('test.tick', (data) {
+      if (_connectedSessionId != boundSessionId) return;
+      final n = _readTickN(data);
+      final at = _readTickAt(data);
+      lastTestTickLabel.value =
+          n == null ? '收到 tick（解析失败）' : 'n=$n${at != null ? '  $at' : ''}';
+      debugPrint('[Realtime] test.tick: $data');
+    });
   }
 
   void disconnect() {
+    stopTest();
     final socket = _socket;
     _socket = null;
     _connectedSessionId = null;
+    connectionLabel.value = '未连接';
     if (socket == null) return;
     try {
       socket.clearListeners();
@@ -93,7 +122,31 @@ class RealtimeService {
     }
   }
 
-  /// 仅绑一次回调，避免重复注册
+  /// 向服务端 emit `test.start`，每秒收 `test.tick`
+  bool startTest() {
+    final socket = _socket;
+    if (socket == null || !socket.connected) {
+      lastTestTickLabel.value = '未连接，无法开始测试';
+      testRunning.value = false;
+      return false;
+    }
+    lastTestTickLabel.value = '等待 tick…';
+    socket.emit('test.start');
+    testRunning.value = true;
+    return true;
+  }
+
+  void stopTest() {
+    if (!testRunning.value) return;
+    try {
+      _socket?.emit('test.stop');
+    } catch (e) {
+      debugPrint('[Realtime] test.stop: $e');
+    }
+    testRunning.value = false;
+  }
+
+  /// 仅绑一次业务回调，避免重复注册
   void bindHandlers({
     required VoidCallback bindingUnbound,
     required VoidCallback sessionInvalidated,
@@ -102,5 +155,22 @@ class RealtimeService {
     _handlersBound = true;
     onBindingUnbound = bindingUnbound;
     onSessionInvalidated = sessionInvalidated;
+  }
+
+  static int? _readTickN(dynamic data) {
+    if (data is Map) {
+      final raw = data['n'];
+      if (raw is num) return raw.toInt();
+      return int.tryParse('$raw');
+    }
+    return null;
+  }
+
+  static String? _readTickAt(dynamic data) {
+    if (data is Map) {
+      final raw = data['at'];
+      if (raw is String && raw.isNotEmpty) return raw;
+    }
+    return null;
   }
 }

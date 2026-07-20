@@ -17,6 +17,7 @@ import '../../widgets/post_card.dart';
 import '../post/post_create_page.dart';
 import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
+import '../settings/user_settings_page.dart';
 import '../settings/version_page.dart';
 import '../settings/version_detail_page.dart';
 import '../account/register_page.dart';
@@ -328,16 +329,15 @@ class _SquarePageState extends State<SquarePage> {
   }
 
   void _showSettings() {
-    final color = Theme.of(context).colorScheme.onSurface;
     showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', const UserSettingsPage()); }),
+            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
+            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
             _settingsTile(Icons.palette_outlined, '颜色模式', () { Navigator.pop(context); navigateToSettingsPage(context, '颜色模式', const ColorModePage()); }),
             SizedBox(height: 16),
           ],
