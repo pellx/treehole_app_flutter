@@ -200,32 +200,28 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       _errorMessage = null;
     });
 
-    // 确保 session 就绪后再上传
+    // session 暂为选填：尽量拿，失败也允许上传；署名才带 user_id
     debugPrint('[PostCreate._pickFiles] 调用 ensureSession...');
     final sessionOk = await SessionService.instance.ensureSession();
-    final isRegistered = PostStorage.isRegistered();
-    debugPrint('[PostCreate._pickFiles] ensureSession=$sessionOk, isRegistered=$isRegistered, '
-        'lastError=${ApiService.lastError}');
-    if (!sessionOk) {
-      if (!mounted) return;
-      setState(() {
-        _uploading = false;
-      });
-      if (isRegistered) {
-        _setError('会话验证失败，请检查网络后重试');
-      } else {
-        _setError('请先注册账号');
-      }
-      return;
-    }
+    debugPrint('[PostCreate._pickFiles] ensureSession=$sessionOk, '
+        'hasAuthor=$_hasAuthor, lastError=${ApiService.lastError}');
+    final userId = _hasAuthor ? _userName : null;
 
     // 并行上传
     final futures = <Future<UploadResult?>>[];
     for (final img in pickedImages) {
-      futures.add(ApiService.uploadFile(PostUploadType.image, File(img.path)));
+      futures.add(ApiService.uploadFile(
+        PostUploadType.image,
+        File(img.path),
+        userId: userId,
+      ));
     }
     if (pickedAttachment != null) {
-      futures.add(ApiService.uploadFile(PostUploadType.attachment, File(pickedAttachment.path)));
+      futures.add(ApiService.uploadFile(
+        PostUploadType.attachment,
+        File(pickedAttachment.path),
+        userId: userId,
+      ));
     }
 
     final results = await Future.wait(futures);

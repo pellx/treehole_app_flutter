@@ -743,33 +743,30 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
+  /// 优先用资料里的 user_display_id，没有再回退本地昵称
+  String get _commentUserName {
+    final display = PostStorage.getDisplayName()?.trim();
+    if (display != null && display.isNotEmpty) return display;
+    return PostStorage.getUserName();
+  }
+
   Future<void> _submitComment() async {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
 
-    // 确保 session 就绪后再提交评论
+    // session 暂为选填：尽量拿，失败也允许裸评论
     debugPrint('[PostCard._submitComment] 调用 ensureSession...');
     final sessionOk = await SessionService.instance.ensureSession();
-    final isRegistered = PostStorage.isRegistered();
-    debugPrint('[PostCard._submitComment] ensureSession=$sessionOk, isRegistered=$isRegistered, '
-        'lastError=${ApiService.lastError}');
-    if (!sessionOk) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isRegistered ? '会话验证失败，请检查网络后重试' : '请先注册账号'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+    debugPrint('[PostCard._submitComment] ensureSession=$sessionOk, '
+        'hasAuthor=$_commentHasAuthor, lastError=${ApiService.lastError}');
 
-    final author = _commentHasAuthor ? PostStorage.getUserName() : '';
+    final userId = _commentHasAuthor ? _commentUserName : null;
     final result = await ApiService.createComment(
       postId: widget.post.id,
       content: content,
-      author: author,
+      author: userId,
       isAnonymous: !_commentHasAuthor,
+      userId: userId,
     );
     if (!mounted) return;
     if (result != null) {
