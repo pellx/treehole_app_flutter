@@ -11,10 +11,14 @@ import '../../models/post_draft.dart';
 import '../../widgets/image_overlay.dart';
 import '../../models/upload_result.dart';
 import '../../services/api.dart';
+import '../../services/session_service.dart';
 import '../../services/storage.dart';
+import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/moderation_feedback.dart';
+import '../account/register_page.dart';
+import '../settings/settings_navigation.dart';
 
 class PostCreatePage extends StatefulWidget {
   const PostCreatePage({super.key});
@@ -70,6 +74,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
+    SessionService.instance.ensureSession();
     _contentExpandCtrl = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: AppDimens.postCreateContentExpandAnimMs),
@@ -190,6 +195,25 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       _errorMessage = null;
     });
 
+    // 确保 session 就绪后再上传
+    debugPrint('[PostCreate._pickFiles] 调用 ensureSession...');
+    final sessionOk = await SessionService.instance.ensureSession();
+    final isRegistered = PostStorage.isRegistered();
+    debugPrint('[PostCreate._pickFiles] ensureSession=$sessionOk, isRegistered=$isRegistered, '
+        'lastError=${ApiService.lastError}');
+    if (!sessionOk) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+      });
+      if (isRegistered) {
+        _setError('会话验证失败，请检查网络后重试');
+      } else {
+        _setError('请先注册账号');
+      }
+      return;
+    }
+
     // 并行上传
     final futures = <Future<UploadResult?>>[];
     for (final img in pickedImages) {
@@ -259,11 +283,41 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
 
     setState(() { _submitting = true; _errorMessage = null; });
 
+    // 确保 session 就绪后再提交
+    debugPrint('[PostCreate._submit] 调用 ensureSession...');
+    final sessionOk = await SessionService.instance.ensureSession();
+    final isRegistered = PostStorage.isRegistered();
+    final sid = await DeviceCredentialStore.getSessionId();
+    final ssec = await DeviceCredentialStore.getSessionSecret();
+    final utok = await DeviceCredentialStore.getUserExternalToken();
+    final dsec = await DeviceCredentialStore.getDeviceSecret();
+    debugPrint('[PostCreate._submit] ensureSession=$sessionOk, isRegistered=$isRegistered, '
+        'sessionId=$sid, sessionSecret=${ssec != null ? "${ssec.length}chars" : "NULL"}, '
+        'userToken=${utok != null ? "${utok.length}chars" : "NULL"}, '
+        'deviceSecret=${dsec != null ? "${dsec.length}chars" : "NULL"}, '
+        'lastError=${ApiService.lastError}');
+    if (!sessionOk) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      if (isRegistered) {
+        _setError('会话验证失败，请检查网络后重试');
+      } else {
+        _setError('请先注册账号');
+      }
+      return;
+    }
+
+    final sessionId = sid ?? 0;
+    final sessionSecret = ssec ?? '';
+
     final draft = PostDraft(
       title: title,
       content: _contentController.text,
       author: _hasAuthor ? _userName : '',
+      isAnonymous: !_hasAuthor,
       uploaded: _uploaded,
+      sessionId: sessionId,
+      sessionSecret: sessionSecret,
     );
 
     final post = await ApiService.createPost(draft);
@@ -585,7 +639,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
     final animMs = AppDimens.postCreateLabelAnimMs;
     final curve = Curves.easeOut;
     return GestureDetector(
-      onTap: () => _titleFocus.requestFocus(),
+      onTap: () => PostStorage.isRegistered() ? _titleFocus.requestFocus() : Navigator.of(context).push(bottomUpRoute(const RegisterPage())),
       child: Container(
         height: AppDimens.postCreateTitleMinHeight,
         padding: EdgeInsets.symmetric(horizontal: AppDimens.postCreateInputPaddingH),
@@ -607,11 +661,12 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                   fontSize: float ? AppDimens.postCreateLabelFontSizeSmall : AppDimens.postCreateLabelFontSizeLarge,
                   color: float ? colors.postCreate.titleLabelFloat : colors.postCreate.titleLabelRest,
                 ),
-                child: const Text('标题'),
+                child: Text(PostStorage.isRegistered() ? '标题' : '请注册'),
               ),
             ),
-            // TextField：始终存在，动画上下移动
-            AnimatedPositioned(
+            // TextField：只在已注册时渲染
+            if (PostStorage.isRegistered())
+              AnimatedPositioned(
               duration: Duration(milliseconds: animMs),
               curve: curve,
               left: 0,
@@ -646,7 +701,9 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
             .clamp(0.0, double.infinity)
             .toDouble();
 
-    return Container(
+    return GestureDetector(
+      onTap: () => PostStorage.isRegistered() ? _contentFocus.requestFocus() : Navigator.of(context).push(bottomUpRoute(const RegisterPage())),
+      child: Container(
       key: key,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -691,10 +748,11 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
                         ? colors.postCreate.contentLabelFloat
                         : colors.postCreate.contentLabelRest,
                   ),
-                  child: const Text('内容'),
+                  child: Text(PostStorage.isRegistered() ? '内容' : '目前未绑定账号'),
                 ),
               ),
-              AnimatedPositioned(
+              if (PostStorage.isRegistered())
+                AnimatedPositioned(
                 duration: Duration(milliseconds: animMs),
                 curve: curve,
                 left: 0,
@@ -727,6 +785,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
           ),
         );
       },
+    ),
     ),
     );
   }
@@ -843,16 +902,18 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
   // ---- 第二部分：按钮行 ----
 
   Widget _buttonRow(AppColors colors, bool hasFiles, bool needsExpand) {
+    final registered = PostStorage.isRegistered();
     return Row(
       children: [
-        _iconOnlyButton(
-          icon: Icons.upload_file,
-          onTap: _uploading ? null : _pickFiles,
-          iconColor: colors.postCreate.uploadBtnIcon,
-          fillColor: colors.postCreate.fieldBg,
-          borderColor: colors.postCreate.uploadBtnBorder,
-        ),
-        SizedBox(width: AppDimens.postCreateActionRowGap),
+        if (registered)
+          _iconOnlyButton(
+            icon: Icons.upload_file,
+            onTap: _uploading ? null : _pickFiles,
+            iconColor: colors.postCreate.uploadBtnIcon,
+            fillColor: colors.postCreate.fieldBg,
+            borderColor: colors.postCreate.uploadBtnBorder,
+          ),
+        if (registered) SizedBox(width: AppDimens.postCreateActionRowGap),
         if (hasFiles)
           _iconOnlyButton(
             icon: Icons.delete_outline,

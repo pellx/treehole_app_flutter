@@ -43,9 +43,8 @@ const Map<String, String> moderationFeedback = {
 /// 后端返回格式如: "图片违规: pornographic_adultContent(95%)"
 /// 或: "内容违规: political_n(100%), political_figure(100%)"
 String getModerationMessage(String rawReason) {
-  if (rawReason.isEmpty) {
-    return '内容包含违规信息 ';
-  }
+  if (rawReason.isEmpty) return '发布失败';
+  if (!rawReason.contains('审核') && !rawReason.contains('违规')) return rawReason;
 
   // 提取 body 文本（去掉前缀如 "图片违规: " 或 "内容违规: "）
   final colonIndex = rawReason.indexOf(': ');

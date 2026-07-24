@@ -6,12 +6,428 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/comment.dart';
+import '../models/device_fingerprint.dart';
 import '../models/post.dart';
+import 'pow.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
-import '../models/version_info.dart';
+import 'storage.dart';
+import 'device_credential_store.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
+
+/// POST /user/register 返回的凭证
+class RegisterResult {
+  final String userToken;
+  final String deviceSecret;
+
+  const RegisterResult({required this.userToken, required this.deviceSecret});
+}
+
+/// POST /user/session/create 返回的 session 凭证
+class SessionCreateResult {
+  final int sessionId;
+  final String sessionSecret;
+
+  const SessionCreateResult({required this.sessionId, required this.sessionSecret});
+}
+
+/// POST /user/login 返回轮换后的 device_secret（不签发 session）
+class LoginResult {
+  final String deviceSecret;
+  final int bindingId;
+  final int deviceId;
+
+  const LoginResult({
+    required this.deviceSecret,
+    required this.bindingId,
+    required this.deviceId,
+  });
+
+  factory LoginResult.fromJson(Map<String, dynamic> json) {
+    final secret = json['device_secret'] as String?;
+    if (secret == null || secret.isEmpty) {
+      throw FormatException('响应缺少 device_secret');
+    }
+    return LoginResult(
+      deviceSecret: secret,
+      bindingId: (json['binding_id'] as num).toInt(),
+      deviceId: (json['device_id'] as num).toInt(),
+    );
+  }
+}
+
+/// POST /user/binding/create 响应
+class BindingCreateResult {
+  final int bindingId;
+  final int deviceId;
+
+  const BindingCreateResult({
+    required this.bindingId,
+    required this.deviceId,
+  });
+
+  factory BindingCreateResult.fromJson(Map<String, dynamic> json) {
+    return BindingCreateResult(
+      bindingId: (json['binding_id'] as num).toInt(),
+      deviceId: (json['device_id'] as num).toInt(),
+    );
+  }
+}
+
+/// POST /user/binding/last-switch 本机切号锁状态
+class LastSwitchResult {
+  final DateTime? switchedAt;
+  final int? ownerUserId;
+  final DateTime? expiresAt;
+
+  const LastSwitchResult({
+    this.switchedAt,
+    this.ownerUserId,
+    this.expiresAt,
+  });
+
+  bool get isLocked {
+    final exp = expiresAt;
+    return exp != null && exp.isAfter(DateTime.now());
+  }
+
+  factory LastSwitchResult.fromJson(Map<String, dynamic> json) {
+    return LastSwitchResult(
+      switchedAt: _parseApiDateTime(json['switched_at']),
+      ownerUserId: (json['owner_user_id'] as num?)?.toInt(),
+      expiresAt: _parseApiDateTime(json['expires_at']),
+    );
+  }
+}
+
+/// POST /user/session/validate 返回的校验结果
+class SessionValidateResult {
+  final bool valid;
+  final int? userId;
+
+  const SessionValidateResult({required this.valid, this.userId});
+}
+
+/// POST /user/profile 返回的用户资料
+class UserProfileResult {
+  final String userDisplayId;
+  final DateTime? displayIdChangedAt;
+  final DateTime? tokenResetAt;
+
+  const UserProfileResult({
+    required this.userDisplayId,
+    this.displayIdChangedAt,
+    this.tokenResetAt,
+  });
+
+  factory UserProfileResult.fromJson(Map<String, dynamic> json) {
+    return UserProfileResult(
+      userDisplayId: json['user_display_id'] as String? ?? '',
+      displayIdChangedAt: DateTime.tryParse(json['display_id_changed_at']?.toString() ?? ''),
+      tokenResetAt: DateTime.tryParse(json['token_reset_at']?.toString() ?? ''),
+    );
+  }
+}
+
+/// POST /user/rename 成功返回
+class RenameResult {
+  final String userDisplayId;
+  final DateTime? displayIdChangedAt;
+
+  const RenameResult({required this.userDisplayId, this.displayIdChangedAt});
+}
+
+/// POST /user/token/reset 返回的新令牌
+class TokenResetResult {
+  final String userToken;
+  final DateTime? tokenResetAt;
+
+  const TokenResetResult({required this.userToken, this.tokenResetAt});
+}
+
+DateTime? _parseApiDateTime(dynamic raw) {
+  if (raw is! String || raw.isEmpty) return null;
+  return DateTime.tryParse(raw);
+}
+
+/// POST /user/devices2user 单条设备
+class BoundDeviceInfo {
+  /// user_device_binding.id
+  final int bindingId;
+  final int deviceId;
+  /// active / unbind_pending
+  final String status;
+  final DateTime? unbindRequestedAt;
+  /// 仅 delete 响应可能带回；列表侧可用 requested+2天推算
+  final DateTime? unbindExecuteAt;
+  final String? deviceDisplayName;
+  final String? deviceName;
+  final String? fingerprint;
+  final String? brand;
+  final String? model;
+  final String? os;
+  /// CPU 架构（如 arm64-v8a；iOS 为 machine）
+  final String? abi;
+  /// 是否当前主设备
+  final bool isPrimary;
+  /// 是否主设备迁移目标（待生效）
+  final bool isPrimaryPending;
+
+  const BoundDeviceInfo({
+    required this.bindingId,
+    required this.deviceId,
+    this.status = 'active',
+    this.unbindRequestedAt,
+    this.unbindExecuteAt,
+    this.deviceDisplayName,
+    this.deviceName,
+    this.fingerprint,
+    this.brand,
+    this.model,
+    this.os,
+    this.abi,
+    this.isPrimary = false,
+    this.isPrimaryPending = false,
+  });
+
+  bool get isUnbindPending => status == 'unbind_pending';
+
+  /// 正式解绑时间：优先接口字段，否则申请时间 + 2 天
+  DateTime? get effectiveUnbindExecuteAt {
+    if (unbindExecuteAt != null) return unbindExecuteAt;
+    final requested = unbindRequestedAt;
+    if (requested == null) return null;
+    return requested.add(const Duration(days: 2));
+  }
+
+  factory BoundDeviceInfo.fromJson(Map<String, dynamic> json) {
+    final bindingRaw = json['id'] ?? json['binding_id'];
+    final deviceRaw = json['device_id'];
+    if (bindingRaw is! num) {
+      throw FormatException('响应缺少绑定 id');
+    }
+    if (deviceRaw is! num) {
+      throw FormatException('响应缺少 device_id');
+    }
+    return BoundDeviceInfo(
+      bindingId: bindingRaw.toInt(),
+      deviceId: deviceRaw.toInt(),
+      status: json['status'] as String? ?? 'active',
+      unbindRequestedAt: _parseApiDateTime(json['unbind_requested_at']),
+      unbindExecuteAt: _parseApiDateTime(json['unbind_execute_at']),
+      deviceDisplayName: json['device_display_name'] as String?,
+      deviceName: json['device_name'] as String?,
+      fingerprint: json['fingerprint'] as String?,
+      brand: json['brand'] as String?,
+      model: json['model'] as String?,
+      os: json['os'] as String?,
+      abi: json['abi'] as String?,
+      isPrimary: json['is_primary'] as bool? ?? false,
+      isPrimaryPending: json['is_primary_pending'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': bindingId,
+        'device_id': deviceId,
+        'status': status,
+        'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
+        'unbind_execute_at': unbindExecuteAt?.toIso8601String(),
+        'device_display_name': deviceDisplayName,
+        'device_name': deviceName,
+        'fingerprint': fingerprint,
+        'brand': brand,
+        'model': model,
+        'os': os,
+        'abi': abi,
+        'is_primary': isPrimary,
+        'is_primary_pending': isPrimaryPending,
+      };
+}
+
+/// POST /user/devices2user 完整响应
+class BoundDevicesResult {
+  final List<BoundDeviceInfo> devices;
+  final int? primaryDeviceId;
+  final int? primaryDevicePendingId;
+  final DateTime? primaryTransferRequestedAt;
+  final DateTime? primaryTransferExecuteAt;
+
+  const BoundDevicesResult({
+    required this.devices,
+    this.primaryDeviceId,
+    this.primaryDevicePendingId,
+    this.primaryTransferRequestedAt,
+    this.primaryTransferExecuteAt,
+  });
+
+  factory BoundDevicesResult.fromJson(Map<String, dynamic> json) {
+    final list = json['devices'];
+    if (list is! List) {
+      throw FormatException('响应缺少 devices');
+    }
+    return BoundDevicesResult(
+      devices: list
+          .whereType<Map>()
+          .map((e) => BoundDeviceInfo.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
+      primaryDevicePendingId:
+          (json['primary_device_pending_id'] as num?)?.toInt(),
+      primaryTransferRequestedAt:
+          _parseApiDateTime(json['primary_transfer_requested_at']),
+      primaryTransferExecuteAt:
+          _parseApiDateTime(json['primary_transfer_execute_at']),
+    );
+  }
+}
+
+/// POST /user/binding/primary-transfer 响应
+class PrimaryTransferResult {
+  final int? primaryDeviceId;
+  final int? primaryDevicePendingId;
+  final DateTime? primaryTransferRequestedAt;
+  final DateTime? primaryTransferExecuteAt;
+
+  const PrimaryTransferResult({
+    this.primaryDeviceId,
+    this.primaryDevicePendingId,
+    this.primaryTransferRequestedAt,
+    this.primaryTransferExecuteAt,
+  });
+
+  factory PrimaryTransferResult.fromJson(Map<String, dynamic> json) {
+    return PrimaryTransferResult(
+      primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
+      primaryDevicePendingId:
+          (json['primary_device_pending_id'] as num?)?.toInt(),
+      primaryTransferRequestedAt:
+          _parseApiDateTime(json['primary_transfer_requested_at']),
+      primaryTransferExecuteAt:
+          _parseApiDateTime(json['primary_transfer_execute_at']),
+    );
+  }
+}
+
+/// POST /user/user2device 单条账户绑定
+class BoundAccountInfo {
+  /// user_device_binding.id
+  final int bindingId;
+  final int deviceId;
+  final String status;
+  final DateTime? unbindRequestedAt;
+  final String userToken;
+  final String? userDisplayId;
+  /// 用户注册时间
+  final DateTime? createdAt;
+
+  const BoundAccountInfo({
+    required this.bindingId,
+    required this.deviceId,
+    this.status = 'active',
+    this.unbindRequestedAt,
+    required this.userToken,
+    this.userDisplayId,
+    this.createdAt,
+  });
+
+  bool get isUnbindPending => status == 'unbind_pending';
+
+  factory BoundAccountInfo.fromJson(Map<String, dynamic> json) {
+    final bindingRaw = json['id'] ?? json['binding_id'];
+    // 缓存仅存遮罩预览；接口返回完整 token
+    final token = (json['user_token'] as String?)?.trim() ?? '';
+    final preview = (json['user_token_preview'] as String?)?.trim() ?? '';
+    return BoundAccountInfo(
+      bindingId: (bindingRaw as num).toInt(),
+      deviceId: (json['device_id'] as num).toInt(),
+      status: json['status'] as String? ?? 'active',
+      unbindRequestedAt: _parseApiDateTime(json['unbind_requested_at']),
+      userToken: token.isNotEmpty ? token : preview,
+      userDisplayId: json['user_display_id'] as String?,
+      createdAt: _parseApiDateTime(json['created_at']),
+    );
+  }
+
+  /// 本地缓存用：不含完整 user_token，仅留遮罩预览供列表展示
+  Map<String, dynamic> toCacheJson() {
+    final token = userToken.trim();
+    String? preview;
+    if (token.isNotEmpty) {
+      const head = 4;
+      const tail = 4;
+      preview = token.length > head + tail
+          ? '${token.substring(0, head)}...${token.substring(token.length - tail)}'
+          : token;
+    }
+    return {
+      'id': bindingId,
+      'device_id': deviceId,
+      'status': status,
+      'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
+      'user_display_id': userDisplayId,
+      'created_at': createdAt?.toIso8601String(),
+      if (preview != null) 'user_token_preview': preview,
+    };
+  }
+}
+
+/// POST /user/binding/transfer-request 成功响应
+class BindingTransferResult {
+  final int fromDeviceId;
+  final int expiresIn;
+  final DateTime? expiresAt;
+
+  const BindingTransferResult({
+    required this.fromDeviceId,
+    required this.expiresIn,
+    this.expiresAt,
+  });
+
+  factory BindingTransferResult.fromJson(Map<String, dynamic> json) {
+    return BindingTransferResult(
+      fromDeviceId: (json['from_device_id'] as num).toInt(),
+      expiresIn: (json['expires_in'] as num?)?.toInt() ?? 0,
+      expiresAt: _parseApiDateTime(json['expires_at']),
+    );
+  }
+}
+
+/// POST /user/binding/delete 成功响应
+class BindingUnbindResult {
+  final int bindingId;
+  final int deviceId;
+  final String status;
+  final DateTime? unbindRequestedAt;
+  final DateTime? unbindExecuteAt;
+
+  const BindingUnbindResult({
+    required this.bindingId,
+    required this.deviceId,
+    required this.status,
+    this.unbindRequestedAt,
+    this.unbindExecuteAt,
+  });
+
+  factory BindingUnbindResult.fromJson(Map<String, dynamic> json) {
+    return BindingUnbindResult(
+      bindingId: (json['id'] as num).toInt(),
+      deviceId: (json['device_id'] as num).toInt(),
+      status: json['status'] as String? ?? 'unbind_pending',
+      unbindRequestedAt: _parseApiDateTime(json['unbind_requested_at']),
+      unbindExecuteAt: _parseApiDateTime(json['unbind_execute_at']),
+    );
+  }
+}
+
+/// PoW 求解结果（challenge_id + nonce）
+class PoWResult {
+  final String challengeId;
+  final int nonce;
+
+  const PoWResult({required this.challengeId, required this.nonce});
+}
 
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
@@ -19,17 +435,55 @@ class ApiService {
   static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
   static const _originalBase = 'https://www.leisure.xin:33433/upload';
   static const _uploadBase = 'https://tree.leisure.xin/node/file-processor/upload';
-  static const _versionBase = 'https://tree.leisure.xin/node/versions';
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
   /// 最近一次 API 调用失败的错误消息（用于前端展示审核拒绝原因）
   static String? lastError;
 
+  /// rename 返回 RENAME_TOO_FREQUENT 时解析出的下次可改时间
+  static DateTime? lastNextRenameAt;
+
+  /// rename 返回 RENAME_TOO_FREQUENT 时解析出的上次改名时间
+  static DateTime? lastDisplayIdChangedAt;
+
+  /// 将链接/网络错误打到 `flutter run` 控制台（用 print 避免 debugPrint 截断）
+  static void logLinkError(String op, Object error, [StackTrace? stackTrace]) {
+    print('[LINK_ERROR] op=$op');
+    print('[LINK_ERROR] type=${error.runtimeType}');
+    print('[LINK_ERROR] error=$error');
+    if (stackTrace != null) {
+      print('[LINK_ERROR] stack=\n$stackTrace');
+    }
+  }
+
   static Future<List<int>> getIdList() async {
     if (_useMock) return [12, 345, 6789];
-    final res = await http.get(Uri.parse('$_base/idList')).timeout(_timeout);
-    return List<int>.from(jsonDecode(res.body));
+    final url = '$_base/idList';
+    try {
+      print('[LINK] GET $url');
+      final res = await http
+          .get(
+            Uri.parse(url),
+            headers: const {
+              'Accept': 'application/json',
+              'User-Agent':
+                  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Treehole/1.0',
+            },
+          )
+          .timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        lastError = 'idList HTTP ${res.statusCode}';
+        logLinkError('getIdList', Exception('${lastError!} body=${res.body}'));
+        throw Exception(lastError);
+      }
+      print('[LINK] getIdList OK status=${res.statusCode} bytes=${res.bodyBytes.length}');
+      return List<int>.from(jsonDecode(res.body));
+    } catch (e, st) {
+      lastError = e.toString();
+      logLinkError('getIdList $url', e, st);
+      rethrow;
+    }
   }
 
   static Future<Post?> getPost(int id) async {
@@ -37,12 +491,12 @@ class ApiService {
     try {
       final res = await http.get(Uri.parse('$_base/$id')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] getPost($id) status=${res.statusCode}');
+        logLinkError('getPost($id)', Exception('HTTP ${res.statusCode}'));
         return null;
       }
       return Post.fromJson(jsonDecode(res.body));
-    } catch (e) {
-      debugPrint('[ApiService] getPost($id) error: $e');
+    } catch (e, st) {
+      logLinkError('getPost($id)', e, st);
       return null;
     }
   }
@@ -55,14 +509,14 @@ class ApiService {
           : '$_thumbBase/$fileName';
       final res = await http.get(Uri.parse(url)).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] downloadThumbnail($fileName) status=${res.statusCode}');
+        logLinkError('downloadThumbnail($fileName)', Exception('HTTP ${res.statusCode}'));
         return null;
       }
       final bytes = res.bodyBytes;
       final dims = await _decodeSize(bytes);
       return ThumbnailData(bytes: bytes, width: dims.$1, height: dims.$2);
-    } catch (e) {
-      debugPrint('[ApiService] downloadThumbnail($fileName) error: $e');
+    } catch (e, st) {
+      logLinkError('downloadThumbnail($fileName)', e, st);
       return null;
     }
   }
@@ -79,8 +533,20 @@ class ApiService {
 
   static Future<UploadResult?> uploadFile(PostUploadType type, File file) async {
     try {
+      final sessionId = await DeviceCredentialStore.getSessionId();
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret();
+      if (sessionId == null || sessionSecret == null || sessionSecret.isEmpty) {
+        debugPrint('[ApiService] uploadFile: session 未就绪 (id=$sessionId)');
+        lastError = 'missing_session';
+        return null;
+      }
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
+      // multipart 的 fields 在 NestJS 中晚于 Guard 解析，session 须同时放 header
+      request.headers['x-session-id'] = sessionId.toString();
+      request.headers['x-session-secret'] = sessionSecret;
       request.fields['type'] = type.apiValue;
+      request.fields['session_id'] = sessionId.toString();
+      request.fields['session_secret'] = sessionSecret;
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
       final streamed = await request.send().timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
@@ -143,12 +609,18 @@ class ApiService {
     required int postId,
     required String content,
     String? author,
+    bool isAnonymous = false,
     int? toId,
   }) async {
     try {
+      final sessionId = await DeviceCredentialStore.getSessionId() ?? 0;
+      final sessionSecret = await DeviceCredentialStore.getSessionSecret() ?? '';
       final body = <String, dynamic>{
         'postId': postId,
         'content': content,
+        'is_anonymous': isAnonymous,
+        'session_id': sessionId,
+        'session_secret': sessionSecret,
       };
       if (author != null && author.isNotEmpty) body['author'] = author;
       if (toId != null) body['toId'] = toId;
@@ -172,43 +644,650 @@ class ApiService {
   }
 
   /// 从 API 错误响应中提取 message 字段
+  /// Nest 可能返回 string，或 ValidationPipe 的 string[]
   static String _parseErrorMessage(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
-      return data['message'] as String? ?? '操作失败';
+      final msg = data['message'];
+      if (msg is String && msg.isNotEmpty) return msg;
+      if (msg is List && msg.isNotEmpty) {
+        return msg.map((e) => e.toString()).join('；');
+      }
+      return '操作失败';
     } catch (_) {
       return '操作失败';
     }
   }
 
-  // ---- 版本更新 ----
+  // ---- 账号注册 ----
 
-  static Future<VersionInfo?> getLatestVersion({String platform = 'android'}) async {
+  static const _userBase = 'https://tree.leisure.xin/node/user';
+
+  /// POST /user/check — 纯查询，不消耗 Turnstile/PoW，返回该指纹是否已注册
+  static Future<bool?> check({
+    required DeviceFingerprint deviceFingerPrint,
+  }) async {
     try {
-      final res = await http.get(Uri.parse('$_versionBase/latest?platform=$platform')).timeout(_timeout);
-      if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] getLatestVersion status=${res.statusCode}');
-        return null;
+      final res = await http
+          .post(Uri.parse('$_userBase/check'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'device_finger_print': deviceFingerPrint.toJson(),
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data['registered'] as bool? ?? false;
       }
-      return VersionInfo.fromJson(jsonDecode(res.body));
+      debugPrint('[ApiService] check status=${res.statusCode} body=${res.body}');
+      return null;
     } catch (e) {
-      debugPrint('[ApiService] getLatestVersion error: $e');
+      debugPrint('[ApiService] check error: $e');
       return null;
     }
   }
 
-  static Future<List<VersionInfo>> getAllVersions({String platform = 'android'}) async {
+  /// POST /user/register — 为新设备创建用户，返回 user_token + device_secret
+  static Future<RegisterResult?> register({
+    required String userDisplayId,
+    required DeviceFingerprint deviceFingerPrint,
+    required String verificationTurnstile,
+    required PoWResult verificationPow,
+  }) async {
     try {
-      final res = await http.get(Uri.parse('$_versionBase?platform=$platform')).timeout(_timeout);
-      if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] getAllVersions status=${res.statusCode}');
-        return [];
+      final requestBody = {
+        'user_display_id': userDisplayId,
+        'device_finger_print': deviceFingerPrint.toJson(),
+        'verification_turnstile': verificationTurnstile,
+        'verification_pow': {
+          'challenge_id': verificationPow.challengeId,
+          'nonce': verificationPow.nonce,
+        },
+      };
+      final res = await http
+          .post(Uri.parse('$_userBase/register'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(requestBody))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final token = data['user_token'] as String?;
+        final secret = data['device_secret'] as String?;
+        if (token != null && secret != null) {
+          return RegisterResult(userToken: token, deviceSecret: secret);
+        }
+        lastError = '响应缺少字段';
+        debugPrint('[ApiService] register missing fields');
+      } else {
+        lastError = _parseErrorMessage(res.body);
+        debugPrint(
+            '[ApiService] register status=${res.statusCode} body=${res.body}');
       }
-      final list = jsonDecode(res.body) as List;
-      return list.map((j) => VersionInfo.fromJson(j as Map<String, dynamic>)).toList();
+      return null;
     } catch (e) {
-      debugPrint('[ApiService] getAllVersions error: $e');
-      return [];
+      lastError = '网络连接失败';
+      debugPrint('[ApiService] register error: $e');
+      return null;
+    }
+  }
+
+  /// 获取 PoW hashcash challenge
+  static Future<PoWChallenge?> getPoWChallenge() async {
+    try {
+      final res = await http.get(Uri.parse('$_userBase/pow-challenge')).timeout(_timeout);
+      if (!_isHttpSuccess(res.statusCode)) {
+        debugPrint('[ApiService] getPoWChallenge status=${res.statusCode}');
+        return null;
+      }
+      return PoWChallenge.fromJson(jsonDecode(res.body));
+    } catch (e) {
+      debugPrint('[ApiService] getPoWChallenge error: $e');
+      return null;
+    }
+  }
+
+  /// POST /user/login — 建绑并轮换 device_secret（**不**签发 session）
+  /// 请求不带旧 secret；成功后须用响应中的新 device_secret 覆盖本地，再调 session/create。
+  static Future<LoginResult?> login({
+    required String userToken,
+    required String fingerprintHash,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/login'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_token': userToken,
+                'fingerprint_hash': fingerprintHash,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        try {
+          return LoginResult.fromJson(data);
+        } catch (e) {
+          debugPrint('[ApiService] login parse error: $e body=${res.body}');
+          lastError = '登录响应解析失败';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] login status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] login error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/create — 建绑并校验现有 device_secret（不轮换、不签发 session）
+  static Future<BindingCreateResult?> createBinding({
+    required String userToken,
+    required String fingerprintHash,
+    required String deviceSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/create'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_token': userToken,
+                'fingerprint_hash': fingerprintHash,
+                'device_secret': deviceSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        try {
+          return BindingCreateResult.fromJson(data);
+        } catch (e) {
+          debugPrint(
+              '[ApiService] createBinding parse error: $e body=${res.body}');
+          lastError = '建绑响应解析失败';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] createBinding status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] createBinding error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/session/create — 申请 session（一设备一有效 session；异用户切号写 2 天锁）
+  /// 需要 user_token + device_secret + fingerprint_hash
+  static Future<SessionCreateResult?> createSession({
+    required String userToken,
+    required String deviceSecret,
+    required String fingerprintHash,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/session/create'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'user_token': userToken,
+                'device_secret': deviceSecret,
+                'fingerprint_hash': fingerprintHash,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final sessionId = data['session_id'] as int?;
+        final sessionSecret = data['session_secret'] as String?;
+        if (sessionId != null && sessionSecret != null) {
+          return SessionCreateResult(sessionId: sessionId, sessionSecret: sessionSecret);
+        }
+        debugPrint('[ApiService] createSession missing fields: ${res.body}');
+        return null;
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] createSession status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] createSession error: $e');
+      return null;
+    }
+  }
+
+  /// POST /user/binding/last-switch — 本机上次切号锁（需有效 session）
+  static Future<LastSwitchResult?> getLastSwitch({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/last-switch'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return LastSwitchResult.fromJson(data);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] getLastSwitch status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] getLastSwitch error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/session/validate — 校验 session 是否有效
+  static Future<SessionValidateResult?> validateSession({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/session/validate'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return SessionValidateResult(
+          valid: data['valid'] == true,
+          userId: data['user_id'] as int?,
+        );
+      }
+      debugPrint('[ApiService] validateSession status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] validateSession error: $e');
+      return null;
+    }
+  }
+
+  /// POST /user/profile — 查询名字与令牌重置时间
+  static Future<UserProfileResult?> getUserProfile({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/profile'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return UserProfileResult.fromJson(data);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] getUserProfile status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] getUserProfile error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/rename — session 鉴权改名（两周冷却）
+  static Future<RenameResult?> rename({
+    required int sessionId,
+    required String sessionSecret,
+    required String newName,
+  }) async {
+    lastNextRenameAt = null;
+    lastDisplayIdChangedAt = null;
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/rename'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'new_name': newName,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final name = data['user_display_id'] as String?;
+        if (name == null || name.isEmpty) {
+          lastError = '响应缺少 user_display_id';
+          return null;
+        }
+        return RenameResult(
+          userDisplayId: name,
+          displayIdChangedAt:
+              DateTime.tryParse(data['display_id_changed_at']?.toString() ?? ''),
+        );
+      }
+      lastError = _parseErrorMessage(res.body);
+      _parseRenameCooldownFields(res.body);
+      debugPrint('[ApiService] rename status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] rename error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// 从 RENAME_TOO_FREQUENT 错误体解析冷却时间字段
+  static void _parseRenameCooldownFields(String body) {
+    try {
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      lastDisplayIdChangedAt =
+          DateTime.tryParse(data['display_id_changed_at']?.toString() ?? '');
+      lastNextRenameAt =
+          DateTime.tryParse(data['next_rename_at']?.toString() ?? '');
+    } catch (_) {
+      // 旧后端可能无此字段，忽略
+    }
+  }
+
+  /// POST /user/token/reset — 重置用户令牌（无冷却）
+  static Future<TokenResetResult?> resetUserToken({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/token/reset'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final token = data['user_token'] as String?;
+        if (token == null) {
+          lastError = '响应缺少 user_token';
+          return null;
+        }
+        return TokenResetResult(
+          userToken: token,
+          tokenResetAt: DateTime.tryParse(data['token_reset_at']?.toString() ?? ''),
+        );
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint('[ApiService] resetUserToken status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] resetUserToken error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/devices2user — 当前账户绑定的设备列表（含主设备字段）
+  static Future<BoundDevicesResult?> listBoundDevices({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/devices2user'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        try {
+          return BoundDevicesResult.fromJson(
+              jsonDecode(res.body) as Map<String, dynamic>);
+        } catch (e) {
+          debugPrint(
+              '[ApiService] listBoundDevices parse error: $e body=${res.body}');
+          lastError = '设备数据解析失败（后端可能未返回绑定 id，请重新编译部署）';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] listBoundDevices status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] listBoundDevices error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/primary-transfer — 主设备迁移（须在主设备 session 上发起）
+  static Future<PrimaryTransferResult?> requestPrimaryTransfer({
+    required int sessionId,
+    required String sessionSecret,
+    required int bindingId,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/primary-transfer'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'id': bindingId,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        return PrimaryTransferResult.fromJson(
+            jsonDecode(res.body) as Map<String, dynamic>);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] requestPrimaryTransfer status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] requestPrimaryTransfer error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/primary-transfer-cancel — 取消主设备迁移
+  static Future<bool> cancelPrimaryTransfer({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/primary-transfer-cancel'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) return true;
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] cancelPrimaryTransfer status=${res.statusCode} body=${res.body}');
+      return false;
+    } catch (e) {
+      debugPrint('[ApiService] cancelPrimaryTransfer error: $e');
+      lastError = '网络连接失败';
+      return false;
+    }
+  }
+
+  /// POST /user/user2device — 当前设备绑定的账户列表
+  static Future<List<BoundAccountInfo>?> listBoundAccounts({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/user2device'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final list = data['users'];
+        if (list is! List) {
+          lastError = '响应缺少 users';
+          return null;
+        }
+        return list
+            .whereType<Map>()
+            .map((e) => BoundAccountInfo.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] listBoundAccounts status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] listBoundAccounts error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/transfer-request — 本机发起跨设备转移申请（15 分钟有效）
+  static Future<BindingTransferResult?> requestBindingTransfer({
+    required int sessionId,
+    required String sessionSecret,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/transfer-request'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        try {
+          return BindingTransferResult.fromJson(data);
+        } catch (e) {
+          debugPrint(
+              '[ApiService] requestBindingTransfer parse error: $e body=${res.body}');
+          lastError = '转移申请响应解析失败';
+          return null;
+        }
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] requestBindingTransfer status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] requestBindingTransfer error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/rename — 按绑定 id 修改设备显示名
+  static Future<String?> renameBinding({
+    required int sessionId,
+    required String sessionSecret,
+    required int bindingId,
+    required String newName,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/rename'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'id': bindingId,
+                'new_name': newName,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data['device_display_name'] as String?;
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] renameBinding status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] renameBinding error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/delete — 申请解绑（进入 unbind_pending，约 2 天后正式解绑）
+  static Future<BindingUnbindResult?> deleteBinding({
+    required int sessionId,
+    required String sessionSecret,
+    required int bindingId,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/delete'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'id': bindingId,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return BindingUnbindResult.fromJson(data);
+      }
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] deleteBinding status=${res.statusCode} body=${res.body}');
+      return null;
+    } catch (e) {
+      debugPrint('[ApiService] deleteBinding error: $e');
+      lastError = '网络连接失败';
+      return null;
+    }
+  }
+
+  /// POST /user/binding/delete-cancel — 取消解绑申请，恢复 active
+  static Future<bool> cancelDeleteBinding({
+    required int sessionId,
+    required String sessionSecret,
+    required int bindingId,
+  }) async {
+    try {
+      final res = await http
+          .post(Uri.parse('$_userBase/binding/delete-cancel'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'session_id': sessionId,
+                'session_secret': sessionSecret,
+                'id': bindingId,
+              }))
+          .timeout(_timeout);
+      if (_isHttpSuccess(res.statusCode)) return true;
+      lastError = _parseErrorMessage(res.body);
+      debugPrint(
+          '[ApiService] cancelDeleteBinding status=${res.statusCode} body=${res.body}');
+      return false;
+    } catch (e) {
+      debugPrint('[ApiService] cancelDeleteBinding error: $e');
+      lastError = '网络连接失败';
+      return false;
     }
   }
 

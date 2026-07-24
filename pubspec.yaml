@@ -1,7 +1,7 @@
 name: treehole
 description: 树通 - 学生的匿名论坛
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+2002
 
 environment:
   sdk: ^3.8.0
@@ -20,6 +20,12 @@ dependencies:
   image_picker: ^1.1.0
   file_picker: ^10.0.0
   flutter_colorpicker: ^1.1.0
+  device_info_plus: ^11.3.3
+  crypto: ^3.0.6
+  flutter_secure_storage: ^9.2.4
+  uuid: ^4.5.1
+  webview_flutter: ^4.10.0
+  socket_io_client: ^3.1.2
 
 dev_dependencies:
   flutter_test:
@@ -31,6 +37,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon.png
+    - assets/mu/
     - assets/numbers/
     - assets/expand_icon.svg
     - assets/plus.svg
@@ -45,3 +52,4 @@ flutter_launcher_icons:
   image_path: "assets/icon.png"
   adaptive_icon_background: "#121212"
   adaptive_icon_foreground: "assets/icon.png"
+

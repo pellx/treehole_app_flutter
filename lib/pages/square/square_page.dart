@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
+import '../../services/account_display.dart';
+import '../../services/avatar_storage.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -18,6 +17,9 @@ import '../../widgets/post_card.dart';
 import '../post/post_create_page.dart';
 import '../settings/color_mode_page.dart';
 import '../settings/settings_navigation.dart';
+import '../settings/user_settings_page.dart';
+import '../account/register_page.dart';
+import '../account/user_page.dart';
 
 class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
@@ -39,37 +41,20 @@ class _SquarePageState extends State<SquarePage> {
   bool _postButtonVisible = true;                   // 发布按钮显隐
   bool _commentOverlayActive = false;                // 评论浮层活跃时禁止滚动唤出
   Duration _postButtonAnimDuration = const Duration(milliseconds: 300);
-  late final TextEditingController _nameController;
-  final FocusNode _nameFocus = FocusNode();
-  bool _editingName = false;
-
-  Future<File> _avatarSavePath() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/avatar.jpg');
-  }
 
   Future<void> _loadAvatar() async {
-    final file = await _avatarSavePath();
-    if (await file.exists()) {
-      final bytes = await file.readAsBytes();
-      if (mounted) setState(() => _avatarBytes = bytes);
-    }
+    final bytes = await AvatarStorage.load();
+    if (mounted) setState(() => _avatarBytes = bytes);
   }
 
-  Future<void> _pickAvatar() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 256);
-    if (picked != null) {
-      final bytes = await File(picked.path).readAsBytes();
-      final saveFile = await _avatarSavePath();
-      await saveFile.writeAsBytes(bytes);
-      if (mounted) setState(() => _avatarBytes = bytes);
-    }
+  void _onAccountDisplayChanged() {
+    if (!mounted) return;
+    _loadAvatar();
+    setState(() {});
   }
 
   void _onNeedCommentRefresh(int postId) {
     if (!_postsNeedCommentRefresh.contains(postId)) return;
-    print('[comment] refreshing postId=$postId');
     final post = _posts.firstWhere((p) => p.id == postId);
     _refreshPostComments(post);
     _postsNeedCommentRefresh.remove(postId);
@@ -78,29 +63,15 @@ class _SquarePageState extends State<SquarePage> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: PostStorage.getUserName());
-    _nameFocus.addListener(() {
-      if (!_nameFocus.hasFocus && _editingName) {
-        _saveName();
-      }
-    });
     _loadAvatar();
     _initLoad();
     ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
-  }
-
-  void _saveName() {
-    final name = _nameController.text.trim();
-    final saved = name.isEmpty ? '匿名用户' : name;
-    _nameController.text = saved;
-    PostStorage.saveUserName(saved);
-    if (mounted) setState(() => _editingName = false);
+    accountDisplayEpoch.addListener(_onAccountDisplayChanged);
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _nameFocus.dispose();
+    accountDisplayEpoch.removeListener(_onAccountDisplayChanged);
     super.dispose();
   }
 
@@ -117,17 +88,26 @@ class _SquarePageState extends State<SquarePage> {
   //
   Future<void> _initLoad() async {
     // 1. 获取最新 ID 列表
+    Object? idListError;
     try {
       _allIds = await ApiService.getIdList();
       await PostStorage.saveIdList(_allIds);
-    } catch (_) {
+    } catch (e, st) {
+      idListError = e;
+      print('[SquarePage][LINK_ERROR] getIdList failed: $e');
+      print('[SquarePage][LINK_ERROR] stack=\n$st');
+      ApiService.logLinkError('SquarePage._initLoad', e, st);
       _allIds = PostStorage.getIdList(); // API 失败，用本地缓存
     }
 
     if (_allIds.isEmpty) {
+      final msg = idListError != null
+          ? '加载失败：${idListError.toString()}'
+          : '加载失败，请检查网络';
+      print('[SquarePage][LINK_ERROR] show error: $msg');
       setState(() {
         _loading = false;
-        _error = '加载失败，请检查网络';
+        _error = msg;
       });
       return;
     }
@@ -166,36 +146,38 @@ class _SquarePageState extends State<SquarePage> {
         .toList();
     if (batch.isEmpty) return;
 
-    print('[loadMore] start, _loading=$_loading, _loadedCount=$_loadedCount');
     setState(() => _loading = true);
     for (final id in batch) {
       _loadingIds.add(id);
     }
 
-    // 并行请求所有帖子（缓存 → API fallback）
+    // 并行请求所有帖子（缓存 → API fallback）；fresh 标记该帖是否刚从 API 拉取
     final futures = batch.map((id) async {
-      final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
+      final cached = PostStorage.getPost(id);
+      if (cached != null) return (post: cached, fresh: false);
+      final post = await ApiService.getPost(id);
       if (post != null) await PostStorage.savePost(post);
-      return post;
+      return (post: post, fresh: true);
     }).toList();
 
-    // 按顺序处理结果，拿到一篇显示一篇
+    // 按顺序处理结果，拿到一篇立即显示，评论走缓存 + 后台刷新（不阻塞帖子上屏）
     for (int i = 0; i < futures.length; i++) {
-      final post = await futures[i];
+      final result = await futures[i];
+      final post = result.post;
       _loadingIds.remove(batch[i]);
       if (post != null && !_posts.any((p) => p.id == post.id)) {
-        await _refreshPostComments(post);
+        _comments[post.id] ??= PostStorage.getComments(post.comments);
+        final order = {for (var j = 0; j < _allIds.length; j++) _allIds[j]: j};
         setState(() {
           _posts.add(post);
-          _posts.sort(
-            (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
-          );
+          _posts.sort((a, b) => (order[a.id] ?? 0).compareTo(order[b.id] ?? 0));
         });
+        // 刚从 API 拉的帖子评论列表已是最新，无需再 getPost
+        _refreshPostComments(post, fetchLatest: !result.fresh);
       }
     }
 
     _loadedCount += batch.length;
-    print('[loadMore] done, _loadedCount=$_loadedCount, _posts=${_posts.length}');
     setState(() => _loading = false);
 
     // 后台预下载缩略图，Hive 有就跳过
@@ -212,7 +194,8 @@ class _SquarePageState extends State<SquarePage> {
 
   // ---- 下拉刷新 ----
   Future<void> _refresh() async {
-    print('[refresh] start');
+    // 指示器至少显示 300ms，避免刷新过快时一闪而过
+    final stopwatch = Stopwatch()..start();
     _loading = true;
     List<int> newIds;
     try {
@@ -221,65 +204,144 @@ class _SquarePageState extends State<SquarePage> {
     } catch (_) {
       newIds = PostStorage.getIdList();
     }
-    if (newIds.isEmpty) { _loading = false; return; }
+    if (newIds.isEmpty) {
+      final elapsed = stopwatch.elapsedMilliseconds;
+      if (elapsed < 300) {
+        await Future.delayed(Duration(milliseconds: 300 - elapsed));
+      }
+      _loading = false;
+      return;
+    }
 
     // 移除已不在 ID 列表中的帖子（后端已删除）
+    final newIdSet = newIds.toSet();
     final removedIds = _posts
         .map((p) => p.id)
-        .where((id) => !newIds.contains(id))
+        .where((id) => !newIdSet.contains(id))
         .toList();
-    for (final id in removedIds) {
-      _posts.removeWhere((p) => p.id == id);
-      _comments.remove(id);
-      _postsNeedCommentRefresh.remove(id);
-      await PostStorage.deletePost(id);
-    }
     if (removedIds.isNotEmpty) {
+      for (final id in removedIds) {
+        _posts.removeWhere((p) => p.id == id);
+        _comments.remove(id);
+        _postsNeedCommentRefresh.remove(id);
+      }
       setState(() {});
+      await Future.wait(removedIds.map(PostStorage.deletePost));
     }
 
     final existingIds = _posts.map((p) => p.id).toSet();
     final addedIds = newIds.where((id) => !existingIds.contains(id)).toList();
 
-    final newPosts = <Post>[];
-    for (final id in addedIds) {
-      final post = PostStorage.getPost(id) ?? await ApiService.getPost(id);
-      if (post != null) {
-        await PostStorage.savePost(post);
-        newPosts.add(post);
-      }
-    }
+    // 并行拉取新帖，避免逐篇串行等待；fresh 标记是否刚从 API 拉取
+    final fetched = await Future.wait(addedIds.map((id) async {
+      final cached = PostStorage.getPost(id);
+      if (cached != null) return (post: cached, fresh: false);
+      final post = await ApiService.getPost(id);
+      if (post != null) await PostStorage.savePost(post);
+      return (post: post, fresh: true);
+    }));
+    final newPosts = [for (final r in fetched) if (r.post != null) r.post!];
+    final freshIds = {for (final r in fetched) if (r.fresh && r.post != null) r.post!.id};
 
     _allIds = newIds;
     _loadedCount = _posts.length + newPosts.length;
     if (newPosts.isNotEmpty) {
+      // 先用缓存评论填充，帖子立即完整上屏
+      for (final p in newPosts) {
+        _comments[p.id] ??= PostStorage.getComments(p.comments);
+      }
+      final order = {for (var i = 0; i < _allIds.length; i++) _allIds[i]: i};
       _posts.insertAll(0, newPosts);
-      _posts.sort(
-        (a, b) => _allIds.indexOf(a.id).compareTo(_allIds.indexOf(b.id)),
-      );
+      _posts.sort((a, b) => (order[a.id] ?? 0).compareTo(order[b.id] ?? 0));
       setState(() {});
     }
+
+    // 已加载帖重新拉详情：署名/匿名可能已变（服务端返回当前 display 名）
+    final reloadedIds = await _reloadLoadedPostsFromApi();
+    freshIds.addAll(reloadedIds);
 
     for (final p in _posts) {
       _postsNeedCommentRefresh.add(p.id);
     }
-    for (final post in _posts.take(7)) {
-      if (_postsNeedCommentRefresh.contains(post.id)) {
-        await _refreshPostComments(post);
-        _postsNeedCommentRefresh.remove(post.id);
-      }
+    // 前 7 篇评论后台并行刷新，不阻塞下拉刷新指示器；其余滚动到时再刷
+    final top = _posts.take(7).toList();
+    for (final p in top) {
+      _postsNeedCommentRefresh.remove(p.id);
+    }
+    unawaited(Future.wait(top.map(
+      // 刚从 API 拉过的帖评论列表已最新，跳过重复 getPost
+      (p) => _refreshPostComments(p, fetchLatest: !freshIds.contains(p.id)),
+    )));
+    final elapsed = stopwatch.elapsedMilliseconds;
+    if (elapsed < 800) {
+      await Future.delayed(Duration(milliseconds: 800 - elapsed));
     }
     _loading = false;
-    print('[refresh] done');
+  }
+
+  /// 对当前列表中的帖并行 getPost，作者变化则写回 UI / Hive
+  /// 返回成功拉到的帖 id，供评论刷新跳过二次请求
+  Future<Set<int>> _reloadLoadedPostsFromApi() async {
+    if (_posts.isEmpty) return {};
+    final snapshot = List<Post>.from(_posts);
+    final results = await Future.wait(snapshot.map((p) async {
+      try {
+        final post = await ApiService.getPost(p.id);
+        if (post != null) await PostStorage.savePost(post);
+        return post;
+      } catch (_) {
+        return null;
+      }
+    }));
+
+    final okIds = <int>{};
+    var uiChanged = false;
+    for (final fresh in results) {
+      if (fresh == null) continue;
+      okIds.add(fresh.id);
+      final idx = _posts.indexWhere((p) => p.id == fresh.id);
+      if (idx < 0) continue;
+      final old = _posts[idx];
+      if (old.author == fresh.author &&
+          old.isAnonymous == fresh.isAnonymous &&
+          old.updateAt == fresh.updateAt &&
+          _sameIntList(old.comments, fresh.comments)) {
+        continue;
+      }
+      _posts[idx] = fresh;
+      uiChanged = true;
+    }
+    if (uiChanged && mounted) setState(() {});
+    return okIds;
+  }
+
+  static bool _sameIntList(List<int> a, List<int> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增
-  Future<void> _refreshPostComments(Post post) async {
+  // fetchLatest=false 时直接用 post.comments（帖子刚从 API 拉取，列表已最新，省一次 getPost）
+  Future<void> _refreshPostComments(Post post, {bool fetchLatest = true}) async {
     List<int> newIds;
-    try {
-      final fresh = await ApiService.getPost(post.id);
-      newIds = fresh?.comments ?? post.comments;
-    } catch (_) {
+    if (fetchLatest) {
+      try {
+        final fresh = await ApiService.getPost(post.id);
+        if (fresh != null) {
+          await PostStorage.savePost(fresh);
+          _replaceLoadedPost(fresh);
+          newIds = fresh.comments;
+        } else {
+          newIds = post.comments;
+        }
+      } catch (_) {
+        newIds = post.comments;
+      }
+    } else {
       newIds = post.comments;
     }
     if (newIds.isEmpty) return;
@@ -314,6 +376,21 @@ class _SquarePageState extends State<SquarePage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
+  /// 用最新帖数据替换列表中同 id 项（署名变更时刷新 UI）
+  void _replaceLoadedPost(Post fresh) {
+    final idx = _posts.indexWhere((p) => p.id == fresh.id);
+    if (idx < 0) return;
+    final old = _posts[idx];
+    if (old.author == fresh.author &&
+        old.isAnonymous == fresh.isAnonymous &&
+        old.updateAt == fresh.updateAt &&
+        _sameIntList(old.comments, fresh.comments)) {
+      return;
+    }
+    _posts[idx] = fresh;
+    if (mounted) setState(() {});
+  }
+
   Widget _drawerTile(IconData icon, String title, {VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: Theme.of(context).colorScheme.onSurface),
@@ -323,16 +400,15 @@ class _SquarePageState extends State<SquarePage> {
   }
 
   void _showSettings() {
-    final color = Theme.of(context).colorScheme.onSurface;
     showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
-            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: color)))); }),
+            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', const UserSettingsPage()); }),
+            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
+            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
             _settingsTile(Icons.palette_outlined, '颜色模式', () { Navigator.pop(context); navigateToSettingsPage(context, '颜色模式', const ColorModePage()); }),
             SizedBox(height: 16),
           ],
@@ -369,7 +445,7 @@ class _SquarePageState extends State<SquarePage> {
         if (!didPop) ImageOverlay.closeCurrent();
       },
       child: Scaffold(
-      drawerEdgeDragWidth: MediaQuery.of(context).size.width / 4,
+      drawerEdgeDragWidth: MediaQuery.of(context).size.width / 3,
       drawer: Builder(builder: (ctx) {
         final colors = Theme.of(ctx).extension<AppColors>()!;
         return Drawer(
@@ -378,19 +454,28 @@ class _SquarePageState extends State<SquarePage> {
         child: SafeArea(
           child: Column(
             children: [
-              Container(
-                color: colors.common.drawerHeaderBg,
-                padding: EdgeInsets.only(
-                  left: AppDimens.drawerHeaderPaddingLeft,
-                  right: AppDimens.drawerHeaderPaddingRight,
-                  top: AppDimens.drawerHeaderPaddingTop,
-                  bottom: AppDimens.drawerHeaderPaddingBottom,
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: _pickAvatar,
-                      child: _avatarBytes != null
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  if (PostStorage.isRegistered()) {
+                    Navigator.of(context)
+                        .push(bottomUpRoute(const UserPage()))
+                        .then((_) => _loadAvatar());
+                  } else {
+                    Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+                  }
+                },
+                child: Container(
+                  color: colors.common.drawerHeaderBg,
+                  padding: EdgeInsets.only(
+                    left: AppDimens.drawerHeaderPaddingLeft,
+                    right: AppDimens.drawerHeaderPaddingRight,
+                    top: AppDimens.drawerHeaderPaddingTop,
+                    bottom: AppDimens.drawerHeaderPaddingBottom,
+                  ),
+                  child: Row(
+                    children: [
+                      _avatarBytes != null
                           ? CircleAvatar(
                               radius: AppDimens.drawerAvatarSize / 2,
                               backgroundImage: MemoryImage(_avatarBytes!),
@@ -400,29 +485,27 @@ class _SquarePageState extends State<SquarePage> {
                               backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
                               backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
                             ),
-                    ),
-                    SizedBox(width: AppDimens.drawerAvatarTextGap),
-                    Expanded(
-                      child: _editingName
-                          ? TextField(
-                              controller: _nameController,
-                              focusNode: _nameFocus,
-                              autofocus: true,
+                      SizedBox(width: AppDimens.drawerAvatarTextGap),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              PostStorage.getDisplayName() ?? PostStorage.getUserName(),
                               style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                              onSubmitted: (_) => _saveName(),
-                            )
-                          : GestureDetector(
-                              onTap: () => setState(() => _editingName = true),
-                              child: Text(PostStorage.getUserName(), style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface)),
                             ),
-                    ),
-                    Icon(Icons.chevron_right, color: colors.common.trailingIcon),
-                  ],
+                            if (!PostStorage.isRegistered())
+                              Text(
+                                '目前未注册账号',
+                                style: TextStyle(fontSize: 11, color: colors.common.trailingIcon),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: colors.common.trailingIcon),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
@@ -430,7 +513,16 @@ class _SquarePageState extends State<SquarePage> {
                   padding: EdgeInsets.zero,
                   children: [
                     _drawerTile(Icons.home_outlined, '主页（没做）'),
-                    _drawerTile(Icons.person_outline, '用户（没做）'),
+                    _drawerTile(Icons.person_outline, '用户', onTap: () {
+                      Navigator.pop(context);
+                      if (PostStorage.isRegistered()) {
+                        Navigator.of(context)
+                            .push(bottomUpRoute(const UserPage()))
+                            .then((_) => _loadAvatar());
+                      } else {
+                        Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+                      }
+                    }),
                     _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
                     _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
                   ],

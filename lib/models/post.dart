@@ -3,6 +3,7 @@ class Post {
   final String title;
   final String content;
   final String author;
+  final bool isAnonymous;
   final String createdAt;
   final String updateAt;
   final List<PostImage> images;
@@ -14,6 +15,7 @@ class Post {
     required this.title,
     this.content = '',
     this.author = '',
+    this.isAnonymous = false,
     this.createdAt = '',
     this.updateAt = '',
     this.images = const [],
@@ -21,12 +23,19 @@ class Post {
     this.comments = const [],
   });
 
+  /// 对外展示署名：匿名或空名则不显示
+  String get displayAuthor {
+    if (isAnonymous) return '';
+    return author.trim();
+  }
+
   factory Post.fromJson(Map<String, dynamic> json) {
     return Post(
       id: json['id'] as int,
       title: json['title'] as String? ?? '',
       content: json['content'] as String? ?? '',
       author: json['author'] as String? ?? '',
+      isAnonymous: _asBool(json['is_anonymous']),
       createdAt: json['created_at'] as String? ?? '',
       updateAt: json['update_at'] as String? ?? '',
       images: (json['images'] as List<dynamic>?)
@@ -45,6 +54,16 @@ class Post {
           [],
     );
   }
+}
+
+bool _asBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    final s = v.toLowerCase();
+    return s == 'true' || s == '1';
+  }
+  return false;
 }
 
 class PostImage {

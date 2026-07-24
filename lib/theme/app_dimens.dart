@@ -319,4 +319,26 @@ class AppDimens {
   // ---- 图片查看器页码点透明度（image_overlay.dart 引用名）----
   static const double overlayPageDotActiveOpacity = 0.9;
   static const double overlayPageDotInactiveOpacity = 0.4;
+
+  // ---- 版本更新提示箭头 ----
+  static const double updateArrowSize = 14;
+
+  // ---- 版本卡片 ----
+  static const double versionCardBottomMargin = 10;
+  static const double versionCardVersionFontSize = 19;
+  static const double versionCardBadgeGap = 7;
+  static const double versionCardBadgeHPadding = 4;
+  static const double versionCardBadgeVPadding = 1;
+  static const double versionCardBadgeRadius = 4;
+  static const double versionCardBadgeFontSize = 12;
+  static const double versionCardRowToBoxGap = 5;
+  static const double versionCardVersionPaddingLeft = 7;
+  static const double versionCardBoxPadding = 8;
+  static const double versionCardTitleFontSize = 18;
+  static const double versionCardLogFontSize = 14;
+  static const double versionCardTitleLogGap = 2;
+  static const double versionCardTitlePaddingLeft = 1;
+  static const double versionCardLatestBorderWidth = 1.5;
+  static const double versionCardMaxHeight = 131;
+  static const int versionCardLogMaxLines = 4;
 }

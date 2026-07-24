@@ -1,10 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
-import '../models/version_info.dart';
 import '../services/api.dart';
 
 class PostStorage {
@@ -12,9 +12,9 @@ class PostStorage {
   static late Box _idBox;
   static late Box _postBox;
   static late Box _thumbBox;
-  static late Box _commentBox; // 回复 Hive 缓存
-  static late Box _customColorsBox; // 自定义颜色缓存
-  static late Box _versionBox; // 版本历史缓存
+  static late Box _commentBox;
+  static late Box _customColorsBox;
+  static late Box _accountBox;
 
   static Future<void> init() async {
     _idBox = await Hive.openBox('id_list');
@@ -22,7 +22,31 @@ class PostStorage {
     _thumbBox = await Hive.openBox('thumbnails');
     _commentBox = await Hive.openBox('comments');
     _customColorsBox = await Hive.openBox('custom_colors');
-    _versionBox = await Hive.openBox('versions');
+    _accountBox = await Hive.openBox('account');
+  }
+
+  // ---- 账号 ----
+  // 设备凭证、用户凭证、会话凭证已迁移到 DeviceCredentialStore (安全存储)
+  // 此处仅保留非敏感的 UI 状态
+
+  static String? getDisplayName() {
+    return _accountBox.get('display_name') as String?;
+  }
+
+  static Future<void> saveDisplayName(String name) async {
+    await _accountBox.put('display_name', name);
+  }
+
+  static bool isRegistered() {
+    return _accountBox.get('registered', defaultValue: false) as bool;
+  }
+
+  static Future<void> setRegistered(bool value) async {
+    await _accountBox.put('registered', value);
+  }
+
+  static Future<void> clearAccount() async {
+    await _accountBox.clear();
   }
 
   // ---- ID 列表 ----
@@ -63,6 +87,7 @@ class PostStorage {
       'title': post.title,
       'content': post.content,
       'author': post.author,
+      'is_anonymous': post.isAnonymous,
       'created_at': post.createdAt,
       'update_at': post.updateAt,
       'images': post.images.map((e) => {'file_name': e.fileName}).toList(),
@@ -120,7 +145,6 @@ class PostStorage {
   static ThumbnailData? getThumbnail(String fileName) {
     final raw = _thumbBox.get('thumb_$fileName');
     if (raw == null) return null;
-    // 兼容旧格式（Uint8List）和新格式（Map）
     if (raw is Uint8List) {
       return ThumbnailData(bytes: raw, width: 0, height: 0);
     }
@@ -177,6 +201,7 @@ class PostStorage {
       'post_id': comment.postId,
       'to_id': comment.toId,
       'author': comment.author,
+      'is_anonymous': comment.isAnonymous,
       'content': comment.content,
       'created_at': comment.createdAt,
     });
@@ -230,32 +255,5 @@ class PostStorage {
 
   static Future<void> saveUserName(String name) async {
     await _customColorsBox.put('user_name', name);
-  }
-
-  // ---- 版本历史 ----
-
-  static List<VersionInfo> getCachedVersions() {
-    final raw = _versionBox.get('list');
-    if (raw == null) return [];
-    final list = raw as List;
-    return list.map((j) => VersionInfo.fromJson(Map<String, dynamic>.from(j as Map))).toList();
-  }
-
-  static Future<void> saveVersions(List<VersionInfo> versions) async {
-    await _versionBox.put('list', versions.map((v) => v.toJson()).toList());
-  }
-
-  static VersionInfo? getLatestCachedVersion() {
-    final versions = getCachedVersions();
-    return versions.isNotEmpty ? versions.first : null;
-  }
-
-  static Future<void> saveLatestVersion(VersionInfo version) async {
-    final existing = getCachedVersions();
-    final ids = existing.map((v) => v.id).toSet();
-    if (!ids.contains(version.id)) {
-      existing.insert(0, version);
-      await saveVersions(existing);
-    }
   }
 }
