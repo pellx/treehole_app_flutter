@@ -264,10 +264,6 @@ class _SquarePageState extends State<SquarePage> {
       setState(() {});
     }
 
-    // 已加载帖重新拉详情：署名/匿名可能已变（服务端返回当前 display 名）
-    final reloadedIds = await _reloadLoadedPostsFromApi();
-    freshIds.addAll(reloadedIds);
-
     for (final p in _posts) {
       _postsNeedCommentRefresh.add(p.id);
     }
@@ -285,42 +281,6 @@ class _SquarePageState extends State<SquarePage> {
       await Future.delayed(Duration(milliseconds: 800 - elapsed));
     }
     _loading = false;
-  }
-
-  /// 对当前列表中的帖并行 getPost，作者变化则写回 UI / Hive
-  /// 返回成功拉到的帖 id，供评论刷新跳过二次请求
-  Future<Set<int>> _reloadLoadedPostsFromApi() async {
-    if (_posts.isEmpty) return {};
-    final snapshot = List<Post>.from(_posts);
-    final results = await Future.wait(snapshot.map((p) async {
-      try {
-        final post = await ApiService.getPost(p.id);
-        if (post != null) await PostStorage.savePost(post);
-        return post;
-      } catch (_) {
-        return null;
-      }
-    }));
-
-    final okIds = <int>{};
-    var uiChanged = false;
-    for (final fresh in results) {
-      if (fresh == null) continue;
-      okIds.add(fresh.id);
-      final idx = _posts.indexWhere((p) => p.id == fresh.id);
-      if (idx < 0) continue;
-      final old = _posts[idx];
-      if (old.author == fresh.author &&
-          old.isAnonymous == fresh.isAnonymous &&
-          old.updateAt == fresh.updateAt &&
-          _sameIntList(old.comments, fresh.comments)) {
-        continue;
-      }
-      _posts[idx] = fresh;
-      uiChanged = true;
-    }
-    if (uiChanged && mounted) setState(() {});
-    return okIds;
   }
 
   static bool _sameIntList(List<int> a, List<int> b) {
