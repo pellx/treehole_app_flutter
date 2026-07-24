@@ -10,6 +10,8 @@ class PostDraft {
   /// 暂时选填：有则随请求带上，后端未强制时可不传
   final int? sessionId;
   final String? sessionSecret;
+  /// 署名时附加的用户 id（user_display_id）；匿名不传
+  final String? userId;
 
   const PostDraft({
     required this.title,
@@ -19,6 +21,7 @@ class PostDraft {
     required this.uploaded,
     this.sessionId,
     this.sessionSecret,
+    this.userId,
   });
 
   Map<String, dynamic> toJson() {
@@ -31,8 +34,10 @@ class PostDraft {
     };
     final sid = sessionId;
     final ssec = sessionSecret;
+    final uid = userId?.trim();
     if (sid != null) map['session_id'] = sid;
     if (ssec != null && ssec.isNotEmpty) map['session_secret'] = ssec;
+    if (uid != null && uid.isNotEmpty) map['user_id'] = uid;
     return map;
   }
 }

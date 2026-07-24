@@ -69,7 +69,12 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
         if (_uploadedAttachment != null) _uploadedAttachment!,
       ];
 
-  String get _userName => PostStorage.getUserName();
+  /// 优先用资料里的 user_display_id，没有再回退本地昵称
+  String get _userName {
+    final display = PostStorage.getDisplayName()?.trim();
+    if (display != null && display.isNotEmpty) return display;
+    return PostStorage.getUserName();
+  }
 
   @override
   void initState() {
@@ -292,14 +297,17 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
         'sessionId=$sid, sessionSecret=${ssec != null ? "${ssec.length}chars" : "NULL"}, '
         'lastError=${ApiService.lastError}');
 
+    // 署名才附加用户 id / author；匿名不带
+    final userId = _hasAuthor ? _userName : null;
     final draft = PostDraft(
       title: title,
       content: _contentController.text,
-      author: _hasAuthor ? _userName : '',
+      author: userId ?? '',
       isAnonymous: !_hasAuthor,
       uploaded: _uploaded,
       sessionId: sid,
       sessionSecret: ssec,
+      userId: userId,
     );
 
     final post = await ApiService.createPost(draft);
