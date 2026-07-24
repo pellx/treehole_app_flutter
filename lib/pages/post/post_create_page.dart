@@ -283,32 +283,14 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
 
     setState(() { _submitting = true; _errorMessage = null; });
 
-    // 确保 session 就绪后再提交
+    // session 暂为选填：尽量拿，失败也允许裸发帖
     debugPrint('[PostCreate._submit] 调用 ensureSession...');
     final sessionOk = await SessionService.instance.ensureSession();
-    final isRegistered = PostStorage.isRegistered();
     final sid = await DeviceCredentialStore.getSessionId();
     final ssec = await DeviceCredentialStore.getSessionSecret();
-    final utok = await DeviceCredentialStore.getUserExternalToken();
-    final dsec = await DeviceCredentialStore.getDeviceSecret();
-    debugPrint('[PostCreate._submit] ensureSession=$sessionOk, isRegistered=$isRegistered, '
+    debugPrint('[PostCreate._submit] ensureSession=$sessionOk, '
         'sessionId=$sid, sessionSecret=${ssec != null ? "${ssec.length}chars" : "NULL"}, '
-        'userToken=${utok != null ? "${utok.length}chars" : "NULL"}, '
-        'deviceSecret=${dsec != null ? "${dsec.length}chars" : "NULL"}, '
         'lastError=${ApiService.lastError}');
-    if (!sessionOk) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      if (isRegistered) {
-        _setError('会话验证失败，请检查网络后重试');
-      } else {
-        _setError('请先注册账号');
-      }
-      return;
-    }
-
-    final sessionId = sid ?? 0;
-    final sessionSecret = ssec ?? '';
 
     final draft = PostDraft(
       title: title,
@@ -316,8 +298,8 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       author: _hasAuthor ? _userName : '',
       isAnonymous: !_hasAuthor,
       uploaded: _uploaded,
-      sessionId: sessionId,
-      sessionSecret: sessionSecret,
+      sessionId: sid,
+      sessionSecret: ssec,
     );
 
     final post = await ApiService.createPost(draft);

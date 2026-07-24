@@ -7,8 +7,9 @@ class PostDraft {
   /// 是否匿名（与署名开关相反）
   final bool isAnonymous;
   final List<UploadResult> uploaded;
-  final int sessionId;
-  final String sessionSecret;
+  /// 暂时选填：有则随请求带上，后端未强制时可不传
+  final int? sessionId;
+  final String? sessionSecret;
 
   const PostDraft({
     required this.title,
@@ -16,17 +17,22 @@ class PostDraft {
     required this.author,
     required this.isAnonymous,
     required this.uploaded,
-    required this.sessionId,
-    required this.sessionSecret,
+    this.sessionId,
+    this.sessionSecret,
   });
 
-  Map<String, dynamic> toJson() => {
-        'title': title,
-        'content': content,
-        'author': author,
-        'is_anonymous': isAnonymous,
-        'uploaded': uploaded.map((e) => e.toJson()).toList(),
-        'session_id': sessionId,
-        'session_secret': sessionSecret,
-      };
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'title': title,
+      'content': content,
+      'author': author,
+      'is_anonymous': isAnonymous,
+      'uploaded': uploaded.map((e) => e.toJson()).toList(),
+    };
+    final sid = sessionId;
+    final ssec = sessionSecret;
+    if (sid != null) map['session_id'] = sid;
+    if (ssec != null && ssec.isNotEmpty) map['session_secret'] = ssec;
+    return map;
+  }
 }
