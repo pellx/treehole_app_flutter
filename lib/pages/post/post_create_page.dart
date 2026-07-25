@@ -13,7 +13,6 @@ import '../../models/upload_result.dart';
 import '../../services/api.dart';
 import '../../services/session_service.dart';
 import '../../services/storage.dart';
-import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/moderation_feedback.dart';
@@ -200,11 +199,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       _errorMessage = null;
     });
 
-    // session 暂为选填：尽量拿，失败也允许上传；署名才带 user_id
-    debugPrint('[PostCreate._pickFiles] 调用 ensureSession...');
-    final sessionOk = await SessionService.instance.ensureSession();
-    debugPrint('[PostCreate._pickFiles] ensureSession=$sessionOk, '
-        'hasAuthor=$_hasAuthor, lastError=${ApiService.lastError}');
+    // 上传不带 session；署名才带 user_id
     final userId = _hasAuthor ? _userName : null;
 
     // 并行上传
@@ -284,16 +279,7 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
 
     setState(() { _submitting = true; _errorMessage = null; });
 
-    // session 暂为选填：尽量拿，失败也允许裸发帖
-    debugPrint('[PostCreate._submit] 调用 ensureSession...');
-    final sessionOk = await SessionService.instance.ensureSession();
-    final sid = await DeviceCredentialStore.getSessionId();
-    final ssec = await DeviceCredentialStore.getSessionSecret();
-    debugPrint('[PostCreate._submit] ensureSession=$sessionOk, '
-        'sessionId=$sid, sessionSecret=${ssec != null ? "${ssec.length}chars" : "NULL"}, '
-        'lastError=${ApiService.lastError}');
-
-    // 署名才附加用户 id / author；匿名不带
+    // 发帖 body 不带 session；署名才附加 user_id / author
     final userId = _hasAuthor ? _userName : null;
     final draft = PostDraft(
       title: title,
@@ -301,8 +287,6 @@ class _PostCreatePageState extends State<PostCreatePage> with SingleTickerProvid
       author: userId ?? '',
       isAnonymous: !_hasAuthor,
       uploaded: _uploaded,
-      sessionId: sid,
-      sessionSecret: ssec,
       userId: userId,
     );
 

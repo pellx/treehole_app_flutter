@@ -500,28 +500,15 @@ class ApiService {
     return (w, h);
   }
 
-  /// [userId] 署名时附加的用户 id；匿名不传。session 暂为选填。
+  /// 上传不带 session（后端 DTO 禁止）；署名时传 [userId]。
   static Future<UploadResult?> uploadFile(
     PostUploadType type,
     File file, {
     String? userId,
   }) async {
     try {
-      final sessionId = await DeviceCredentialStore.getSessionId();
-      final sessionSecret = await DeviceCredentialStore.getSessionSecret();
       final request = http.MultipartRequest('POST', Uri.parse(_uploadBase));
       request.fields['type'] = type.apiValue;
-      // multipart 的 fields 在 NestJS 中晚于 Guard 解析，session 须同时放 header
-      if (sessionId != null &&
-          sessionSecret != null &&
-          sessionSecret.isNotEmpty) {
-        request.headers['x-session-id'] = sessionId.toString();
-        request.headers['x-session-secret'] = sessionSecret;
-        request.fields['session_id'] = sessionId.toString();
-        request.fields['session_secret'] = sessionSecret;
-      } else {
-        debugPrint('[ApiService] uploadFile: session 未就绪，尝试无 session 上传');
-      }
       final uid = userId?.trim();
       if (uid != null && uid.isNotEmpty) {
         request.fields['user_id'] = uid;
@@ -584,7 +571,7 @@ class ApiService {
     }
   }
 
-  /// session / user_id 暂为选填；署名时传 [userId]。
+  /// 回复不带 session（后端 DTO 禁止）；署名时传 [userId]。
   static Future<Comment?> createComment({
     required int postId,
     required String content,
@@ -594,17 +581,11 @@ class ApiService {
     String? userId,
   }) async {
     try {
-      final sessionId = await DeviceCredentialStore.getSessionId();
-      final sessionSecret = await DeviceCredentialStore.getSessionSecret();
       final body = <String, dynamic>{
         'postId': postId,
         'content': content,
         'is_anonymous': isAnonymous,
       };
-      if (sessionId != null) body['session_id'] = sessionId;
-      if (sessionSecret != null && sessionSecret.isNotEmpty) {
-        body['session_secret'] = sessionSecret;
-      }
       if (author != null && author.isNotEmpty) body['author'] = author;
       final uid = userId?.trim();
       if (uid != null && uid.isNotEmpty) body['user_id'] = uid;

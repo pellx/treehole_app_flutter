@@ -754,12 +754,7 @@ class _PostCardState extends State<PostCard> {
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
 
-    // session 暂为选填：尽量拿，失败也允许裸评论
-    debugPrint('[PostCard._submitComment] 调用 ensureSession...');
-    final sessionOk = await SessionService.instance.ensureSession();
-    debugPrint('[PostCard._submitComment] ensureSession=$sessionOk, '
-        'hasAuthor=$_commentHasAuthor, lastError=${ApiService.lastError}');
-
+    // 回复不带 session；署名才带 user_id / author
     final userId = _commentHasAuthor ? _commentUserName : null;
     final result = await ApiService.createComment(
       postId: widget.post.id,

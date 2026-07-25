@@ -7,10 +7,8 @@ class PostDraft {
   /// 是否匿名（与署名开关相反）
   final bool isAnonymous;
   final List<UploadResult> uploaded;
-  /// 暂时选填：有则随请求带上，后端未强制时可不传
-  final int? sessionId;
-  final String? sessionSecret;
   /// 署名时附加的用户 id（user_display_id）；匿名不传
+  /// 注意：发帖 body 不要带 session，否则后端 ValidationPipe 会报 session should not exist
   final String? userId;
 
   const PostDraft({
@@ -19,8 +17,6 @@ class PostDraft {
     required this.author,
     required this.isAnonymous,
     required this.uploaded,
-    this.sessionId,
-    this.sessionSecret,
     this.userId,
   });
 
@@ -32,11 +28,7 @@ class PostDraft {
       'is_anonymous': isAnonymous,
       'uploaded': uploaded.map((e) => e.toJson()).toList(),
     };
-    final sid = sessionId;
-    final ssec = sessionSecret;
     final uid = userId?.trim();
-    if (sid != null) map['session_id'] = sid;
-    if (ssec != null && ssec.isNotEmpty) map['session_secret'] = ssec;
     if (uid != null && uid.isNotEmpty) map['user_id'] = uid;
     return map;
   }
