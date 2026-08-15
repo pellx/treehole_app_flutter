@@ -546,7 +546,13 @@ class _SquarePageState extends State<SquarePage> {
     return Stack(
       children: [
         child,
-        Positioned.fill(
+        // 手势识别器只覆盖帖子内容区（顶栏以下），不覆盖顶栏，
+        // 避免任何情况下影响顶部 tab 和搜索按钮的点击。
+        Positioned(
+          left: 0,
+          right: 0,
+          top: AppSquareTopBarTheme.height,
+          bottom: 0,
           child: RawGestureDetector(
             behavior: HitTestBehavior.translucent,
             gestures: {
