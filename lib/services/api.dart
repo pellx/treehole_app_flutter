@@ -462,11 +462,23 @@ class ApiService {
   /// rename 返回 RENAME_TOO_FREQUENT 时解析出的上次改名时间
   static DateTime? lastDisplayIdChangedAt;
 
-  static Future<List<int>> getIdList({String? search}) async {
+  static Future<List<int>> getIdList({
+    String? search,
+    String? author,
+    String? dateStart,
+    String? dateEnd,
+    String? category,
+  }) async {
     if (_useMock) return [12, 345, 6789];
+    final params = <String, String>{};
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (author != null && author.isNotEmpty) params['author'] = author;
+    if (dateStart != null && dateStart.isNotEmpty) params['dateStart'] = dateStart;
+    if (dateEnd != null && dateEnd.isNotEmpty) params['dateEnd'] = dateEnd;
+    if (category != null && category.isNotEmpty) params['category'] = category;
     var uri = Uri.parse('$_base/idList');
-    if (search != null && search.isNotEmpty) {
-      uri = uri.replace(queryParameters: {'search': search});
+    if (params.isNotEmpty) {
+      uri = uri.replace(queryParameters: params);
     }
     final res = await _client.get(uri).timeout(_timeout);
     return List<int>.from(jsonDecode(res.body));
