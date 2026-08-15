@@ -48,6 +48,15 @@ class _SquarePageState extends State<SquarePage> {
   /// 是否正在执行左侧刷新
   bool _leftRefreshing = false;
 
+  final _scrollController = ScrollController();
+
+  /// 列表是否已经滚到最顶部
+  bool get _isAtTop {
+    if (!_scrollController.hasClients) return true;
+    return _scrollController.position.pixels <=
+        _scrollController.position.minScrollExtent + 0.01;
+  }
+
   /// 当前左侧拉出进度 0~1
   double get _leftPullProgress =>
       (_leftPullDistance / AppSquareRefreshTheme.pullThreshold)
@@ -120,6 +129,7 @@ class _SquarePageState extends State<SquarePage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -478,6 +488,7 @@ class _SquarePageState extends State<SquarePage> {
         return false;
       },
       child: CustomScrollView(
+        controller: _scrollController,
         // 使用 ClampingScrollPhysics，避免在顶部继续下拉出现空白/回弹，
         // 从而让左侧拉出刷新球成为唯一的下拉刷新入口。
         physics: const ClampingScrollPhysics(),
@@ -527,7 +538,7 @@ class _SquarePageState extends State<SquarePage> {
     );
   }
 
-  /// 左侧拉出刷新球外壳：不改变子布局，仅在左侧边缘监听纵向拖拽
+  /// 顶部下拉刷新球外壳：列表置顶时，任意位置向下拉都会唤出左侧刷新球
   Widget _buildRefreshShell(Widget child) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -536,36 +547,32 @@ class _SquarePageState extends State<SquarePage> {
     return Stack(
       children: [
         child,
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: AppSquareRefreshTheme.triggerAreaWidth,
+        Positioned.fill(
           child: RawGestureDetector(
-            behavior: HitTestBehavior.opaque,
+            behavior: HitTestBehavior.translucent,
             gestures: {
-              _LeftPullRecognizer:
-                  GestureRecognizerFactoryWithHandlers<_LeftPullRecognizer>(
-                _LeftPullRecognizer.new,
+              _TopPullRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_TopPullRecognizer>(
+                _TopPullRecognizer.new,
                 (instance) {
-                  instance
-                    ..onStart = () {
-                      setState(() {
-                        _leftPullDistance = 0;
-                        _leftPullHapticTriggered = false;
-                      });
-                    }
-                    ..onMove = (dy) {
-                      setState(() {
-                        _leftPullDistance += dy;
-                        if (_leftPullProgress >= 1.0 &&
-                            !_leftPullHapticTriggered) {
-                          HapticFeedback.mediumImpact();
-                          _leftPullHapticTriggered = true;
-                        }
-                      });
-                    }
-                    ..onEnd = _onLeftPullEnd;
+                  instance.isAtTop = () => _isAtTop;
+                  instance.onStart = () {
+                    setState(() {
+                      _leftPullDistance = 0;
+                      _leftPullHapticTriggered = false;
+                    });
+                  };
+                  instance.onMove = (dy) {
+                    setState(() {
+                      _leftPullDistance += dy;
+                      if (_leftPullProgress >= 1.0 &&
+                          !_leftPullHapticTriggered) {
+                        HapticFeedback.mediumImpact();
+                        _leftPullHapticTriggered = true;
+                      }
+                    });
+                  };
+                  instance.onEnd = _onLeftPullEnd;
                 },
               ),
             },
@@ -723,26 +730,59 @@ class _SquarePageState extends State<SquarePage> {
   }
 }
 
-/// 左侧拉出刷新球的自定义手势识别器。
+/// 顶部下拉识别器：列表在最顶部时，任意位置的「向下拉」都会触发刷新球。
 ///
-/// 在屏幕左侧触发区域内，指针一落下来就立即接受手势（resolve accepted），
-/// 从而阻止背后的 Scrollable 抢走纵向拖拽事件，保证左侧一定能拉出刷新球。
-class _LeftPullRecognizer extends OneSequenceGestureRecognizer {
+/// 与 Scrollable 的垂直拖拽手势竞争。只有在列表已置顶且用户明显向下拖拽时
+/// 才 accept，其他情况立即 reject，把手势还给列表滚动或子组件。
+class _TopPullRecognizer extends OneSequenceGestureRecognizer {
+  /// 回调：询问当前列表是否已经滚到最顶部。
+  bool Function()? isAtTop;
+
   VoidCallback? onStart;
   ValueChanged<double>? onMove;
   VoidCallback? onEnd;
 
+  double _dy = 0;
+  double _dx = 0;
+
+  /// 向下拉多少像素后正式接管手势（要比 Scrollable 的拖拽阈值小一点）。
+  static const double _acceptThreshold = 12;
+
   @override
   void addAllowedPointer(PointerDownEvent event) {
     startTrackingPointer(event.pointer, event.transform);
-    resolve(GestureDisposition.accepted);
+    if (isAtTop == null || !isAtTop!()) {
+      resolve(GestureDisposition.rejected);
+      return;
+    }
+    _dx = 0;
+    _dy = 0;
     onStart?.call();
   }
 
   @override
   void handleEvent(PointerEvent event) {
     if (event is PointerMoveEvent) {
-      onMove?.call(event.delta.dy);
+      _dx += event.delta.dx;
+      _dy += event.delta.dy;
+
+      // 明显向下拉：接管手势，阻止列表滚动。
+      if (_dy > _acceptThreshold && _dy > _dx.abs()) {
+        resolve(GestureDisposition.accepted);
+        onMove?.call(event.delta.dy);
+        return;
+      }
+
+      // 明显是水平方向：拒绝，让给横向滚动或系统返回手势。
+      if (_dx.abs() > _acceptThreshold && _dx.abs() > _dy.abs()) {
+        resolve(GestureDisposition.rejected);
+        return;
+      }
+
+      // 还在犹豫区，先按当前向下位移更新球（视觉跟手）。
+      if (_dy > 0) {
+        onMove?.call(event.delta.dy);
+      }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
       onEnd?.call();
       stopTrackingPointer(event.pointer);
@@ -750,7 +790,7 @@ class _LeftPullRecognizer extends OneSequenceGestureRecognizer {
   }
 
   @override
-  String get debugDescription => 'left_pull';
+  String get debugDescription => 'top_pull';
 
   @override
   void didStopTrackingLastPointer(int pointer) {}
