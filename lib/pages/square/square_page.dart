@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -540,25 +541,34 @@ class _SquarePageState extends State<SquarePage> {
           top: 0,
           bottom: 0,
           width: AppSquareRefreshTheme.triggerAreaWidth,
-          child: GestureDetector(
+          child: RawGestureDetector(
             behavior: HitTestBehavior.translucent,
-            onVerticalDragStart: (_) {
-              setState(() {
-                _leftPullDistance = 0;
-                _leftPullHapticTriggered = false;
-              });
+            gestures: {
+              _LeftPullRecognizer:
+                  GestureRecognizerFactoryWithHandlers<_LeftPullRecognizer>(
+                _LeftPullRecognizer.new,
+                (instance) {
+                  instance
+                    ..onStart = () {
+                      setState(() {
+                        _leftPullDistance = 0;
+                        _leftPullHapticTriggered = false;
+                      });
+                    }
+                    ..onMove = (dy) {
+                      setState(() {
+                        _leftPullDistance += dy;
+                        if (_leftPullProgress >= 1.0 &&
+                            !_leftPullHapticTriggered) {
+                          HapticFeedback.mediumImpact();
+                          _leftPullHapticTriggered = true;
+                        }
+                      });
+                    }
+                    ..onEnd = _onLeftPullEnd;
+                },
+              ),
             },
-            onVerticalDragUpdate: (details) {
-              setState(() {
-                _leftPullDistance += details.delta.dy;
-                if (_leftPullProgress >= 1.0 && !_leftPullHapticTriggered) {
-                  HapticFeedback.mediumImpact();
-                  _leftPullHapticTriggered = true;
-                }
-              });
-            },
-            onVerticalDragEnd: (_) => _onLeftPullEnd(),
-            onVerticalDragCancel: _onLeftPullEnd,
           ),
         ),
         Positioned(
@@ -711,6 +721,39 @@ class _SquarePageState extends State<SquarePage> {
       ),
     );
   }
+}
+
+/// 左侧拉出刷新球的自定义手势识别器。
+///
+/// 在屏幕左侧触发区域内，指针一落下来就立即接受手势（resolve accepted），
+/// 从而阻止背后的 Scrollable 抢走纵向拖拽事件，保证左侧一定能拉出刷新球。
+class _LeftPullRecognizer extends OneSequenceGestureRecognizer {
+  VoidCallback? onStart;
+  ValueChanged<double>? onMove;
+  VoidCallback? onEnd;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    startTrackingPointer(event.pointer, event.transform);
+    resolve(GestureDisposition.accepted);
+    onStart?.call();
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      onMove?.call(event.delta.dy);
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      onEnd?.call();
+      stopTrackingPointer(event.pointer);
+    }
+  }
+
+  @override
+  String get debugDescription => 'left_pull';
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {}
 }
 
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
