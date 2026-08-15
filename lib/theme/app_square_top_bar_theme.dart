@@ -22,6 +22,15 @@ class AppSquareTopBarTheme {
   static const double indicatorHeight = 2.5;
   static const double indicatorBorderRadius = 1.25;
 
+  /// 指示条到文字的距离
+  static const double indicatorTopSpacing = 4;
+
+  /// 指示条到顶栏底部的距离（让整体视觉上下更平衡）
+  static const double indicatorBottomSpacing = 2;
+
   /// 搜索图标大小
   static const double searchIconSize = 24;
+
+  /// 搜索图标右侧留白（越小越贴边）
+  static const double searchIconRightInset = 2;
 }

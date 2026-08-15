@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -38,6 +37,10 @@ class _SquarePageState extends State<SquarePage> {
 
   int _selectedCategoryIndex = 0;
 
+  /// 左侧拉出刷新球的进度 0~1
+  double _leftPullProgress = 0;
+  bool _leftRefreshing = false;
+
   final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
   final _categoryKeywords = {
     '问答': ['问', '求助', '怎么办', '帮忙', '求', '？', '?'],
@@ -59,6 +62,31 @@ class _SquarePageState extends State<SquarePage> {
   void _onCategoryTap(int index) {
     HapticFeedback.lightImpact();
     setState(() => _selectedCategoryIndex = index);
+  }
+
+  void _onLeftPullEnd() {
+    if (_leftPullProgress > 0.5) {
+      _triggerLeftRefresh();
+    } else {
+      setState(() {
+        _leftPullProgress = 0;
+      });
+    }
+  }
+
+  Future<void> _triggerLeftRefresh() async {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _leftRefreshing = true;
+      _leftPullProgress = 1;
+    });
+    await _refresh();
+    if (mounted) {
+      setState(() {
+        _leftRefreshing = false;
+        _leftPullProgress = 0;
+      });
+    }
   }
 
   void _onNeedCommentRefresh(int postId) {
@@ -372,7 +400,9 @@ class _SquarePageState extends State<SquarePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) ImageOverlay.closeCurrent();
       },
-      child: Scaffold(body: SafeArea(bottom: false, child: _buildBody())),
+      child: Scaffold(
+        body: SafeArea(bottom: false, child: _buildRefreshShell(_buildBody())),
+      ),
     );
   }
 
@@ -428,7 +458,6 @@ class _SquarePageState extends State<SquarePage> {
           decelerationRate: ScrollDecelerationRate.fast,
         ),
         slivers: [
-          CupertinoSliverRefreshControl(onRefresh: _refresh),
           topBar,
           if (posts.isEmpty)
             const SliverFillRemaining(
@@ -469,6 +498,75 @@ class _SquarePageState extends State<SquarePage> {
             ),
         ],
       ),
+    );
+  }
+
+  /// 左侧拉出刷新球外壳：不改变子布局，仅在左侧边缘监听纵向拖拽
+  Widget _buildRefreshShell(Widget child) {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final ballSize = 48.0;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Stack(
+      children: [
+        child,
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 18,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onVerticalDragStart: (_) {},
+            onVerticalDragUpdate: (details) {
+              setState(() {
+                _leftPullProgress = (_leftPullProgress + details.delta.dy / 120)
+                    .clamp(0.0, 1.0);
+              });
+            },
+            onVerticalDragEnd: (_) => _onLeftPullEnd(),
+            onVerticalDragCancel: _onLeftPullEnd,
+          ),
+        ),
+        Positioned(
+          left: -ballSize + (ballSize + 20) * _leftPullProgress,
+          top: screenHeight / 2 - ballSize / 2,
+          child: Opacity(
+            opacity: _leftPullProgress.clamp(0.0, 1.0),
+            child: Container(
+              width: ballSize,
+              height: ballSize,
+              decoration: BoxDecoration(
+                color: colors.common.surface,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.common.onSurface.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(2, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: _leftRefreshing
+                    ? SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.common.green,
+                        ),
+                      )
+                    : Icon(
+                        Icons.refresh,
+                        size: 24,
+                        color: colors.common.green,
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -513,7 +611,9 @@ class _SquarePageState extends State<SquarePage> {
                                       : onSurface.withValues(alpha: 0.7),
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(
+                                height: AppSquareTopBarTheme.indicatorTopSpacing,
+                              ),
                               Container(
                                 width: AppSquareTopBarTheme.indicatorWidth,
                                 height: AppSquareTopBarTheme.indicatorHeight,
@@ -526,6 +626,10 @@ class _SquarePageState extends State<SquarePage> {
                                   ),
                                 ),
                               ),
+                              SizedBox(
+                                height:
+                                    AppSquareTopBarTheme.indicatorBottomSpacing,
+                              ),
                             ],
                           ),
                         ),
@@ -534,15 +638,20 @@ class _SquarePageState extends State<SquarePage> {
                   ),
                 ),
               ),
-              IconButton(
-                icon: Icon(
-                  Icons.search,
-                  color: onSurface,
-                  size: AppSquareTopBarTheme.searchIconSize,
+              Padding(
+                padding: const EdgeInsets.only(
+                  right: AppSquareTopBarTheme.searchIconRightInset,
                 ),
-                onPressed: () => Navigator.of(
-                  context,
-                ).push(topDownRoute(const SearchPage())),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.search,
+                    color: onSurface,
+                    size: AppSquareTopBarTheme.searchIconSize,
+                  ),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(topDownRoute(const SearchPage())),
+                ),
               ),
             ],
           ),
