@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_bottom_nav_theme.dart';
 import '../theme/app_colors.dart';
 
 /// 应用底部导航栏：纯文字 tab + 中央发布按钮
@@ -22,10 +23,10 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final bg = Theme.of(context).brightness == Brightness.light
-        ? const Color(0xFFF7F7F7)
-        : const Color(0xFF1A1A1A);
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final bg = isLight
+        ? AppBottomNavTheme.backgroundLight
+        : AppBottomNavTheme.backgroundDark;
     final divider = colors.common.divider;
 
     return Container(
@@ -36,12 +37,12 @@ class AppBottomNav extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 56,
+          height: AppBottomNavTheme.height,
           child: Row(
             children: [
               _navItem(context, 0, labels[0]),
               _navItem(context, 1, labels[1]),
-              _publishButton(context, onSurface),
+              _publishButton(context),
               _navItem(context, 2, labels[2]),
               _navItem(context, 3, labels[3]),
             ],
@@ -52,8 +53,6 @@ class AppBottomNav extends StatelessWidget {
   }
 
   Widget _navItem(BuildContext context, int logicalIndex, String label) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final colors = Theme.of(context).extension<AppColors>()!;
     final selected = logicalIndex == currentIndex;
     final isLight = Theme.of(context).brightness == Brightness.light;
 
@@ -68,13 +67,15 @@ class AppBottomNav extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.normal,
+              fontSize: AppBottomNavTheme.labelFontSize,
+              fontWeight: AppBottomNavTheme.labelFontWeight,
               color: selected
-                  ? (isLight ? const Color(0xFF07C160) : colors.common.green)
+                  ? (isLight
+                        ? AppBottomNavTheme.selectedLabelLight
+                        : AppBottomNavTheme.selectedLabelDark)
                   : (isLight
-                        ? const Color(0xFF999999)
-                        : onSurface.withValues(alpha: 0.4)),
+                        ? AppBottomNavTheme.unselectedLabelLight
+                        : AppBottomNavTheme.unselectedLabelDark),
             ),
           ),
         ),
@@ -82,11 +83,11 @@ class AppBottomNav extends StatelessWidget {
     );
   }
 
-  Widget _publishButton(BuildContext context, Color onSurface) {
+  Widget _publishButton(BuildContext context) {
     final isLight = Theme.of(context).brightness == Brightness.light;
     final buttonColor = isLight
-        ? const Color(0xFF333333)
-        : onSurface.withValues(alpha: 0.8);
+        ? AppBottomNavTheme.publishButtonColorLight
+        : AppBottomNavTheme.publishButtonColorDark;
 
     return Expanded(
       child: GestureDetector(
@@ -97,13 +98,22 @@ class AppBottomNav extends StatelessWidget {
         },
         child: Center(
           child: Container(
-            width: 44,
-            height: 30,
+            width: AppBottomNavTheme.publishButtonWidth,
+            height: AppBottomNavTheme.publishButtonHeight,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: buttonColor, width: 1.8),
+              borderRadius: BorderRadius.circular(
+                AppBottomNavTheme.publishButtonBorderRadius,
+              ),
+              border: Border.all(
+                color: buttonColor,
+                width: AppBottomNavTheme.publishButtonBorderWidth,
+              ),
             ),
-            child: Icon(Icons.add, size: 22, color: buttonColor),
+            child: Icon(
+              Icons.add,
+              size: AppBottomNavTheme.publishButtonIconSize,
+              color: buttonColor,
+            ),
           ),
         ),
       ),
