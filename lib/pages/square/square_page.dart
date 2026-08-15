@@ -561,9 +561,9 @@ class _SquarePageState extends State<SquarePage> {
                     _leftPullDistance = 0;
                     _leftPullHapticTriggered = false;
                   };
-                  instance.onMove = (dy) {
+                  instance.onMove = (cumulativeDy) {
                     setState(() {
-                      _leftPullDistance += dy;
+                      _leftPullDistance = cumulativeDy;
                       if (_leftPullProgress >= 1.0 &&
                           !_leftPullHapticTriggered) {
                         HapticFeedback.mediumImpact();
@@ -736,16 +736,22 @@ class _SquarePageState extends State<SquarePage> {
 ///
 /// 与 Scrollable 的垂直拖拽手势竞争。只有在列表已置顶且用户明显向下拖拽时
 /// 才 accept，其他情况立即 reject，把手势还给列表滚动或子组件。
+///
+/// 注意：在正式 accept 之前不会调用 onMove，避免极小的手指抖动触发 setState
+/// 导致顶部 tab 点击失效。
 class _TopPullRecognizer extends OneSequenceGestureRecognizer {
   /// 回调：询问当前列表是否已经滚到最顶部。
   bool Function()? isAtTop;
 
   VoidCallback? onStart;
+
+  /// 回调参数为「从手指按下开始的累计向下位移」，不是单帧 delta。
   ValueChanged<double>? onMove;
   VoidCallback? onEnd;
 
-  double _dy = 0;
   double _dx = 0;
+  double _dy = 0;
+  bool _accepted = false;
 
   /// 向下拉多少像素后正式接管手势（要比 Scrollable 的拖拽阈值小一点）。
   static const double _acceptThreshold = 12;
@@ -759,6 +765,7 @@ class _TopPullRecognizer extends OneSequenceGestureRecognizer {
     }
     _dx = 0;
     _dy = 0;
+    _accepted = false;
     onStart?.call();
   }
 
@@ -768,22 +775,28 @@ class _TopPullRecognizer extends OneSequenceGestureRecognizer {
       _dx += event.delta.dx;
       _dy += event.delta.dy;
 
-      // 明显向下拉：接管手势，阻止列表滚动。
-      if (_dy > _acceptThreshold && _dy > _dx.abs()) {
-        resolve(GestureDisposition.accepted);
-        onMove?.call(event.delta.dy);
+      if (!_accepted) {
+        // 明显向下拉：接管手势，阻止列表滚动。
+        if (_dy > _acceptThreshold && _dy > _dx.abs()) {
+          _accepted = true;
+          resolve(GestureDisposition.accepted);
+          onMove?.call(_dy);
+          return;
+        }
+
+        // 明显是水平方向：拒绝，让给横向滚动或系统返回手势。
+        if (_dx.abs() > _acceptThreshold && _dx.abs() > _dy.abs()) {
+          resolve(GestureDisposition.rejected);
+          return;
+        }
+
+        // 还在犹豫区：不调用 onMove，避免触发 setState 影响顶部点击。
         return;
       }
 
-      // 明显是水平方向：拒绝，让给横向滚动或系统返回手势。
-      if (_dx.abs() > _acceptThreshold && _dx.abs() > _dy.abs()) {
-        resolve(GestureDisposition.rejected);
-        return;
-      }
-
-      // 还在犹豫区，先按当前向下位移更新球（视觉跟手）。
+      // 已接管：按累计向下位移更新刷新球。
       if (_dy > 0) {
-        onMove?.call(event.delta.dy);
+        onMove?.call(_dy);
       }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
       onEnd?.call();
