@@ -10,6 +10,7 @@ import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../theme/app_square_top_bar_theme.dart';
 import '../../widgets/image_overlay.dart';
 import '../search/search_page.dart';
 import '../settings/settings_navigation.dart';
@@ -376,27 +377,44 @@ class _SquarePageState extends State<SquarePage> {
   }
 
   Widget _buildBody() {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final topBar = _buildTopBar(colors, onSurface);
+
+    // 顶部栏始终保留，加载/错误/空状态以 SliverFillRemaining 嵌入列表
     if (_loading && _posts.isEmpty) {
-      return const AppLoadingCenter(message: '加载中...');
-    }
-    if (_error != null && _posts.isEmpty) {
-      return AppErrorState(message: _error!, onRetry: _initLoad);
-    }
-    if (_posts.isEmpty) {
-      return const AppEmptyState(
-        message: '还没有帖子，快来发布第一条吧',
-        icon: Icons.inbox_outlined,
+      return CustomScrollView(
+        slivers: [
+          topBar,
+          const SliverFillRemaining(child: AppLoadingCenter(message: '加载中...')),
+        ],
       );
     }
-    if (_filteredPosts.isEmpty) {
-      return const AppEmptyState(
-        message: '该分类下暂无帖子',
-        icon: Icons.inbox_outlined,
+    if (_error != null && _posts.isEmpty) {
+      return CustomScrollView(
+        slivers: [
+          topBar,
+          SliverFillRemaining(
+            child: AppErrorState(message: _error!, onRetry: _initLoad),
+          ),
+        ],
+      );
+    }
+    if (_posts.isEmpty) {
+      return CustomScrollView(
+        slivers: [
+          topBar,
+          const SliverFillRemaining(
+            child: AppEmptyState(
+              message: '还没有帖子，快来发布第一条吧',
+              icon: Icons.inbox_outlined,
+            ),
+          ),
+        ],
       );
     }
 
-    final colors = Theme.of(context).extension<AppColors>()!;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final posts = _filteredPosts;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
@@ -411,113 +429,133 @@ class _SquarePageState extends State<SquarePage> {
         ),
         slivers: [
           CupertinoSliverRefreshControl(onRefresh: _refresh),
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _SearchBarHeaderDelegate(
-              child: Container(
-                color: colors.common.surface,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: _categories.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final label = entry.value;
-                            final selected = index == _selectedCategoryIndex;
-                            return GestureDetector(
-                              onTap: () => _onCategoryTap(index),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                ),
-                                alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      label,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                        color: selected
-                                            ? colors.common.green
-                                            : onSurface.withValues(alpha: 0.7),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      width: 20,
-                                      height: 2.5,
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? colors.common.green
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(
-                                          1.25,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
+          topBar,
+          if (posts.isEmpty)
+            const SliverFillRemaining(
+              child: AppEmptyState(
+                message: '该分类下暂无帖子',
+                icon: Icons.inbox_outlined,
+              ),
+            )
+          else
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                AppDimens.listPaddingLeft,
+                AppDimens.listPaddingTop,
+                AppDimens.listPaddingRight,
+                AppDimens.listPaddingBottom,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate(
+                  posts
+                      .map(
+                        (p) => PostCard(
+                          key: ValueKey(p.id),
+                          post: p,
+                          comments: _comments[p.id] ?? [],
+                          onNeedCommentRefresh: () =>
+                              _onNeedCommentRefresh(p.id),
+                          onCommentCreated: (cmt) {
+                            setState(() {
+                              _comments[p.id] ??= [];
+                              _comments[p.id] = [..._comments[p.id]!, cmt];
+                            });
+                          },
                         ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.search, color: onSurface),
-                      onPressed: () => Navigator.of(
-                        context,
-                      ).push(topDownRoute(const SearchPage())),
-                    ),
-                  ],
+                      )
+                      .toList(),
                 ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              AppDimens.listPaddingLeft,
-              AppDimens.listPaddingTop,
-              AppDimens.listPaddingRight,
-              AppDimens.listPaddingBottom,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate(
-                _filteredPosts
-                    .map(
-                      (p) => PostCard(
-                        key: ValueKey(p.id),
-                        post: p,
-                        comments: _comments[p.id] ?? [],
-                        onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id),
-                        onCommentCreated: (cmt) {
-                          setState(() {
-                            _comments[p.id] ??= [];
-                            _comments[p.id] = [..._comments[p.id]!, cmt];
-                          });
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
         ],
+      ),
+    );
+  }
+
+  /// 顶部分类栏：结构与样式分离，样式全部读取 AppSquareTopBarTheme
+  Widget _buildTopBar(AppColors colors, Color onSurface) {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _PinnedHeaderDelegate(
+        child: Container(
+          color: colors.common.surface,
+          child: Row(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _categories.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final label = entry.value;
+                      final selected = index == _selectedCategoryIndex;
+                      return GestureDetector(
+                        onTap: () => _onCategoryTap(index),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal:
+                                AppSquareTopBarTheme.itemHorizontalPadding,
+                          ),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  fontSize: AppSquareTopBarTheme.fontSize,
+                                  fontWeight: selected
+                                      ? AppSquareTopBarTheme.selectedFontWeight
+                                      : AppSquareTopBarTheme
+                                            .unselectedFontWeight,
+                                  color: selected
+                                      ? colors.common.green
+                                      : onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                width: AppSquareTopBarTheme.indicatorWidth,
+                                height: AppSquareTopBarTheme.indicatorHeight,
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? colors.common.green
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(
+                                    AppSquareTopBarTheme.indicatorBorderRadius,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.search,
+                  color: onSurface,
+                  size: AppSquareTopBarTheme.searchIconSize,
+                ),
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(topDownRoute(const SearchPage())),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _SearchBarHeaderDelegate extends SliverPersistentHeaderDelegate {
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
 
-  _SearchBarHeaderDelegate({required this.child});
+  _PinnedHeaderDelegate({required this.child});
 
   @override
   Widget build(
@@ -529,13 +567,13 @@ class _SearchBarHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => 48;
+  double get maxExtent => AppSquareTopBarTheme.height;
 
   @override
-  double get minExtent => 48;
+  double get minExtent => AppSquareTopBarTheme.height;
 
   @override
-  bool shouldRebuild(covariant _SearchBarHeaderDelegate oldDelegate) {
+  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) {
     return child != oldDelegate.child;
   }
 }
