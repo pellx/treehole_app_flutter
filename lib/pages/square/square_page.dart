@@ -556,10 +556,10 @@ class _SquarePageState extends State<SquarePage> {
                 (instance) {
                   instance.isAtTop = () => _isAtTop;
                   instance.onStart = () {
-                    setState(() {
-                      _leftPullDistance = 0;
-                      _leftPullHapticTriggered = false;
-                    });
+                    // 只在手势开始时重置内部状态，不要 setState，
+                    // 否则每次在顶部点击（如切换 tab）都会触发重建，导致 tab 点击失效。
+                    _leftPullDistance = 0;
+                    _leftPullHapticTriggered = false;
                   };
                   instance.onMove = (dy) {
                     setState(() {
