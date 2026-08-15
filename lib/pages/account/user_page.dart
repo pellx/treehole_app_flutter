@@ -503,7 +503,7 @@ class _UserPageState extends State<UserPage> {
                   colors,
                   onSurface,
                   '账户切换',
-                  Icons.swap_horiz_outlined,
+                  Icons.switch_account_outlined,
                   _openLoginOther,
                 ),
               ]),
