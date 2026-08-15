@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
@@ -33,6 +34,35 @@ class _SquarePageState extends State<SquarePage> {
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
   final Set<int> _postsNeedCommentRefresh = {}; // 需要刷新回复的帖子 ID
+
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  int _selectedCategoryIndex = 0;
+
+  final _categories = ['推荐', '经验', '求助', '闲聊', '资源'];
+  final _categoryKeywords = {
+    '经验': ['经验', '教程', '攻略', '如何', '怎么', '技巧', '分享'],
+    '求助': ['求助', '问', '请问', '怎么办', '帮忙', '求'],
+    '闲聊': ['闲聊', '吐槽', '八卦', '聊聊', '讨论'],
+    '资源': ['资源', '下载', '链接', '文件', '附件'],
+  };
+
+  final _channels = ['校园', '城市', '兴趣', '活动', '其他'];
+  int? _selectedChannelIndex;
+
+  List<Post> get _filteredPosts {
+    final category = _categories[_selectedCategoryIndex];
+    if (category == '推荐') return _posts;
+    final keywords = _categoryKeywords[category] ?? [];
+    return _posts.where((p) {
+      final text = '${p.title} ${p.content}'.toLowerCase();
+      return keywords.any((k) => text.contains(k));
+    }).toList();
+  }
+
+  void _onCategoryTap(int index) {
+    HapticFeedback.lightImpact();
+    setState(() => _selectedCategoryIndex = index);
+  }
 
   void _onNeedCommentRefresh(int postId) {
     if (!_postsNeedCommentRefresh.contains(postId)) return;
@@ -345,7 +375,70 @@ class _SquarePageState extends State<SquarePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) ImageOverlay.closeCurrent();
       },
-      child: Scaffold(body: SafeArea(bottom: false, child: _buildBody())),
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _buildDrawer(),
+        body: SafeArea(bottom: false, child: _buildBody()),
+      ),
+    );
+  }
+
+  Widget _buildDrawer() {
+    final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                '栏目选择',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: onSurface,
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _channels.length,
+                itemBuilder: (context, index) {
+                  final selected = index == _selectedChannelIndex;
+                  return ListTile(
+                    leading: Icon(
+                      Icons.folder_outlined,
+                      color: selected
+                          ? colors.common.green
+                          : onSurface.withValues(alpha: 0.6),
+                    ),
+                    title: Text(
+                      _channels[index],
+                      style: TextStyle(
+                        color: selected ? colors.common.green : onSurface,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    trailing: selected
+                        ? Icon(Icons.check, color: colors.common.green)
+                        : null,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _selectedChannelIndex = index);
+                      Navigator.of(context).pop();
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -362,8 +455,15 @@ class _SquarePageState extends State<SquarePage> {
         icon: Icons.inbox_outlined,
       );
     }
+    if (_filteredPosts.isEmpty) {
+      return const AppEmptyState(
+        message: '该分类下暂无帖子',
+        icon: Icons.inbox_outlined,
+      );
+    }
 
     final colors = Theme.of(context).extension<AppColors>()!;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
@@ -382,42 +482,71 @@ class _SquarePageState extends State<SquarePage> {
             pinned: true,
             delegate: _SearchBarHeaderDelegate(
               child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(
-                    context,
-                  ).push(topDownRoute(const SearchPage())),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                    child: Container(
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.light
-                            ? const Color(0xFFF2F2F2)
-                            : const Color(0xFF2A2A2A),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.search,
-                            size: 18,
-                            color: colors.common.trailingIcon,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '搜索',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: colors.common.trailingIcon,
-                            ),
-                          ),
-                        ],
+                color: colors.common.surface,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.menu, color: onSurface),
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: _categories.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final label = entry.value;
+                            final selected = index == _selectedCategoryIndex;
+                            return GestureDetector(
+                              onTap: () => _onCategoryTap(index),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: selected
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: selected
+                                            ? colors.common.green
+                                            : onSurface.withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: 20,
+                                      height: 2.5,
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? colors.common.green
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(
+                                          1.25,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
-                  ),
+                    IconButton(
+                      icon: Icon(Icons.search, color: onSurface),
+                      onPressed: () => Navigator.of(
+                        context,
+                      ).push(topDownRoute(const SearchPage())),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -431,7 +560,7 @@ class _SquarePageState extends State<SquarePage> {
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate(
-                _posts
+                _filteredPosts
                     .map(
                       (p) => PostCard(
                         key: ValueKey(p.id),
@@ -471,10 +600,10 @@ class _SearchBarHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  double get maxExtent => 52;
+  double get maxExtent => 48;
 
   @override
-  double get minExtent => 52;
+  double get minExtent => 48;
 
   @override
   bool shouldRebuild(covariant _SearchBarHeaderDelegate oldDelegate) {
