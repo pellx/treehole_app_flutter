@@ -620,9 +620,9 @@ class _SquarePageState extends State<SquarePage> {
                             horizontal:
                                 AppSquareTopBarTheme.itemHorizontalPadding,
                           ),
-                          alignment: Alignment.center,
+                          alignment: Alignment.bottomCenter,
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               Text(
                                 label,

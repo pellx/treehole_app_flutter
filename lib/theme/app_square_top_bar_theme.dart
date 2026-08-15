@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 ///   - 左侧横向滚动的分类 tab
 ///   - 右侧搜索图标按钮
 ///
-/// 每个 tab 的视觉结构（从上到下）：
-///   文字
-///   [indicatorTopSpacing]
-///   指示条（宽 [indicatorWidth] × 高 [indicatorHeight]）
-///   [indicatorBottomSpacing]
+/// 每个 tab 内部采用「底部对齐」布局，结构如下（从下到上）：
 ///   顶栏底部
+///   [indicatorBottomSpacing]  ← 指示条底部到顶栏底部的距离，直接决定指示条位置
+///   指示条（宽 [indicatorWidth] × 高 [indicatorHeight]）
+///   [indicatorTopSpacing]     ← 文字底部到指示条顶部的距离
+///   文字
 class AppSquareTopBarTheme {
   const AppSquareTopBarTheme._();
 
@@ -36,11 +36,11 @@ class AppSquareTopBarTheme {
   static const double indicatorBorderRadius = 1.25;
 
   /// 文字底部到指示条顶部的距离。
-  /// 这个值越大，指示条离文字越远。
+  /// 这个值越大，文字和指示条分得越开。
   static const double indicatorTopSpacing = 4;
 
   /// 指示条底部到顶栏容器底部的距离。
-  /// 顶栏高度固定，所以它和 [indicatorTopSpacing] 共同决定指示条在竖直方向的视觉位置。
+  /// 这是「直接距离」：tab 内部按底部对齐，改这个值会立刻改变指示条在顶栏里的高低。
   static const double indicatorBottomSpacing = 2;
 
   /// 搜索图标本身的大小。
@@ -51,7 +51,7 @@ class AppSquareTopBarTheme {
   static const double searchIconRightInset = 2;
 
   /// 搜索按钮的顶部内边距。
-  /// [IconButton] 会在顶栏内居中放置图标；topPadding 越大，图标越靠下。
+  /// [IconButton] 会把图标放在剩余空间的中心；topPadding 越大，图标越靠下。
   static const double searchIconTopPadding = 8;
 
   /// 搜索按钮的底部内边距。
