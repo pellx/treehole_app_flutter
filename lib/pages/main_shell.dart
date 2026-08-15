@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../widgets/app_bottom_nav.dart';
 import '../pages/square/square_page.dart';
-import '../pages/search/search_page.dart';
+import '../pages/favorites/favorites_page.dart';
+import '../pages/messages/messages_page.dart';
 import '../pages/account/user_page.dart';
 import '../pages/post/post_create_page.dart';
 import '../pages/settings/settings_navigation.dart';
@@ -19,23 +20,11 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   final _homeKey = GlobalKey();
-  final _searchKey = GlobalKey();
+  final _favoritesKey = GlobalKey();
+  final _messagesKey = GlobalKey();
   final _userKey = GlobalKey();
 
-  static const _items = [
-    AppNavItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: '主页'),
-    AppNavItem(
-      icon: Icons.search_outlined,
-      activeIcon: Icons.search,
-      label: '搜索',
-    ),
-    AppNavItem(icon: Icons.edit_outlined, activeIcon: Icons.edit, label: '发布'),
-    AppNavItem(
-      icon: Icons.person_outline,
-      activeIcon: Icons.person,
-      label: '用户',
-    ),
-  ];
+  static const _labels = ['广场', '收藏', '消息', '我的'];
 
   Future<void> _openCreatePost() async {
     HapticFeedback.lightImpact();
@@ -49,10 +38,6 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _onTap(int index) {
-    if (index == 2) {
-      _openCreatePost();
-      return;
-    }
     if (index != _currentIndex) {
       HapticFeedback.lightImpact();
       setState(() => _currentIndex = index);
@@ -63,8 +48,8 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = [
       SquarePage(key: _homeKey),
-      SearchPage(key: _searchKey),
-      const SizedBox.shrink(), // 发布由底部导航点击事件处理，不占页面
+      FavoritesPage(key: _favoritesKey),
+      MessagesPage(key: _messagesKey),
       UserPage(key: _userKey),
     ];
 
@@ -73,7 +58,8 @@ class _MainShellState extends State<MainShell> {
       bottomNavigationBar: AppBottomNav(
         currentIndex: _currentIndex,
         onTap: _onTap,
-        items: _items,
+        onPublishTap: _openCreatePost,
+        labels: _labels,
       ),
     );
   }

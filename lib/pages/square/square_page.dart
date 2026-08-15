@@ -7,8 +7,11 @@ import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
 import '../../services/storage.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/image_overlay.dart';
+import '../search/search_page.dart';
+import '../settings/settings_navigation.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_loading_indicator.dart';
@@ -360,6 +363,8 @@ class _SquarePageState extends State<SquarePage> {
       );
     }
 
+    final colors = Theme.of(context).extension<AppColors>()!;
+
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
         if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
@@ -373,6 +378,43 @@ class _SquarePageState extends State<SquarePage> {
         ),
         slivers: [
           CupertinoSliverRefreshControl(onRefresh: _refresh),
+          SliverToBoxAdapter(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () =>
+                  Navigator.of(context).push(topDownRoute(const SearchPage())),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Container(
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.light
+                        ? const Color(0xFFF2F2F2)
+                        : const Color(0xFF2A2A2A),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.search,
+                        size: 18,
+                        color: colors.common.trailingIcon,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '搜索',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: colors.common.trailingIcon,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(
               AppDimens.listPaddingLeft,
