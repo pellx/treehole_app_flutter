@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../theme/app_dimens.dart';
@@ -34,6 +35,7 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   bool _expanded = false; // 正文是否展开
+  bool _hasBeenExpanded = false; // 是否曾经被展开过
   int _commentsShowCount = AppDimens.commentMaxShown; // 当前展开的回复数
   int? _expandedAuthorId; // 当前展开的回复署名 ID
   OverlayEntry? _commentOverlay; // 评论输入浮层
@@ -143,6 +145,9 @@ class _PostCardState extends State<PostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final isLong = post.content.length > AppDimens.contentMaxLength;
+    final remaining = isLong
+        ? post.content.length - AppDimens.contentMaxLength
+        : 0;
     final displayContent = (_expanded || !isLong)
         ? post.content
         : post.content.substring(0, AppDimens.contentMaxLength);
@@ -211,8 +216,10 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
           SizedBox(height: AppDimens.dateRowTopSpacing),
-          Container(key: _dateRowKey, child: _dateRow(colors)),
-          if (isLong) _expandTextButton(pc),
+          Container(
+            key: _dateRowKey,
+            child: _dateRow(colors, isLong, remaining),
+          ),
           SizedBox(height: AppDimens.dateRowBottomSpacing),
           if (widget.comments.isNotEmpty) _commentSection(colors, primary),
         ],
@@ -423,7 +430,7 @@ class _PostCardState extends State<PostCard> {
     final pc = colors.postCard;
     final all = widget.comments;
     final showMore = all.length > _commentsShowCount;
-    final hasExpanded = _commentsShowCount > AppDimens.commentMaxShown;
+    final hasMinus = _commentsShowCount > AppDimens.commentMaxShown;
     final visible = all.take(_commentsShowCount).toList();
     final postDay = widget.post.createdAt.length >= 10
         ? widget.post.createdAt.substring(0, 10)
@@ -458,34 +465,63 @@ class _PostCardState extends State<PostCard> {
       );
       lastDay = cmtDay;
     }
-    if (showMore || hasExpanded) {
+    if (showMore || hasMinus) {
+      final remain = all.length - _commentsShowCount;
       rows.add(
         Align(
           key: const ValueKey('comment_btns'),
           alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              setState(() {
-                if (showMore) {
-                  _commentsShowCount =
-                      (_commentsShowCount + AppDimens.commentStep).clamp(
-                        AppDimens.commentMaxShown,
-                        all.length,
-                      );
-                } else {
-                  _commentsShowCount = AppDimens.commentMaxShown;
-                }
-              });
-            },
-            child: Padding(
-              padding: EdgeInsets.only(top: AppDimens.commentRemainTopOffset),
-              child: Icon(
-                showMore ? Icons.add : Icons.remove,
-                size: 20,
-                color: pc.commentRemain,
-              ),
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showMore) ...[
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: AppDimens.commentRemainTopOffset,
+                  ),
+                  child: Text(
+                    '+$remain',
+                    style: TextStyle(
+                      fontSize: AppDimens.commentRemainFontSize,
+                      color: pc.commentRemain,
+                    ),
+                  ),
+                ),
+                SizedBox(width: AppDimens.commentRemainBtnGap),
+              ],
+              if (hasMinus)
+                GestureDetector(
+                  onTap: () => setState(
+                    () => _commentsShowCount = AppDimens.commentMaxShown,
+                  ),
+                  child: SvgPicture.asset(
+                    'assets/minus.svg',
+                    width: AppDimens.commentBtnSize,
+                    height: AppDimens.commentBtnSize,
+                    colorFilter: ColorFilter.mode(
+                      pc.commentIcon,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+              if (showMore && hasMinus)
+                SizedBox(width: AppDimens.commentBtnGap),
+              if (showMore)
+                GestureDetector(
+                  onTap: () => setState(
+                    () => _commentsShowCount += AppDimens.commentStep,
+                  ),
+                  child: SvgPicture.asset(
+                    'assets/plus.svg',
+                    width: AppDimens.commentBtnSize,
+                    height: AppDimens.commentBtnSize,
+                    colorFilter: ColorFilter.mode(
+                      pc.commentIcon,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       );
@@ -902,7 +938,7 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _dateRow(AppColors colors) {
+  Widget _dateRow(AppColors colors, bool isLong, int remaining) {
     final pc = colors.postCard;
     return Stack(
       alignment: Alignment.centerLeft,
@@ -917,6 +953,50 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
         ),
+        if (isLong && !_hasBeenExpanded)
+          Positioned(
+            top: AppDimens.expandIconTop,
+            right:
+                AppDimens.dotsPositionedRight +
+                AppDimens.dotsBtnWidth +
+                AppDimens.expandBtnDotsGap +
+                AppDimens.expandIconSize +
+                AppDimens.expandRemainGap,
+            child: Text(
+              '+$remaining',
+              style: TextStyle(
+                fontSize: AppDimens.fontSizeSmall,
+                color: pc.commentDate,
+              ),
+            ),
+          ),
+        if (isLong)
+          Positioned(
+            top: AppDimens.expandIconTop,
+            right:
+                AppDimens.dotsPositionedRight +
+                AppDimens.dotsBtnWidth +
+                AppDimens.expandBtnDotsGap,
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _expanded = !_expanded;
+                _hasBeenExpanded = true;
+              }),
+              child: AnimatedRotation(
+                turns: _expanded ? 0.0 : 0.5,
+                duration: Duration(milliseconds: AppDimens.expandIconAnimMs),
+                child: SvgPicture.asset(
+                  'assets/expand_icon.svg',
+                  width: AppDimens.expandIconSize,
+                  height: AppDimens.expandIconSize,
+                  colorFilter: ColorFilter.mode(
+                    _hasBeenExpanded ? pc.expandIconGray : pc.expandIconBlue,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            ),
+          ),
         // 两点按钮
         Positioned(
           right: AppDimens.dotsPositionedRight,
@@ -924,28 +1004,6 @@ class _PostCardState extends State<PostCard> {
           child: _dotsOnly(pc),
         ),
       ],
-    );
-  }
-
-  Widget _expandTextButton(PostCardColors pc) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: EdgeInsets.only(left: AppDimens.paddingSm, top: 4),
-        child: GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            setState(() => _expanded = !_expanded);
-          },
-          child: Text(
-            _expanded ? '收起' : '展开全文',
-            style: TextStyle(
-              fontSize: AppDimens.fontSizeSmall,
-              color: pc.commentRemain,
-            ),
-          ),
-        ),
-      ),
     );
   }
 

@@ -35,23 +35,19 @@ class _SquarePageState extends State<SquarePage> {
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
   final Set<int> _postsNeedCommentRefresh = {}; // 需要刷新回复的帖子 ID
 
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedCategoryIndex = 0;
 
-  final _categories = ['推荐', '经验', '求助', '闲聊', '资源'];
+  final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
   final _categoryKeywords = {
-    '经验': ['经验', '教程', '攻略', '如何', '怎么', '技巧', '分享'],
-    '求助': ['求助', '问', '请问', '怎么办', '帮忙', '求'],
-    '闲聊': ['闲聊', '吐槽', '八卦', '聊聊', '讨论'],
-    '资源': ['资源', '下载', '链接', '文件', '附件'],
+    '问答': ['问', '求助', '怎么办', '帮忙', '求', '？', '?'],
+    '资料': ['资料', '资源', '下载', '链接', '文件', '附件', '教程', '攻略'],
+    '兴趣': ['兴趣', '闲聊', '吐槽', '八卦', '聊聊', '讨论', '经验', '分享'],
+    '梗图': ['梗', '图', '图片', '表情包', '笑', 'meme'],
   };
-
-  final _channels = ['校园', '城市', '兴趣', '活动', '其他'];
-  int? _selectedChannelIndex;
 
   List<Post> get _filteredPosts {
     final category = _categories[_selectedCategoryIndex];
-    if (category == '推荐') return _posts;
+    if (category == '默认') return _posts;
     final keywords = _categoryKeywords[category] ?? [];
     return _posts.where((p) {
       final text = '${p.title} ${p.content}'.toLowerCase();
@@ -375,70 +371,7 @@ class _SquarePageState extends State<SquarePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) ImageOverlay.closeCurrent();
       },
-      child: Scaffold(
-        key: _scaffoldKey,
-        drawer: _buildDrawer(),
-        body: SafeArea(bottom: false, child: _buildBody()),
-      ),
-    );
-  }
-
-  Widget _buildDrawer() {
-    final colors = Theme.of(context).extension<AppColors>()!;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                '栏目选择',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: onSurface,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _channels.length,
-                itemBuilder: (context, index) {
-                  final selected = index == _selectedChannelIndex;
-                  return ListTile(
-                    leading: Icon(
-                      Icons.folder_outlined,
-                      color: selected
-                          ? colors.common.green
-                          : onSurface.withValues(alpha: 0.6),
-                    ),
-                    title: Text(
-                      _channels[index],
-                      style: TextStyle(
-                        color: selected ? colors.common.green : onSurface,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    trailing: selected
-                        ? Icon(Icons.check, color: colors.common.green)
-                        : null,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() => _selectedChannelIndex = index);
-                      Navigator.of(context).pop();
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+      child: Scaffold(body: SafeArea(bottom: false, child: _buildBody())),
     );
   }
 
@@ -485,10 +418,6 @@ class _SquarePageState extends State<SquarePage> {
                 color: colors.common.surface,
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: Icon(Icons.menu, color: onSurface),
-                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                    ),
                     Expanded(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
