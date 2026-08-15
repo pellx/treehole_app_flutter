@@ -1,4 +1,5 @@
 /// 设备指纹数据模型
+library;
 
 // ── Android 子结构 ──
 
@@ -38,11 +39,21 @@ class AndroidBuildInfo {
   });
 
   Map<String, dynamic> toJson() => {
-    'board': board, 'bootloader': bootloader, 'brand': brand,
-    'device': device, 'display': display, 'fingerprint': fingerprint,
-    'hardware': hardware, 'host': host, 'id': id,
-    'manufacturer': manufacturer, 'model': model, 'product': product,
-    'name': name, 'tags': tags, 'type': type,
+    'board': board,
+    'bootloader': bootloader,
+    'brand': brand,
+    'device': device,
+    'display': display,
+    'fingerprint': fingerprint,
+    'hardware': hardware,
+    'host': host,
+    'id': id,
+    'manufacturer': manufacturer,
+    'model': model,
+    'product': product,
+    'name': name,
+    'tags': tags,
+    'type': type,
   };
 }
 
@@ -66,9 +77,12 @@ class AndroidVersionInfo {
   });
 
   Map<String, dynamic> toJson() => {
-    'baseOS': baseOS, 'codename': codename,
-    'incremental': incremental, 'previewSdkInt': previewSdkInt,
-    'release': release, 'sdkInt': sdkInt,
+    'baseOS': baseOS,
+    'codename': codename,
+    'incremental': incremental,
+    'previewSdkInt': previewSdkInt,
+    'release': release,
+    'sdkInt': sdkInt,
     'securityPatch': securityPatch,
   };
 }
@@ -173,9 +187,12 @@ class IosDeviceInfo {
   });
 
   Map<String, dynamic> toJson() => {
-    'name': name, 'systemName': systemName,
-    'systemVersion': systemVersion, 'model': model,
-    'modelName': modelName, 'localizedModel': localizedModel,
+    'name': name,
+    'systemName': systemName,
+    'systemVersion': systemVersion,
+    'model': model,
+    'modelName': modelName,
+    'localizedModel': localizedModel,
     'identifierForVendor': identifierForVendor,
     'isPhysicalDevice': isPhysicalDevice,
     'isiOSAppOnMac': isiOSAppOnMac,
@@ -219,8 +236,10 @@ class IosUtsnameInfo {
   });
 
   Map<String, dynamic> toJson() => {
-    'sysname': sysname, 'nodename': nodename,
-    'release': release, 'version': version,
+    'sysname': sysname,
+    'nodename': nodename,
+    'release': release,
+    'version': version,
     'machine': machine,
   };
 }
@@ -254,11 +273,7 @@ class DeviceFingerprint {
   final AndroidFingerprint? android;
   final IosFingerprint? ios;
 
-  const DeviceFingerprint._({
-    required this.platform,
-    this.android,
-    this.ios,
-  });
+  const DeviceFingerprint._({required this.platform, this.android, this.ios});
 
   factory DeviceFingerprint.android(AndroidFingerprint a) =>
       DeviceFingerprint._(platform: DevicePlatform.android, android: a);

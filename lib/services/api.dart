@@ -12,8 +12,6 @@ import 'pow.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
 import '../models/version_info.dart';
-import 'storage.dart';
-import 'device_credential_store.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
@@ -440,6 +438,9 @@ class ApiService {
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
 
+  /// 共享 HTTP 客户端：复用 TCP/TLS 连接，避免每次请求重新握手
+  static final http.Client _client = http.Client();
+
   /// 最近一次 API 调用失败的错误消息（用于前端展示审核拒绝原因）
   static String? lastError;
 
@@ -451,14 +452,14 @@ class ApiService {
 
   static Future<List<int>> getIdList() async {
     if (_useMock) return [12, 345, 6789];
-    final res = await http.get(Uri.parse('$_base/idList')).timeout(_timeout);
+    final res = await _client.get(Uri.parse('$_base/idList')).timeout(_timeout);
     return List<int>.from(jsonDecode(res.body));
   }
 
   static Future<Post?> getPost(int id) async {
     if (_useMock) return _mockPost(id);
     try {
-      final res = await http.get(Uri.parse('$_base/$id')).timeout(_timeout);
+      final res = await _client.get(Uri.parse('$_base/$id')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getPost($id) status=${res.statusCode}');
         return null;
@@ -476,13 +477,14 @@ class ApiService {
       final url = isGif
           ? '$_originalBase/$fileName'
           : '$_thumbBase/$fileName';
-      final res = await http.get(Uri.parse(url)).timeout(_timeout);
+      final res = await _client.get(Uri.parse(url)).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] downloadThumbnail($fileName) status=${res.statusCode}');
         return null;
       }
       final bytes = res.bodyBytes;
-      final dims = await _decodeSize(bytes);
+      // 优先读图片头拿尺寸（不做整图解码）；解析不了再走 codec 兜底
+      final dims = _readImageSize(bytes) ?? await _decodeSize(bytes);
       return ThumbnailData(bytes: bytes, width: dims.$1, height: dims.$2);
     } catch (e) {
       debugPrint('[ApiService] downloadThumbnail($fileName) error: $e');
@@ -500,6 +502,78 @@ class ApiService {
     return (w, h);
   }
 
+  /// 从图片头读取宽高（PNG/JPEG/GIF/WebP），比整图解码快得多；识别失败返回 null
+  static (int, int)? _readImageSize(Uint8List bytes) {
+    final b = bytes;
+    if (b.length < 12) return null;
+    // PNG：签名 + IHDR，宽高在偏移 16..24（大端）
+    if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47 &&
+        b.length >= 24) {
+      return (
+        (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19],
+        (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23],
+      );
+    }
+    // GIF：宽高在偏移 6..10（小端）
+    if (b[0] == 0x47 && b[1] == 0x49 && b[2] == 0x46 && b.length >= 10) {
+      return (b[6] | (b[7] << 8), b[8] | (b[9] << 8));
+    }
+    // JPEG：逐个扫描段，直到 SOF 段取出宽高
+    if (b[0] == 0xFF && b[1] == 0xD8) {
+      var i = 2;
+      while (i + 9 < b.length) {
+        if (b[i] != 0xFF) {
+          i++;
+          continue;
+        }
+        final marker = b[i + 1];
+        // SOI/EOI 无长度段
+        if (marker == 0xD8 || marker == 0xD9) {
+          i += 2;
+          continue;
+        }
+        // TEM/RSTn 等无长度段标记，直接跳过
+        if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+          i += 2;
+          continue;
+        }
+        // SOS：其后为熵编码数据，不再有段结构
+        if (marker == 0xDA) break;
+        // SOF0-SOF15（排除 DHT/DAC 等）带精度+高+宽
+        if (marker >= 0xC0 &&
+            marker <= 0xCF &&
+            marker != 0xC4 &&
+            marker != 0xC8 &&
+            marker != 0xCC) {
+          final h = (b[i + 5] << 8) | b[i + 6];
+          final w = (b[i + 7] << 8) | b[i + 8];
+          return (w, h);
+        }
+        final len = (b[i + 2] << 8) | b[i + 3];
+        i += 2 + len;
+      }
+    }
+    // WebP：RIFF....WEBP，按 VP8X / VP8L / VP8 三种 chunk 解析
+    if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
+        b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+      final chunk = String.fromCharCodes(b.sublist(12, 16));
+      if (chunk == 'VP8X' && b.length >= 30) {
+        return (
+          1 + (b[24] | (b[25] << 8) | (b[26] << 16)),
+          1 + (b[27] | (b[28] << 8) | (b[29] << 16)),
+        );
+      }
+      if (chunk == 'VP8L' && b.length >= 25) {
+        final bits = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+        return (1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF));
+      }
+      if (chunk == 'VP8 ' && b.length >= 30) {
+        return (b[26] | (b[27] << 8), b[28] | (b[29] << 8));
+      }
+    }
+    return null;
+  }
+
   /// 上传不带 session（后端 DTO 禁止）；署名时传 [userId]。
   static Future<UploadResult?> uploadFile(
     PostUploadType type,
@@ -514,7 +588,7 @@ class ApiService {
         request.fields['user_id'] = uid;
       }
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
-      final streamed = await request.send().timeout(_timeout);
+      final streamed = await _client.send(request).timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
         final body = await streamed.stream.bytesToString();
         debugPrint('[ApiService] uploadFile($type, ${file.path}) status=${streamed.statusCode} body=$body');
@@ -536,7 +610,7 @@ class ApiService {
 
   static Future<Post?> createPost(PostDraft draft) async {
     try {
-      final res = await http
+      final res = await _client
           .post(
             Uri.parse(_base),
             headers: const {'Content-Type': 'application/json'},
@@ -559,7 +633,7 @@ class ApiService {
 
   static Future<Comment?> getComment(int id) async {
     try {
-      final res = await http.get(Uri.parse('$_commentBase/$id')).timeout(_timeout);
+      final res = await _client.get(Uri.parse('$_commentBase/$id')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getComment($id) status=${res.statusCode}');
         return null;
@@ -590,7 +664,7 @@ class ApiService {
       final uid = userId?.trim();
       if (uid != null && uid.isNotEmpty) body['user_id'] = uid;
       if (toId != null) body['toId'] = toId;
-      final res = await http
+      final res = await _client
           .post(
             Uri.parse(_commentBase),
             headers: const {'Content-Type': 'application/json'},
@@ -629,7 +703,7 @@ class ApiService {
 
   static Future<VersionInfo?> getLatestVersion({String platform = 'android'}) async {
     try {
-      final res = await http.get(Uri.parse('$_versionBase/latest?platform=$platform')).timeout(_timeout);
+      final res = await _client.get(Uri.parse('$_versionBase/latest?platform=$platform')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getLatestVersion status=${res.statusCode}');
         return null;
@@ -643,7 +717,7 @@ class ApiService {
 
   static Future<List<VersionInfo>> getAllVersions({String platform = 'android'}) async {
     try {
-      final res = await http.get(Uri.parse('$_versionBase?platform=$platform')).timeout(_timeout);
+      final res = await _client.get(Uri.parse('$_versionBase?platform=$platform')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getAllVersions status=${res.statusCode}');
         return [];
@@ -665,7 +739,7 @@ class ApiService {
     required DeviceFingerprint deviceFingerPrint,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/check'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -701,7 +775,7 @@ class ApiService {
           'nonce': verificationPow.nonce,
         },
       };
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/register'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(requestBody))
@@ -731,7 +805,7 @@ class ApiService {
   /// 获取 PoW hashcash challenge
   static Future<PoWChallenge?> getPoWChallenge() async {
     try {
-      final res = await http.get(Uri.parse('$_userBase/pow-challenge')).timeout(_timeout);
+      final res = await _client.get(Uri.parse('$_userBase/pow-challenge')).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getPoWChallenge status=${res.statusCode}');
         return null;
@@ -750,7 +824,7 @@ class ApiService {
     required String fingerprintHash,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/login'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -786,7 +860,7 @@ class ApiService {
     required String deviceSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/create'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -825,7 +899,7 @@ class ApiService {
     required String fingerprintHash,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/session/create'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -859,7 +933,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/last-switch'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -888,7 +962,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/session/validate'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -917,7 +991,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/profile'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -948,7 +1022,7 @@ class ApiService {
     lastNextRenameAt = null;
     lastDisplayIdChangedAt = null;
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/rename'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1000,7 +1074,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/token/reset'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1036,7 +1110,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/devices2user'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1073,7 +1147,7 @@ class ApiService {
     required int bindingId,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/primary-transfer'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1103,7 +1177,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/primary-transfer-cancel'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1129,7 +1203,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/user2device'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1166,7 +1240,7 @@ class ApiService {
     required String sessionSecret,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/transfer-request'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1204,7 +1278,7 @@ class ApiService {
     required String newName,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/rename'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1236,7 +1310,7 @@ class ApiService {
     required int bindingId,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/delete'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({
@@ -1267,7 +1341,7 @@ class ApiService {
     required int bindingId,
   }) async {
     try {
-      final res = await http
+      final res = await _client
           .post(Uri.parse('$_userBase/binding/delete-cancel'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({

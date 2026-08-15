@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,13 +18,16 @@ class PostStorage {
   static late Box _accountBox;
 
   static Future<void> init() async {
-    _idBox = await Hive.openBox('id_list');
-    _postBox = await Hive.openBox('posts');
-    _thumbBox = await Hive.openBox('thumbnails');
-    _commentBox = await Hive.openBox('comments');
-    _customColorsBox = await Hive.openBox('custom_colors');
-    _versionBox = await Hive.openBox('versions');
-    _accountBox = await Hive.openBox('account');
+    // 并行打开各 box，缩短首帧前阻塞
+    await Future.wait([
+      Hive.openBox('id_list').then((b) => _idBox = b),
+      Hive.openBox('posts').then((b) => _postBox = b),
+      Hive.openBox('thumbnails').then((b) => _thumbBox = b),
+      Hive.openBox('comments').then((b) => _commentBox = b),
+      Hive.openBox('custom_colors').then((b) => _customColorsBox = b),
+      Hive.openBox('versions').then((b) => _versionBox = b),
+      Hive.openBox('account').then((b) => _accountBox = b),
+    ]);
   }
 
   // ---- 账号 ----
@@ -81,7 +83,31 @@ class PostStorage {
     if (raw == null) return null;
     final map = Map<String, dynamic>.from(raw as Map);
     map.remove('fetched');
+    map.remove('comments_checked_at');
     return Post.fromJson(map);
+  }
+
+  /// 评论列表本地刷新 TTL：期间内不再重复 getPost 拉全帖
+  static const Duration commentRefreshTtl = Duration(minutes: 5);
+
+  /// 记录最近一次评论列表从服务端刷新的时间
+  static Future<void> setCommentsCheckedAt(int postId) async {
+    final raw = _postBox.get(postId);
+    if (raw == null) return;
+    final map = Map<String, dynamic>.from(raw as Map);
+    map['comments_checked_at'] = DateTime.now().millisecondsSinceEpoch;
+    await _postBox.put(postId, map);
+  }
+
+  /// 最近一次评论刷新是否仍在 TTL 内（在则跳过重新 getPost）
+  static bool commentsFresh(int postId) {
+    final raw = _postBox.get(postId);
+    if (raw == null) return false;
+    final map = raw as Map;
+    final at = map['comments_checked_at'];
+    if (at is! num) return false;
+    final checked = DateTime.fromMillisecondsSinceEpoch(at.toInt());
+    return DateTime.now().difference(checked) < commentRefreshTtl;
   }
 
   static Future<void> savePost(Post post) async {

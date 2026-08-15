@@ -1,6 +1,7 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'pages/square/square_page.dart';
+import 'pages/main_shell.dart';
 import 'app_navigator.dart';
 import 'services/session_service.dart';
 import 'theme/app_colors.dart';
@@ -70,6 +71,12 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
           selectionColor: AppColors.light.common.green.withValues(alpha: 0.3),
           selectionHandleColor: AppColors.light.common.green,
         ),
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          },
+        ),
         extensions: const [AppColors.light],
       ),
       darkTheme: ThemeData.dark().copyWith(
@@ -83,9 +90,15 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
           selectionColor: AppColors.dark.common.green.withValues(alpha: 0.3),
           selectionHandleColor: AppColors.dark.common.green,
         ),
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          },
+        ),
         extensions: const [AppColors.dark],
       ),
-      home: const SquarePage(),
+      home: const MainShell(),
     );
   }
 }

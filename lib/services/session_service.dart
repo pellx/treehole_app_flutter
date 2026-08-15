@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
@@ -252,7 +251,8 @@ class SessionService {
 
     if (sessionId != null && sessionSecret != null) {
       final lastValidated = _lastValidatedAt;
-      final cacheHit = lastValidated != null &&
+      final cacheHit =
+          lastValidated != null &&
           DateTime.now().difference(lastValidated) < _validationCacheTtl;
 
       if (!cacheHit) {
@@ -322,8 +322,7 @@ class SessionService {
 
     final known = await DeviceCredentialStore.getKnownUserTokens();
     if (known.isEmpty) return false;
-    final ordered =
-        await DeviceCredentialStore.sortTokensByLastSession(known);
+    final ordered = await DeviceCredentialStore.sortTokensByLastSession(known);
     return _tryCandidateLogins(ordered);
   }
 
@@ -360,10 +359,7 @@ class SessionService {
     }
 
     final others = tokens.where((t) => t != current).toList();
-    return _failoverAfterUnbound(
-      failedToken: current,
-      extraCandidates: others,
-    );
+    return _failoverAfterUnbound(failedToken: current, extraCandidates: others);
   }
 
   Future<bool> _failoverAfterUnbound({
@@ -373,10 +369,7 @@ class SessionService {
     await _evictCurrentAccount(failedToken);
 
     final known = await DeviceCredentialStore.getKnownUserTokens();
-    final candidates = <String>{
-      ...extraCandidates,
-      ...known,
-    };
+    final candidates = <String>{...extraCandidates, ...known};
     if (failedToken != null) candidates.remove(failedToken);
 
     if (candidates.isEmpty) {
@@ -513,8 +506,8 @@ class SessionService {
       return false;
     }
 
-    final current =
-        (await DeviceCredentialStore.getUserExternalToken())?.trim();
+    final current = (await DeviceCredentialStore.getUserExternalToken())
+        ?.trim();
     if (current != null && current == token) {
       return ensureSession();
     }
@@ -537,7 +530,8 @@ class SessionService {
         if (boundOk) await _applySwitchedAccountDisplay(displayNameHint);
         return boundOk;
       }
-      final needLogin = err == 'DEVICE_SECRET_INVALID' ||
+      final needLogin =
+          err == 'DEVICE_SECRET_INVALID' ||
           err == 'DEVICE_NOT_FOUND' ||
           err == 'FINGERPRINT_MISMATCH';
       if (!needLogin) return false;

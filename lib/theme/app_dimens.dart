@@ -31,8 +31,8 @@ class AppDimens {
   static const double postCreateDividerThickness = 1;
   static const double postCreateDividerIndent = 2;
   static const double postCreateTitleMinHeight = 48;
-  static const double postCreateContentMinHeight = 120;
-  static const double postCreateContentMaxHeight = 200;
+  static const double postCreateContentMinHeight = 160;
+  static const double postCreateContentMaxHeight = 280;
 
   // ---- Floating label（标题）----
   static const double postCreateLabelFontSizeLarge = 16;

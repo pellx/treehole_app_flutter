@@ -1,17 +1,18 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_colors.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../services/storage.dart';
 import '../services/api.dart';
 import '../services/session_service.dart';
 import '../pages/account/register_page.dart';
 import '../pages/settings/settings_navigation.dart';
-import 'dart:typed_data';
+import '../widgets/app_bottom_sheet.dart';
+import '../widgets/app_snackbar.dart';
 import 'image_overlay.dart';
 
 class PostCard extends StatefulWidget {
@@ -19,40 +20,43 @@ class PostCard extends StatefulWidget {
   final List<Comment> comments; // 帖子回复列表
   final VoidCallback? onNeedCommentRefresh;
   final void Function(Comment comment)? onCommentCreated; // 评论成功后直接插入
-  final ValueChanged<bool>? onCommentOverlayChanged; // 评论浮层显隐通知
-  const PostCard({super.key, required this.post, this.comments = const [], this.onNeedCommentRefresh, this.onCommentCreated, this.onCommentOverlayChanged});
+  const PostCard({
+    super.key,
+    required this.post,
+    this.comments = const [],
+    this.onNeedCommentRefresh,
+    this.onCommentCreated,
+  });
 
   @override
   State<PostCard> createState() => _PostCardState();
 }
 
 class _PostCardState extends State<PostCard> {
-  bool _expanded = false;           // 正文是否展开
-  bool _hasBeenExpanded = false;    // 是否被展开过（控制图标颜色）
+  bool _expanded = false; // 正文是否展开
   int _commentsShowCount = AppDimens.commentMaxShown; // 当前展开的回复数
-  int? _expandedAuthorId;           // 当前展开的回复署名 ID
-  final GlobalKey _dotsKey = GlobalKey(); // 两点按钮定位
-  OverlayEntry? _actionOverlay;     // 操作浮层
-  OverlayEntry? _commentOverlay;   // 评论输入浮层
+  int? _expandedAuthorId; // 当前展开的回复署名 ID
+  OverlayEntry? _commentOverlay; // 评论输入浮层
   final _commentController = TextEditingController();
   final _commentFocusNode = FocusNode();
   bool _commentHasAuthor = false;
-  bool _commentMultiLine = false;  // 多行时去掉垂直 padding
-  bool _commentHadText = false;    // 跟踪是否有文字（发送按钮状态）
-  String? _commentAuthorHint;      // 署名提示文字
+  bool _commentMultiLine = false; // 多行时去掉垂直 padding
+  bool _commentHadText = false; // 跟踪是否有文字（发送按钮状态）
+  String? _commentAuthorHint; // 署名提示文字
   Timer? _commentAuthorTimer;
   final _commentTextFieldKey = GlobalKey(); // 保持 TextField 状态跨重建
-  final _cardKey = GlobalKey();              // 卡片定位
-  final _dateRowKey = GlobalKey();            // 日期行定位
-  final _commentSectionKey = GlobalKey();      // 回复区域底部定位
-  bool _commentKeyboardVisible = false;     // 跟踪键盘状态
-  double _commentLastBottomInset = 0;        // 上次键盘高度
+  final _cardKey = GlobalKey(); // 卡片定位
+  final _dateRowKey = GlobalKey(); // 日期行定位
+  final _commentSectionKey = GlobalKey(); // 回复区域底部定位
+  bool _commentKeyboardVisible = false; // 跟踪键盘状态
+  double _commentLastBottomInset = 0; // 上次键盘高度
 
   @override
   void initState() {
     super.initState();
     widget.onNeedCommentRefresh?.call();
     _commentController.addListener(_onCommentTextChanged);
+    _commentFocusNode.addListener(_onCommentFocusChanged);
   }
 
   void _onCommentFocusChanged() {
@@ -90,10 +94,12 @@ class _PostCardState extends State<PostCard> {
       textDirection: TextDirection.ltr,
     );
     final screenW = MediaQuery.of(context).size.width;
-    final availW = screenW - AppDimens.commentInputSectionMarginBottom * 2
-        - AppDimens.commentInputAuthorBtnSize * 2
-        - AppDimens.commentInputBtnGap * 2
-        - AppDimens.commentInputPaddingH * 2;
+    final availW =
+        screenW -
+        AppDimens.commentInputSectionMarginBottom * 2 -
+        AppDimens.commentInputAuthorBtnSize * 2 -
+        AppDimens.commentInputBtnGap * 2 -
+        AppDimens.commentInputPaddingH * 2;
     painter.layout(maxWidth: availW);
     final isMulti = painter.height > 19.6 * 1.2;
 
@@ -106,6 +112,7 @@ class _PostCardState extends State<PostCard> {
   @override
   void dispose() {
     _commentController.removeListener(_onCommentTextChanged);
+    _commentFocusNode.removeListener(_onCommentFocusChanged);
     _commentOverlay?.remove();
     _commentAuthorTimer?.cancel();
     _commentController.dispose();
@@ -136,11 +143,11 @@ class _PostCardState extends State<PostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
     final isLong = post.content.length > AppDimens.contentMaxLength;
-    final remaining = isLong ? post.content.length - AppDimens.contentMaxLength : 0;
     final displayContent = (_expanded || !isLong)
         ? post.content
         : post.content.substring(0, AppDimens.contentMaxLength);
-    final hasBody = post.content.isNotEmpty ||
+    final hasBody =
+        post.content.isNotEmpty ||
         post.images.isNotEmpty ||
         post.attachments.isNotEmpty;
 
@@ -164,8 +171,7 @@ class _PostCardState extends State<PostCard> {
                 color: pc.cardBorder,
                 width: AppDimens.cardBorderWidth,
               ),
-              borderRadius:
-                  BorderRadius.circular(AppDimens.cardBorderRadius),
+              borderRadius: BorderRadius.circular(AppDimens.cardBorderRadius),
             ),
             child: Stack(
               clipBehavior: Clip.none,
@@ -178,7 +184,7 @@ class _PostCardState extends State<PostCard> {
                     if (hasBody)
                       Container(
                         height: AppDimens.cardBorderWidth,
-                color: pc.cardBorder,
+                        color: pc.cardBorder,
                       ),
                     if (hasBody)
                       Padding(
@@ -205,7 +211,8 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
           SizedBox(height: AppDimens.dateRowTopSpacing),
-          Container(key: _dateRowKey, child: _dateRow(colors, isLong, remaining)),
+          Container(key: _dateRowKey, child: _dateRow(colors)),
+          if (isLong) _expandTextButton(pc),
           SizedBox(height: AppDimens.dateRowBottomSpacing),
           if (widget.comments.isNotEmpty) _commentSection(colors, primary),
         ],
@@ -229,36 +236,34 @@ class _PostCardState extends State<PostCard> {
     final len = post.id.toString().length;
 
     final child = ColorFiltered(
-        colorFilter: ColorFilter.mode(
-            pc.idTint,
-            BlendMode.srcIn,
-          ),
-          child: SizedBox(
-            width: AppDimens.idImageOverlap * (len - 1) +
-                AppDimens.idDigitWidth,
-            height: AppDimens.idImageHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: List.generate(len, (i) {
-                final digit = post.id.toString()[i];
-                return Positioned(
-                  left: i * AppDimens.idImageOverlap * 1.0,
-                  child: Image.asset(
-                    'assets/numbers/$digit.png',
-                    width: AppDimens.idDigitWidth,
-                    height: AppDimens.idImageHeight,
-                    fit: BoxFit.fill,
-                    errorBuilder: (context, error, stackTrace) =>
-                        Text(digit,
-                            style: TextStyle(
-                                fontSize: AppDimens.fontSizeId,
-                                color: pc.idErrorFallback)),
+      colorFilter: ColorFilter.mode(pc.idTint, BlendMode.srcIn),
+      child: SizedBox(
+        width: AppDimens.idImageOverlap * (len - 1) + AppDimens.idDigitWidth,
+        height: AppDimens.idImageHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: List.generate(len, (i) {
+            final digit = post.id.toString()[i];
+            return Positioned(
+              left: i * AppDimens.idImageOverlap * 1.0,
+              child: Image.asset(
+                'assets/numbers/$digit.png',
+                width: AppDimens.idDigitWidth,
+                height: AppDimens.idImageHeight,
+                fit: BoxFit.fill,
+                errorBuilder: (context, error, stackTrace) => Text(
+                  digit,
+                  style: TextStyle(
+                    fontSize: AppDimens.fontSizeId,
+                    color: pc.idErrorFallback,
                   ),
-                );
-              }),
-            ),
-          ),
-        );
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
 
     Widget content = child;
     if (AppDimens.idVertical) {
@@ -271,12 +276,16 @@ class _PostCardState extends State<PostCard> {
       child: content,
     );
   }
+
   Widget _content(String displayContent, PostCardColors pc) {
-    return Text(displayContent,
-        style: TextStyle(
-            fontSize: AppDimens.fontSizeContent,
-            color: pc.content,
-            height: AppDimens.contentLineHeight));
+    return Text(
+      displayContent,
+      style: TextStyle(
+        fontSize: AppDimens.fontSizeContent,
+        color: pc.content,
+        height: AppDimens.contentLineHeight,
+      ),
+    );
   }
 
   Widget _images(post) {
@@ -307,7 +316,9 @@ class _PostCardState extends State<PostCard> {
       rects.add(Rect.fromLTWH(offset.dx, offset.dy, size.width, size.height));
     }
     // 确保至少有 index 对应的 rect
-    while (rects.length <= index) rects.add(null);
+    while (rects.length <= index) {
+      rects.add(null);
+    }
 
     final thumbs = <Uint8List?>[];
     for (final img in images) {
@@ -315,14 +326,16 @@ class _PostCardState extends State<PostCard> {
     }
 
     final overlay = Overlay.of(context);
-    ImageOverlay.currentEntry = OverlayEntry(builder: (_) {
-      return ImageOverlay(
-        images: images,
-        initialIndex: index,
-        thumbRects: rects,
-        thumbnails: thumbs,
-      );
-    });
+    ImageOverlay.currentEntry = OverlayEntry(
+      builder: (_) {
+        return ImageOverlay(
+          images: images,
+          initialIndex: index,
+          thumbRects: rects,
+          thumbnails: thumbs,
+        );
+      },
+    );
     overlay.insert(ImageOverlay.currentEntry!);
   }
 
@@ -331,18 +344,23 @@ class _PostCardState extends State<PostCard> {
     return GestureDetector(
       onTap: () => _openOverlay(post.images, 0, _singleKey),
       child: Padding(
-        padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
+        padding: EdgeInsets.only(
+          top: AppDimens.cardImageTop,
+          bottom: AppDimens.cardImageBottom,
+        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: AppDimens.singleImageMaxRatio * AppDimens.titleAuthorMaxWidth,
+            maxHeight:
+                AppDimens.singleImageMaxRatio * AppDimens.titleAuthorMaxWidth,
           ),
           child: SizedBox(
             key: _singleKey[0],
             child: ThumbnailImage(
-                key: ValueKey(post.images[0].fileName),
-                fileName: post.images[0].fileName,
-                fit: BoxFit.contain,
-                constrainSingle: true),
+              key: ValueKey(post.images[0].fileName),
+              fileName: post.images[0].fileName,
+              fit: BoxFit.contain,
+              constrainSingle: true,
+            ),
           ),
         ),
       ),
@@ -355,7 +373,10 @@ class _PostCardState extends State<PostCard> {
     }
 
     return Padding(
-      padding: EdgeInsets.only(top: AppDimens.cardImageTop, bottom: AppDimens.cardImageBottom),
+      padding: EdgeInsets.only(
+        top: AppDimens.cardImageTop,
+        bottom: AppDimens.cardImageBottom,
+      ),
       child: Wrap(
         spacing: AppDimens.thumbnailGap,
         runSpacing: AppDimens.thumbnailGap,
@@ -369,7 +390,9 @@ class _PostCardState extends State<PostCard> {
               width: AppDimens.gridImageSize,
               height: AppDimens.gridImageSize,
               child: ThumbnailImage(
-                  key: ValueKey(img.fileName), fileName: img.fileName),
+                key: ValueKey(img.fileName),
+                fileName: img.fileName,
+              ),
             ),
           );
         }).toList(),
@@ -383,21 +406,24 @@ class _PostCardState extends State<PostCard> {
       padding: EdgeInsets.only(top: AppDimens.paddingSm),
       child: Column(
         children: post.attachments.map<Widget>((att) {
-          return Text('📎 ${att.sourceName}',
-              style: TextStyle(
-                  fontSize: AppDimens.fontSizeSmall,
-                  color: pc.attachmentText));
+          return Text(
+            '📎 ${att.sourceName}',
+            style: TextStyle(
+              fontSize: AppDimens.fontSizeSmall,
+              color: pc.attachmentText,
+            ),
+          );
         }).toList(),
       ),
     );
   }
 
-  // 回复区域：无边框，默认折叠显示前 commentMaxShown 条，末尾右侧有展开/收起按钮
+  // 回复区域：无边框，默认折叠显示前 commentMaxShown 条，末尾有展开/收起文字按钮
   Widget _commentSection(AppColors colors, Color primary) {
     final pc = colors.postCard;
     final all = widget.comments;
     final showMore = all.length > _commentsShowCount;
-    final hasMinus = _commentsShowCount > AppDimens.commentMaxShown;
+    final hasExpanded = _commentsShowCount > AppDimens.commentMaxShown;
     final visible = all.take(_commentsShowCount).toList();
     final postDay = widget.post.createdAt.length >= 10
         ? widget.post.createdAt.substring(0, 10)
@@ -410,64 +436,62 @@ class _PostCardState extends State<PostCard> {
           ? visible[i].createdAt.substring(0, 10)
           : '';
       if (cmtDay != postDay && cmtDay != lastDay) {
-        rows.add(Padding(
-          key: ValueKey('sep_$cmtDay'),
-          padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
-          child: _commentDateSeparator(visible[i].createdAt, colors),
-        ));
+        rows.add(
+          Padding(
+            key: ValueKey('sep_$cmtDay'),
+            padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
+            child: _commentDateSeparator(visible[i].createdAt, colors),
+          ),
+        );
       }
-      rows.add(Padding(
-        key: ValueKey('cmt_${visible[i].id}'),
-        padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
-        child: _commentRow(visible[i], colors, primary, _expandedAuthorId == visible[i].id),
-      ));
+      rows.add(
+        Padding(
+          key: ValueKey('cmt_${visible[i].id}'),
+          padding: EdgeInsets.only(bottom: AppDimens.commentVPadding),
+          child: _commentRow(
+            visible[i],
+            colors,
+            primary,
+            _expandedAuthorId == visible[i].id,
+          ),
+        ),
+      );
       lastDay = cmtDay;
     }
-    if (showMore || hasMinus) {
+    if (showMore || hasExpanded) {
       final remain = all.length - _commentsShowCount;
-      rows.add(Align(
-        key: const ValueKey('comment_btns'),
-        alignment: Alignment.centerRight,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showMore) ...[
-              Padding(
-                padding: EdgeInsets.only(top: AppDimens.commentRemainTopOffset),
-                child: Text(
-                  '+$remain',
-                  style: TextStyle(
-                    fontSize: AppDimens.commentRemainFontSize,
-                    color: pc.commentRemain,
-                  ),
+      rows.add(
+        Align(
+          key: const ValueKey('comment_btns'),
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                if (showMore) {
+                  _commentsShowCount =
+                      (_commentsShowCount + AppDimens.commentStep).clamp(
+                        AppDimens.commentMaxShown,
+                        all.length,
+                      );
+                } else {
+                  _commentsShowCount = AppDimens.commentMaxShown;
+                }
+              });
+            },
+            child: Padding(
+              padding: EdgeInsets.only(top: AppDimens.commentRemainTopOffset),
+              child: Text(
+                showMore ? '展开 $remain 条回复' : '收起回复',
+                style: TextStyle(
+                  fontSize: AppDimens.commentRemainFontSize,
+                  color: pc.commentRemain,
                 ),
               ),
-              SizedBox(width: AppDimens.commentRemainBtnGap),
-            ],
-            if (hasMinus)
-              GestureDetector(
-                onTap: () => setState(() => _commentsShowCount = AppDimens.commentMaxShown),
-                child: SvgPicture.asset(
-                  'assets/minus.svg',
-                  width: AppDimens.commentBtnSize,
-                  height: AppDimens.commentBtnSize,
-                  colorFilter: ColorFilter.mode(pc.commentIcon, BlendMode.srcIn),
-                ),
-              ),
-            if (showMore && hasMinus) SizedBox(width: AppDimens.commentBtnGap),
-            if (showMore)
-              GestureDetector(
-                onTap: () => setState(() => _commentsShowCount += AppDimens.commentStep),
-                child: SvgPicture.asset(
-                  'assets/plus.svg',
-                  width: AppDimens.commentBtnSize,
-                  height: AppDimens.commentBtnSize,
-                  colorFilter: ColorFilter.mode(pc.commentIcon, BlendMode.srcIn),
-                ),
-              ),
-          ],
+            ),
+          ),
         ),
-      ));
+      );
     }
 
     return Container(
@@ -508,10 +532,7 @@ class _PostCardState extends State<PostCard> {
           Expanded(
             child: Padding(
               padding: EdgeInsets.only(top: AppDimens.commentDateLineTopOffset),
-              child: Container(
-                height: 1,
-                color: pc.commentDateSeparatorLine,
-              ),
+              child: Container(height: 1, color: pc.commentDateSeparatorLine),
             ),
           ),
         ],
@@ -544,158 +565,189 @@ class _PostCardState extends State<PostCard> {
         return Material(
           color: Colors.transparent,
           child: Stack(
-          children: [
-            // 署名提示（输入栏上方）
-            if (_commentAuthorHint != null)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: (bottomInset > 0 ? bottomInset : safeBottom + AppDimens.commentInputSectionMarginBottom)
-                    + AppDimens.commentInputHeight + AppDimens.commentInputAuthorHintOffset,
-                child: Center(
-                  child: Text(
-                    _commentAuthorHint!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: colors.postCreate.bottomHintText,
+            children: [
+              // 署名提示（输入栏上方）
+              if (_commentAuthorHint != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom:
+                      (bottomInset > 0
+                          ? bottomInset
+                          : safeBottom +
+                                AppDimens.commentInputSectionMarginBottom) +
+                      AppDimens.commentInputHeight +
+                      AppDimens.commentInputAuthorHintOffset,
+                  child: Center(
+                    child: Text(
+                      _commentAuthorHint!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colors.postCreate.bottomHintText,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            // 输入栏贴在键盘上方
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: bottomInset > 0 ? bottomInset : safeBottom + AppDimens.commentInputSectionMarginBottom,
-              child: Container(
-                color: pc.commentInputBarBg,
-                padding: EdgeInsets.only(
-                  left: AppDimens.commentInputSectionMarginBottom,
-                  right: AppDimens.commentInputSectionMarginBottom,
-                  top: AppDimens.commentInputSectionMarginTop,
-                  bottom: bottomInset > 0 ? AppDimens.commentInputSectionMarginBottom : 0,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: AppDimens.commentInputHeight,
-                          maxHeight: AppDimens.commentInputMaxHeight,
-                        ),
-                        child: Stack(
+              // 输入栏贴在键盘上方
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: bottomInset > 0
+                    ? bottomInset
+                    : safeBottom + AppDimens.commentInputSectionMarginBottom,
+                child: Container(
+                  color: pc.commentInputBarBg,
+                  padding: EdgeInsets.only(
+                    left: AppDimens.commentInputSectionMarginBottom,
+                    right: AppDimens.commentInputSectionMarginBottom,
+                    top: AppDimens.commentInputSectionMarginTop,
+                    bottom: bottomInset > 0
+                        ? AppDimens.commentInputSectionMarginBottom
+                        : 0,
+                  ),
+                  child: PostStorage.isRegistered()
+                      ? Row(
                           children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                color: pc.commentInputFieldBg,
-                                borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
-                              ),
-                              child: TextField(
-                                  key: _commentTextFieldKey,
-                                  controller: _commentController,
-                                focusNode: _commentFocusNode,
-                                autofocus: true,
-                                minLines: 1,
-                                maxLines: null,
-                                keyboardType: TextInputType.multiline,
-                                textAlignVertical: _commentMultiLine
-                                    ? TextAlignVertical.top
-                                    : TextAlignVertical.center,
-                                style: TextStyle(
-                                  fontSize: AppDimens.commentInputFontSize,
-                                  color: pc.commentContent,
-                                  height: 1.4,
+                            Expanded(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: AppDimens.commentInputHeight,
+                                  maxHeight: AppDimens.commentInputMaxHeight,
                                 ),
-                                decoration: InputDecoration(
-                                  hintText: '输入评论...',
-                                  hintStyle: TextStyle(
-                                    fontSize: AppDimens.commentInputFontSize,
-                                    color: pc.commentDate,
-                                    height: 1.4,
-                                  ),
-                                  contentPadding: _commentMultiLine
-                                      ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
-                                      : EdgeInsets.fromLTRB(
-                                          AppDimens.commentInputPaddingH,
-                                          10,
-                                          AppDimens.commentInputPaddingH,
-                                          10,
-                                        ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                                textInputAction: TextInputAction.send,
-                                onSubmitted: (_) => _submitComment(),
+                                child: _commentInputField(pc),
                               ),
                             ),
-                            if (!PostStorage.isRegistered())
-                              Positioned.fill(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: pc.commentInputFieldBg,
-                                      borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
-                                    ),
-                                    alignment: Alignment.centerLeft,
-                                    padding: _commentMultiLine
-                                        ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
-                                        : EdgeInsets.fromLTRB(
-                                            AppDimens.commentInputPaddingH,
-                                            10,
-                                            AppDimens.commentInputPaddingH,
-                                            10,
-                                          ),
-                                    child: Text(
-                                      '目前未绑定账号，请注册',
-                                      style: TextStyle(
-                                        fontSize: AppDimens.commentInputFontSize,
-                                        color: pc.commentDate,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                  ),
+                            SizedBox(width: AppDimens.commentInputBtnGap),
+                            _commentAuthorBtn(colors),
+                            SizedBox(width: AppDimens.commentInputBtnGap),
+                            _commentSendBtn(colors),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: AppDimens.commentInputHeight,
+                                  maxHeight: AppDimens.commentInputMaxHeight,
                                 ),
+                                child: _commentInputField(pc),
                               ),
+                            ),
                           ],
                         ),
-                      ),
-                    ),
-                    SizedBox(width: AppDimens.commentInputBtnGap),
-                    _commentAuthorBtn(colors),
-                    SizedBox(width: AppDimens.commentInputBtnGap),
-                    _commentSendBtn(colors),
-                  ],
                 ),
               ),
-            ),
-          ],
+            ],
           ),
         );
       },
     );
   }
 
+  Widget _commentInputField(PostCardColors pc) {
+    if (!PostStorage.isRegistered()) {
+      return GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          _dismissCommentOverlay();
+          Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: pc.commentInputFieldBg,
+            borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
+          ),
+          alignment: Alignment.centerLeft,
+          padding: _commentMultiLine
+              ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
+              : EdgeInsets.fromLTRB(
+                  AppDimens.commentInputPaddingH,
+                  10,
+                  AppDimens.commentInputPaddingH,
+                  10,
+                ),
+          child: Text(
+            '登录后评论',
+            style: TextStyle(
+              fontSize: AppDimens.commentInputFontSize,
+              color: pc.commentDate,
+              height: 1.4,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: pc.commentInputFieldBg,
+        borderRadius: BorderRadius.circular(AppDimens.commentInputRadius),
+      ),
+      child: TextField(
+        key: _commentTextFieldKey,
+        controller: _commentController,
+        focusNode: _commentFocusNode,
+        autofocus: true,
+        minLines: 1,
+        maxLines: null,
+        keyboardType: TextInputType.multiline,
+        textAlignVertical: _commentMultiLine
+            ? TextAlignVertical.top
+            : TextAlignVertical.center,
+        style: TextStyle(
+          fontSize: AppDimens.commentInputFontSize,
+          color: pc.commentContent,
+          height: 1.4,
+        ),
+        decoration: InputDecoration(
+          hintText: '输入评论...',
+          hintStyle: TextStyle(
+            fontSize: AppDimens.commentInputFontSize,
+            color: pc.commentDate,
+            height: 1.4,
+          ),
+          contentPadding: _commentMultiLine
+              ? EdgeInsets.symmetric(horizontal: AppDimens.commentInputPaddingH)
+              : EdgeInsets.fromLTRB(
+                  AppDimens.commentInputPaddingH,
+                  10,
+                  AppDimens.commentInputPaddingH,
+                  10,
+                ),
+          border: InputBorder.none,
+          isDense: true,
+        ),
+        textInputAction: TextInputAction.send,
+        onSubmitted: (_) => _submitComment(),
+      ),
+    );
+  }
+
   Widget _commentAuthorBtn(AppColors colors) {
     return GestureDetector(
       onTap: () {
+        HapticFeedback.lightImpact();
         _commentHasAuthor = !_commentHasAuthor;
         _commentAuthorTimer?.cancel();
         _commentAuthorHint = _commentHasAuthor ? '开启署名' : '关闭署名';
         _commentOverlay?.markNeedsBuild();
-        _commentAuthorTimer = Timer(const Duration(milliseconds: AppDimens.commentInputAuthorHintMs), () {
-          _commentAuthorHint = null;
-          _commentOverlay?.markNeedsBuild();
-        });
+        _commentAuthorTimer = Timer(
+          const Duration(milliseconds: AppDimens.commentInputAuthorHintMs),
+          () {
+            _commentAuthorHint = null;
+            _commentOverlay?.markNeedsBuild();
+          },
+        );
       },
       child: Container(
         width: AppDimens.commentInputAuthorBtnSize,
         height: AppDimens.commentInputAuthorBtnSize,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppDimens.commentInputAuthorBtnRadius),
+          borderRadius: BorderRadius.circular(
+            AppDimens.commentInputAuthorBtnRadius,
+          ),
           color: _commentHasAuthor
               ? colors.postCreate.authorActiveFill
               : colors.postCreate.fieldBg,
@@ -727,17 +779,23 @@ class _PostCardState extends State<PostCard> {
         height: AppDimens.commentInputAuthorBtnSize,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppDimens.commentInputAuthorBtnRadius),
+          borderRadius: BorderRadius.circular(
+            AppDimens.commentInputAuthorBtnRadius,
+          ),
           color: hasText ? pc.commentSendActiveBg : pc.commentSendInactiveBg,
           border: Border.all(
-            color: hasText ? pc.commentSendActiveBg : pc.commentSendInactiveBorder,
+            color: hasText
+                ? pc.commentSendActiveBg
+                : pc.commentSendInactiveBorder,
             width: AppDimens.commentInputAuthorBtnBorderWidth,
           ),
         ),
         child: Icon(
           Icons.send,
           size: AppDimens.commentInputAuthorBtnIconSize,
-          color: hasText ? pc.commentSendActiveIcon : pc.commentSendInactiveIcon,
+          color: hasText
+              ? pc.commentSendActiveIcon
+              : pc.commentSendInactiveIcon,
         ),
       ),
     );
@@ -751,6 +809,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Future<void> _submitComment() async {
+    HapticFeedback.mediumImpact();
     final content = _commentController.text.trim();
     if (content.isEmpty) return;
 
@@ -772,12 +831,7 @@ class _PostCardState extends State<PostCard> {
       _dismissCommentOverlay();
       widget.onNeedCommentRefresh?.call();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ApiService.lastError ?? '评论发送失败'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showAppSnackBar(context, message: ApiService.lastError ?? '评论发送失败');
     }
   }
 
@@ -791,7 +845,12 @@ class _PostCardState extends State<PostCard> {
   }
 
   // 单条回复行：[时间] 内容(单行截断) [署名]
-  Widget _commentRow(Comment comment, AppColors colors, Color primary, bool isExpanded) {
+  Widget _commentRow(
+    Comment comment,
+    AppColors colors,
+    Color primary,
+    bool isExpanded,
+  ) {
     final pc = colors.postCard;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -823,6 +882,7 @@ class _PostCardState extends State<PostCard> {
         if (comment.displayAuthor.isNotEmpty)
           GestureDetector(
             onTap: () {
+              HapticFeedback.lightImpact();
               setState(() {
                 _expandedAuthorId = isExpanded ? null : comment.id;
               });
@@ -845,62 +905,21 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _dateRow(AppColors colors, bool isLong, int remaining) {
+  Widget _dateRow(AppColors colors) {
     final pc = colors.postCard;
     return Stack(
       alignment: Alignment.centerLeft,
       children: [
         Padding(
           padding: EdgeInsets.only(left: AppDimens.paddingSm),
-          child: Text(_dateTransform(widget.post.createdAt),
-              style: TextStyle(
-                  fontSize: AppDimens.fontSizeSmall,
-                  color: pc.dateText)),
+          child: Text(
+            _dateTransform(widget.post.createdAt),
+            style: TextStyle(
+              fontSize: AppDimens.fontSizeSmall,
+              color: pc.dateText,
+            ),
+          ),
         ),
-          if (isLong && !_hasBeenExpanded)
-            Positioned(
-              top: AppDimens.expandIconTop,
-              right: AppDimens.dotsPositionedRight +
-                  AppDimens.dotsBtnWidth +
-                  AppDimens.expandBtnDotsGap +
-                  AppDimens.expandIconSize +
-                  AppDimens.expandRemainGap,
-              child: Text(
-                '+$remaining',
-                style: TextStyle(
-                  fontSize: AppDimens.fontSizeSmall,
-              color: pc.commentDate,
-                ),
-              ),
-            ),
-          if (isLong)
-            Positioned(
-              top: AppDimens.expandIconTop,
-              right: AppDimens.dotsPositionedRight +
-                  AppDimens.dotsBtnWidth +
-                  AppDimens.expandBtnDotsGap,
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _expanded = !_expanded;
-                  _hasBeenExpanded = true;
-                }),
-                child: AnimatedRotation(
-                  turns: _expanded ? 0.0 : 0.5,
-                  duration: Duration(milliseconds: AppDimens.expandIconAnimMs),
-                  child: SvgPicture.asset(
-                    'assets/expand_icon.svg',
-                    width: AppDimens.expandIconSize,
-                    height: AppDimens.expandIconSize,
-                    colorFilter: ColorFilter.mode(
-                      _hasBeenExpanded
-                          ? pc.expandIconGray
-                          : pc.expandIconBlue,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
-              ),
-            ),
         // 两点按钮
         Positioned(
           right: AppDimens.dotsPositionedRight,
@@ -911,12 +930,33 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // ---- 两点按钮（点击弹出浮层）----
+  Widget _expandTextButton(PostCardColors pc) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: EdgeInsets.only(left: AppDimens.paddingSm, top: 4),
+        child: GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _expanded = !_expanded);
+          },
+          child: Text(
+            _expanded ? '收起' : '展开全文',
+            style: TextStyle(
+              fontSize: AppDimens.fontSizeSmall,
+              color: pc.commentRemain,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- 两点按钮（点击弹出底部菜单）----
 
   Widget _dotsOnly(PostCardColors pc) {
     return GestureDetector(
-      key: _dotsKey,
-      onTap: () => _toggleOverlay(pc),
+      onTap: () => _showPostActionsSheet(pc),
       child: Container(
         width: AppDimens.dotsBtnWidth,
         height: AppDimens.dotsBtnHeight,
@@ -929,18 +969,24 @@ class _PostCardState extends State<PostCard> {
             Positioned(
               top: AppDimens.dotsTopPadding,
               left: AppDimens.dotsLeftPadding,
-              child: Text('·',
-                  style: const TextStyle(
-                      fontSize: AppDimens.dotsFontSize,
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                '·',
+                style: const TextStyle(
+                  fontSize: AppDimens.dotsFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             Positioned(
               top: AppDimens.dotsTopPadding,
               right: AppDimens.dotsRightPadding,
-              child: Text('·',
-                  style: const TextStyle(
-                      fontSize: AppDimens.dotsFontSize,
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                '·',
+                style: const TextStyle(
+                  fontSize: AppDimens.dotsFontSize,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
@@ -948,141 +994,47 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  void _toggleOverlay(PostCardColors pc) {
-    if (_actionOverlay != null) {
-      _actionOverlay!.remove();
-      _actionOverlay = null;
-      return;
-    }
-
-    final renderBox =
-        _dotsKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final buttonPos = renderBox.localToGlobal(Offset.zero);
-    final buttonSize = renderBox.size;
-
-    _actionOverlay = OverlayEntry(
-      builder: (_) => _buildOverlayContent(pc, buttonPos, buttonSize),
-    );
-    Overlay.of(context).insert(_actionOverlay!);
-  }
-
-  Widget _buildOverlayContent(
-      PostCardColors pc, Offset buttonPos, Size buttonSize) {
-    final boxWidth = 3 * AppDimens.actionMenuBtnWidth +
-        2 * 1 + // 两条竖线
-        AppDimens.paddingSm * 2;
-    final boxHeight = AppDimens.actionMenuBoxHeight;
-
-    // 方框在按钮左侧，顶对齐
-    final boxRight = buttonPos.dx +
-        buttonSize.width +
-        AppDimens.actionMenuBoxRightOffset;
-    final boxLeft = boxRight - boxWidth;
-    final boxTop = buttonPos.dy + AppDimens.actionMenuBoxTopOffset;
-
-    return Stack(
-      children: [
-        // 全屏透明遮罩（点击收起）
-        GestureDetector(
-          onTap: _dismissOverlay,
-          behavior: HitTestBehavior.translucent,
-          child: Container(color: Colors.transparent),
+  void _showPostActionsSheet(PostCardColors pc) {
+    HapticFeedback.lightImpact();
+    showAppActionsSheet(
+      context: context,
+      title: '帖子操作',
+      actions: [
+        AppSheetAction(
+          icon: Icons.star_border,
+          label: '收藏',
+          onTap: () => showAppSnackBar(context, message: '收藏功能即将上线'),
         ),
-        // 浮动方框
-        Positioned(
-          left: boxLeft,
-          top: boxTop,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: boxWidth,
-              height: boxHeight,
-              decoration: BoxDecoration(
-                color: pc.actionMenuBg,
-                borderRadius:
-                    BorderRadius.circular(AppDimens.dotsBtnRadius),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(width: AppDimens.paddingSm),
-                  _actionIcon('assets/icons/game-pack/report.svg', '举报', pc,
-                      AppDimens.actionMenuIconSizeReport, _onReport),
-                  _actionDivider(pc),
-                  _actionIcon('assets/icons/game-pack/five-pointed-star.svg', '收藏', pc,
-                      AppDimens.actionMenuIconSizeFavorite, _onFavorite),
-                  _actionDivider(pc),
-                  _actionIcon('assets/icons/game-pack/message.svg', '回复', pc,
-                      AppDimens.actionMenuIconSizeComment, _onComment),
-                  SizedBox(width: AppDimens.paddingSm),
-                ],
-              ),
-            ),
-          ),
+        AppSheetAction(
+          icon: Icons.report_outlined,
+          label: '举报',
+          onTap: () => showAppSnackBar(context, message: '举报功能即将上线'),
+        ),
+        AppSheetAction(
+          icon: Icons.content_copy,
+          label: '复制内容',
+          onTap: () {
+            final text = '${widget.post.title}\n${widget.post.content}';
+            Clipboard.setData(ClipboardData(text: text));
+            showAppSnackBar(context, message: '已复制帖子内容');
+          },
+        ),
+        AppSheetAction(
+          icon: Icons.share_outlined,
+          label: '分享',
+          onTap: () => showAppSnackBar(context, message: '分享功能即将上线'),
+        ),
+        AppSheetAction(
+          icon: Icons.comment_outlined,
+          label: '回复',
+          onTap: _onComment,
         ),
       ],
     );
   }
 
-  void _dismissOverlay() {
-    _actionOverlay?.remove();
-    _actionOverlay = null;
-  }
-
-  // ---- 操作图标 ----
-
-  Widget _actionIcon(String assetPath, String tooltip, PostCardColors pc,
-      double iconSize, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Tooltip(
-        message: tooltip,
-        child: Container(
-          width: AppDimens.actionMenuBtnWidth,
-          height: AppDimens.actionMenuBtnHeight,
-          decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(AppDimens.actionMenuBtnRadius),
-          ),
-          child: Center(
-            child: SvgPicture.asset(
-              assetPath,
-              width: iconSize,
-              height: iconSize,
-              colorFilter: ColorFilter.mode(pc.actionBtnText, BlendMode.srcIn),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _actionDivider(PostCardColors pc) {
-    return Container(
-      width: 1,
-      height: 12,
-      decoration: BoxDecoration(
-        color: pc.actionBtnText.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(0.5),
-      ),
-    );
-  }
-
-  // ---- 菜单操作处理 ----
-
-  void _onFavorite() {
-    _dismissOverlay();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('收藏功能即将上线'),
-          duration: Duration(seconds: 1)),
-    );
-  }
-
   void _onComment() {
-    _dismissOverlay();
+    HapticFeedback.lightImpact();
     if (_commentOverlay != null) {
       _dismissCommentOverlay();
       return;
@@ -1090,9 +1042,7 @@ class _PostCardState extends State<PostCard> {
     // 确保有有效 session
     SessionService.instance.ensureSession();
     final overlay = Overlay.of(context);
-    _commentOverlay = OverlayEntry(
-      builder: (_) => _buildCommentOverlay(),
-    );
+    _commentOverlay = OverlayEntry(builder: (_) => _buildCommentOverlay());
     overlay.insert(_commentOverlay!);
     // 恢复草稿
     final draft = PostStorage.getCommentDraft(widget.post.id);
@@ -1100,7 +1050,6 @@ class _PostCardState extends State<PostCard> {
       _commentController.text = draft;
     }
     _commentKeyboardVisible = false;
-    widget.onCommentOverlayChanged?.call(true);
     // 先聚焦唤出键盘，再滚动对齐
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _commentOverlay == null) return;
@@ -1112,53 +1061,40 @@ class _PostCardState extends State<PostCard> {
         final ctx = hasComments
             ? _commentSectionKey.currentContext
             : _dateRowKey.currentContext;
-        if (ctx != null) {
-          final box = ctx.findRenderObject() as RenderBox;
-          final scrollable = Scrollable.of(ctx);
-          // 目标区域底部在视口中的位置
-          final targetBottom = box.localToGlobal(Offset.zero).dy + box.size.height;
-          final scrollTop = scrollable.context.findRenderObject() as RenderBox;
-          final viewportTop = scrollTop.localToGlobal(Offset.zero).dy;
-          final targetBottomInViewport = targetBottom - viewportTop;
-          // 有评论定位评论区底部，无评论定位日期行底部
-          final offset = hasComments
-              ? AppDimens.commentScrollBottomOffset
-              : AppDimens.dateRowScrollBottomOffset;
-          final desiredBottom = scrollable.position.viewportDimension - offset;
-          final delta = targetBottomInViewport - desiredBottom;
-          if (delta.abs() > 2) {
-            scrollable.position.animateTo(
-              (scrollable.position.pixels + delta).clamp(
-                scrollable.position.minScrollExtent,
-                scrollable.position.maxScrollExtent,
-              ),
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
+        if (ctx == null || !ctx.mounted) return;
+        final box = ctx.findRenderObject() as RenderBox;
+        final scrollable = Scrollable.of(ctx);
+        // 目标区域底部在视口中的位置
+        final targetBottom =
+            box.localToGlobal(Offset.zero).dy + box.size.height;
+        final scrollTop = scrollable.context.findRenderObject() as RenderBox;
+        final viewportTop = scrollTop.localToGlobal(Offset.zero).dy;
+        final targetBottomInViewport = targetBottom - viewportTop;
+        // 有评论定位评论区底部，无评论定位日期行底部
+        final offset = hasComments
+            ? AppDimens.commentScrollBottomOffset
+            : AppDimens.dateRowScrollBottomOffset;
+        final desiredBottom = scrollable.position.viewportDimension - offset;
+        final delta = targetBottomInViewport - desiredBottom;
+        if (delta.abs() > 2) {
+          scrollable.position.animateTo(
+            (scrollable.position.pixels + delta).clamp(
+              scrollable.position.minScrollExtent,
+              scrollable.position.maxScrollExtent,
+            ),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
         }
       });
     });
   }
 
   void _dismissCommentOverlay() {
-    final hadOverlay = _commentOverlay != null;
     _commentOverlay?.remove();
     _commentOverlay = null;
     _commentFocusNode.unfocus();
     _commentHadText = false;
-    if (hadOverlay) {
-      widget.onCommentOverlayChanged?.call(false);
-    }
-  }
-
-  void _onReport() {
-    _dismissOverlay();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('举报功能即将上线'),
-          duration: Duration(seconds: 1)),
-    );
   }
 }
 
@@ -1177,123 +1113,167 @@ class _TitleAuthorRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pc = colors.postCard;
     final titleStyle = TextStyle(
-        fontSize: AppDimens.fontSizeTitle,
-        fontWeight: FontWeight.w400,
-        color: pc.title);
+      fontSize: AppDimens.fontSizeTitle,
+      fontWeight: FontWeight.w400,
+      color: pc.title,
+    );
     final authorStyle = TextStyle(
-        fontSize: AppDimens.fontSizeAuthor,
-        color: pc.authorName);
+      fontSize: AppDimens.fontSizeAuthor,
+      color: pc.authorName,
+    );
     final atStyle = TextStyle(
-        fontSize: AppDimens.fontSizeAt,
-        color: pc.atSymbol,
-        fontStyle: FontStyle.italic);
+      fontSize: AppDimens.fontSizeAt,
+      color: pc.atSymbol,
+      fontStyle: FontStyle.italic,
+    );
 
     // 测量标题和作者宽度（标题最多2行）
     final tp = TextPainter(
-        text: TextSpan(text: post.title, style: titleStyle),
-        maxLines: 2,
-        textDirection: TextDirection.ltr)..layout();
+      text: TextSpan(text: post.title, style: titleStyle),
+      maxLines: 2,
+      textDirection: TextDirection.ltr,
+    )..layout();
     final ap = TextPainter(
-        text: TextSpan(text: '@${post.displayAuthor}', style: authorStyle),
-        maxLines: 1,
-        textDirection: TextDirection.ltr);
+      text: TextSpan(text: '@${post.displayAuthor}', style: authorStyle),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    );
     if (post.displayAuthor.isNotEmpty) ap.layout();
 
     final titleW = tp.width;
-    final authorW = post.displayAuthor.isEmpty ? 0 : ap.width + AppDimens.paddingLg;
+    final authorW = post.displayAuthor.isEmpty
+        ? 0
+        : ap.width + AppDimens.paddingLg;
 
     return ConstrainedBox(
-      constraints:
-          BoxConstraints(maxWidth: AppDimens.titleAuthorMaxWidth),
+      constraints: BoxConstraints(maxWidth: AppDimens.titleAuthorMaxWidth),
       child: post.displayAuthor.isEmpty
-          ? Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle)
+          ? Text(
+              post.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle,
+            )
           : titleW + authorW <= AppDimens.titleAuthorMaxWidth
-              // 不超宽：都 inline，不换行
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
+          // 不超宽：都 inline，不换行
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  post.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: titleStyle,
+                ),
+                SizedBox(width: AppDimens.paddingLg),
+                Text('@', style: atStyle),
+                SizedBox(width: AppDimens.authorAtGap),
+                Text(post.displayAuthor, style: authorStyle),
+              ],
+            )
+          // 超宽
+          : () {
+              final halfW = AppDimens.titleAuthorMaxWidth / 2;
+              final gap = AppDimens.paddingLg;
+              final bothLong = titleW > halfW && authorW > halfW;
+
+              if (bothLong) {
+                // 按比例分配：titleShare = titleW / totalW * maxWidth
+                final totalW = titleW + authorW;
+                final avail = AppDimens.titleAuthorMaxWidth - gap;
+                return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
-                    SizedBox(width: AppDimens.paddingLg),
-                    Text('@', style: atStyle),
-                    SizedBox(width: AppDimens.authorAtGap),
-                    Text(post.displayAuthor, style: authorStyle),
-                  ],
-                )
-              // 超宽
-              : () {
-                  final halfW = AppDimens.titleAuthorMaxWidth / 2;
-                  final gap = AppDimens.paddingLg;
-                  final bothLong = titleW > halfW && authorW > halfW;
-
-                  double titleFlex, authorFlex;
-                  if (bothLong) {
-                    // 按比例分配：titleShare = titleW / totalW * maxWidth
-                    final totalW = titleW + authorW;
-                    final avail = AppDimens.titleAuthorMaxWidth - gap;
-                    titleFlex = (titleW / totalW) * avail / avail;
-                    authorFlex = (authorW / totalW);
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Flexible(
-                          flex: (titleW / totalW * avail).round().clamp(1, 999),
-                          child: Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, softWrap: true, style: titleStyle),
-                        ),
-                        SizedBox(width: gap),
-                        Flexible(
-                          flex: (authorW / totalW * avail).round().clamp(1, 999),
-                          child: Text.rich(
-                            TextSpan(children: [
-                              TextSpan(text: '@', style: atStyle),
-                              TextSpan(text: post.displayAuthor, style: authorStyle),
-                            ]),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
-                    );
-                  } else {
-                    // 短的 inline，长的被约束到 maxWidth - 短宽度
-                    final titleLong = titleW > halfW;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (titleLong)
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                                maxWidth: AppDimens.titleAuthorMaxWidth -
-                                    authorW -
-                                    gap),
-                            child: Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
-                          )
-                        else
-                          Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
-                        SizedBox(width: gap),
-                        if (!titleLong)
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                                maxWidth: AppDimens.titleAuthorMaxWidth -
-                                    titleW -
-                                    gap),
-                            child: Text.rich(
-                              TextSpan(children: [
-                                TextSpan(text: '@', style: atStyle),
-                                TextSpan(text: post.displayAuthor, style: authorStyle),
-                              ]),
+                    Flexible(
+                      flex: (titleW / totalW * avail).round().clamp(1, 999),
+                      child: Text(
+                        post.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
+                        style: titleStyle,
+                      ),
+                    ),
+                    SizedBox(width: gap),
+                    Flexible(
+                      flex: (authorW / totalW * avail).round().clamp(1, 999),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '@', style: atStyle),
+                            TextSpan(
+                              text: post.displayAuthor,
+                              style: authorStyle,
                             ),
-                          )
-                        else
-                          Text.rich(
-                            TextSpan(children: [
+                          ],
+                        ),
+                        softWrap: true,
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                // 短的 inline，长的被约束到 maxWidth - 短宽度
+                final titleLong = titleW > halfW;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (titleLong)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth:
+                              AppDimens.titleAuthorMaxWidth - authorW - gap,
+                        ),
+                        child: Text(
+                          post.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
+                        ),
+                      )
+                    else
+                      Text(
+                        post.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
+                      ),
+                    SizedBox(width: gap),
+                    if (!titleLong)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth:
+                              AppDimens.titleAuthorMaxWidth - titleW - gap,
+                        ),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
                               TextSpan(text: '@', style: atStyle),
-                              TextSpan(text: post.displayAuthor, style: authorStyle),
-                            ]),
+                              TextSpan(
+                                text: post.displayAuthor,
+                                style: authorStyle,
+                              ),
+                            ],
                           ),
-                      ],
-                    );
-                  }
-                }(),
+                        ),
+                      )
+                    else
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '@', style: atStyle),
+                            TextSpan(
+                              text: post.displayAuthor,
+                              style: authorStyle,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                );
+              }
+            }(),
     );
   }
 }
@@ -1302,7 +1282,12 @@ class ThumbnailImage extends StatefulWidget {
   final String fileName;
   final BoxFit fit;
   final bool constrainSingle;
-  const ThumbnailImage({super.key, required this.fileName, this.fit = BoxFit.cover, this.constrainSingle = false});
+  const ThumbnailImage({
+    super.key,
+    required this.fileName,
+    this.fit = BoxFit.cover,
+    this.constrainSingle = false,
+  });
 
   @override
   State<ThumbnailImage> createState() => _ThumbnailImageState();
@@ -1329,8 +1314,10 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
 
   void _calcDisplaySize(ThumbnailData data) {
     if (data.width > 0 && data.height > 0) {
-      final ratio = (data.width / data.height)
-          .clamp(AppDimens.singleImageMinRatio, AppDimens.singleImageMaxRatio);
+      final ratio = (data.width / data.height).clamp(
+        AppDimens.singleImageMinRatio,
+        AppDimens.singleImageMaxRatio,
+      );
       final h = sqrt(AppDimens.singleImageMaxArea / ratio);
       _displayH = h;
       _displayW = ratio * h;
@@ -1341,7 +1328,10 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
     final cached = PostStorage.getThumbnail(widget.fileName);
     if (cached != null) {
       _calcDisplaySize(cached);
-      setState(() { _bytes = cached.bytes; _loading = false; });
+      setState(() {
+        _bytes = cached.bytes;
+        _loading = false;
+      });
       return;
     }
     final downloaded = await ApiService.downloadThumbnail(widget.fileName);
@@ -1351,7 +1341,10 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
     if (!mounted) return;
     if (downloaded != null) {
       _calcDisplaySize(downloaded);
-      setState(() { _bytes = downloaded.bytes; _loading = false; });
+      setState(() {
+        _bytes = downloaded.bytes;
+        _loading = false;
+      });
     } else {
       setState(() => _loading = false);
     }
@@ -1361,7 +1354,11 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
   Widget build(BuildContext context) {
     final defaultMax = sqrt(AppDimens.singleImageMaxArea);
     if (_loading) {
-      final child = const Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifThumbSize, height: AppDimens.loadingGifThumbSize);
+      final child = const Image(
+        image: AssetImage('assets/loading.gif'),
+        width: AppDimens.loadingGifThumbSize,
+        height: AppDimens.loadingGifThumbSize,
+      );
       if (widget.constrainSingle) {
         final w = _displayW ?? defaultMax;
         final h = _displayH ?? defaultMax;
@@ -1374,15 +1371,29 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
       return Center(child: child);
     }
     if (_bytes != null) {
-      Widget img = Image.memory(_bytes!, fit: widget.fit);
+      // 按显示尺寸降采样解码，避免把大图整张解到内存
+      final dpr = MediaQuery.of(context).devicePixelRatio;
+      int? cacheWidth;
+      int? cacheHeight;
       if (widget.constrainSingle) {
         final w = _displayW ?? defaultMax;
         final h = _displayH ?? defaultMax;
-        img = SizedBox(
-          width: w,
-          height: h,
-          child: img,
-        );
+        cacheWidth = (w * dpr).round();
+        cacheHeight = (h * dpr).round();
+      } else {
+        cacheWidth = (AppDimens.gridImageSize * dpr).round();
+        cacheHeight = (AppDimens.gridImageSize * dpr).round();
+      }
+      Widget img = Image.memory(
+        _bytes!,
+        fit: widget.fit,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
+      );
+      if (widget.constrainSingle) {
+        final w = _displayW ?? defaultMax;
+        final h = _displayH ?? defaultMax;
+        img = SizedBox(width: w, height: h, child: img);
       }
       return img;
     }

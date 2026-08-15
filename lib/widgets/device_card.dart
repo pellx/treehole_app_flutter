@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_colors.dart';
@@ -224,22 +225,34 @@ class _DeviceCardState extends State<DeviceCard> {
         ? '是否确认申请解绑本机？将于2天后解绑，期间仍可登录，解绑后可凭用户令牌登录'
         : '是否确认立即解绑该设备？解绑后该设备将无法继续使用本账户';
     final ok = await _confirmDialog(message: message);
-    if (ok && mounted) widget.onDelete?.call();
+    if (ok) {
+      HapticFeedback.mediumImpact();
+      if (mounted) widget.onDelete?.call();
+    }
   }
 
   Future<void> _confirmCancelDelete() async {
     final ok = await _confirmDialog(message: '是否确认取消解绑申请？');
-    if (ok && mounted) widget.onCancelDelete?.call();
+    if (ok) {
+      HapticFeedback.lightImpact();
+      if (mounted) widget.onCancelDelete?.call();
+    }
   }
 
   Future<void> _confirmPrimaryStar() async {
     final ok = await _confirmDialog(message: '是否进行主设备迁移？');
-    if (ok && mounted) widget.onPrimaryStar?.call();
+    if (ok) {
+      HapticFeedback.mediumImpact();
+      if (mounted) widget.onPrimaryStar?.call();
+    }
   }
 
   Future<void> _confirmPrimaryCancel() async {
     final ok = await _confirmDialog(message: '是否取消主设备迁移？');
-    if (ok && mounted) widget.onPrimaryCancel?.call();
+    if (ok) {
+      HapticFeedback.lightImpact();
+      if (mounted) widget.onPrimaryCancel?.call();
+    }
   }
 
   Future<void> _confirmTransferTarget() async {
@@ -247,7 +260,10 @@ class _DeviceCardState extends State<DeviceCard> {
       message:
           '是否迁移到「${widget.data.displayName}」？\n该更改将于两天后生效',
     );
-    if (ok && mounted) widget.onTransferTarget?.call();
+    if (ok) {
+      HapticFeedback.mediumImpact();
+      if (mounted) widget.onTransferTarget?.call();
+    }
   }
 
   Future<bool> _confirmDialog({required String message}) async {

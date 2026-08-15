@@ -1,46 +1,25 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/app_app_bar.dart';
 
 void navigateToSubPage(BuildContext context, String title, Widget body) {
   Navigator.of(context).push(MaterialPageRoute(builder: (ctx) {
-    return Builder(builder: (scaffoldCtx) {
-      final colors = Theme.of(scaffoldCtx).extension<AppColors>()!;
-      final barText = colors.common.barText;
-      return Scaffold(
-        backgroundColor: Theme.of(scaffoldCtx).scaffoldBackgroundColor,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Container(
-                height: AppDimens.settingsBarHeight,
-                color: colors.common.drawerHeaderBg,
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.arrow_back, color: barText),
-                      onPressed: () => Navigator.pop(scaffoldCtx),
-                    ),
-                    Expanded(
-                      child: Text(title,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                              color: barText)),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
-              Expanded(child: body),
-            ],
-          ),
+    return Scaffold(
+      backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            AppAppBar(
+              title: title,
+              onBack: () => Navigator.pop(ctx),
+            ),
+            Expanded(child: body),
+          ],
         ),
-      );
-    });
+      ),
+    );
   }));
 }
 
@@ -71,45 +50,21 @@ Route<T> bottomUpRoute<T>(Widget page) {
 void navigateToSettingsPage(BuildContext context, String title, Widget body) {
   Navigator.of(context).push(PageRouteBuilder(
     pageBuilder: (_, __, ___) {
-      return Builder(builder: (scaffoldCtx) {
-        final colors = Theme.of(scaffoldCtx).extension<AppColors>()!;
-        final barText = colors.common.barText;
-        return Scaffold(
-          backgroundColor: Theme.of(scaffoldCtx).scaffoldBackgroundColor,
-          body: Column(
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
             children: [
-              Container(
-                color: colors.common.drawerHeaderBg,
-                child: SafeArea(
-                  bottom: false,
-                  child: SizedBox(
-                    height: AppDimens.settingsBarHeight,
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon:
-                              Icon(Icons.keyboard_arrow_up, color: barText),
-                          onPressed: () => Navigator.pop(scaffoldCtx),
-                        ),
-                        Expanded(
-                          child: Text(title,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w500,
-                                  color: barText)),
-                        ),
-                        const SizedBox(width: 48),
-                      ],
-                    ),
-                  ),
-                ),
+              AppAppBar(
+                title: title,
+                onBack: () => Navigator.pop(context),
               ),
               Expanded(child: body),
             ],
           ),
-        );
-      });
+        ),
+      );
     },
     transitionsBuilder: (_, animation, __, child) => SlideTransition(
       position:

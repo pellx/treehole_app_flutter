@@ -8,7 +8,7 @@ import 'services/storage.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
-  await PostStorage.init();
-  await BindingCache.init();
+  // 两套 Hive box 并行打开，缩短启动阻塞
+  await Future.wait([PostStorage.init(), BindingCache.init()]);
   runApp(TreeholeApp(key: appKey));
 }

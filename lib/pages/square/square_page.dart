@@ -1,29 +1,18 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
-import '../../services/account_display.dart';
-import '../../services/avatar_storage.dart';
 import '../../services/storage.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/image_overlay.dart';
 import '../../widgets/post_card.dart';
-import '../post/post_create_page.dart';
-import '../settings/color_mode_page.dart';
-import '../settings/settings_navigation.dart';
-import '../settings/user_settings_page.dart';
-import '../settings/version_page.dart';
-import '../settings/version_detail_page.dart';
-import '../account/register_page.dart';
-import '../account/user_page.dart';
-import '../../models/version_info.dart';
+import '../../widgets/app_error_state.dart';
+import '../../widgets/app_loading_indicator.dart';
+import '../../widgets/app_empty_state.dart';
 
 class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
@@ -33,30 +22,14 @@ class SquarePage extends StatefulWidget {
 }
 
 class _SquarePageState extends State<SquarePage> {
-  List<Post> _posts = [];          // 当前展示的帖子列表
-  List<int> _allIds = [];          // 全部帖子 ID（按 API 返回顺序）
-  int _loadedCount = 0;            // 已加载到第几个 ID
-  bool _loading = false;           // 是否正在加载中
-  String? _error;                  // 错误信息（null = 正常）
+  List<Post> _posts = []; // 当前展示的帖子列表
+  List<int> _allIds = []; // 全部帖子 ID（按 API 返回顺序）
+  int _loadedCount = 0; // 已加载到第几个 ID
+  bool _loading = false; // 是否正在加载中
+  String? _error; // 错误信息（null = 正常）
   final Set<int> _loadingIds = {}; // 正在请求中的 ID（防止重复请求）
   final Map<int, List<Comment>> _comments = {}; // 帖子回复缓存
-  final Set<int> _postsNeedCommentRefresh = {};  // 需要刷新回复的帖子 ID
-  Uint8List? _avatarBytes;                          // 抽屉头像字节
-  bool _postButtonVisible = true;                   // 发布按钮显隐
-  bool _commentOverlayActive = false;                // 评论浮层活跃时禁止滚动唤出
-  Duration _postButtonAnimDuration = const Duration(milliseconds: 300);
-  bool _updateAvailable = false;                     // 有新版本可更新
-
-  Future<void> _loadAvatar() async {
-    final bytes = await AvatarStorage.load();
-    if (mounted) setState(() => _avatarBytes = bytes);
-  }
-
-  void _onAccountDisplayChanged() {
-    if (!mounted) return;
-    _loadAvatar();
-    setState(() {});
-  }
+  final Set<int> _postsNeedCommentRefresh = {}; // 需要刷新回复的帖子 ID
 
   void _onNeedCommentRefresh(int postId) {
     if (!_postsNeedCommentRefresh.contains(postId)) return;
@@ -68,15 +41,14 @@ class _SquarePageState extends State<SquarePage> {
   @override
   void initState() {
     super.initState();
-    _loadAvatar();
     _initLoad();
-    ImageOverlay.onChanged = () { if (mounted) setState(() {}); };
-    accountDisplayEpoch.addListener(_onAccountDisplayChanged);
+    ImageOverlay.onChanged = () {
+      if (mounted) setState(() {});
+    };
   }
 
   @override
   void dispose() {
-    accountDisplayEpoch.removeListener(_onAccountDisplayChanged);
     super.dispose();
   }
 
@@ -118,18 +90,6 @@ class _SquarePageState extends State<SquarePage> {
         _loading = false;
         _error = '加载失败，请检查网络';
       });
-    }
-
-    // 3. 后台检查版本更新（不阻塞加载）
-    _checkVersion();
-  }
-
-  Future<void> _checkVersion() async {
-    final latest = await ApiService.getLatestVersion();
-    if (latest == null || !mounted) return;
-    await PostStorage.saveLatestVersion(latest);
-    if (latest.versionNumber != VersionInfo.currentVersion && mounted) {
-      setState(() => _updateAvailable = true);
     }
   }
 
@@ -241,15 +201,23 @@ class _SquarePageState extends State<SquarePage> {
     final addedIds = newIds.where((id) => !existingIds.contains(id)).toList();
 
     // 并行拉取新帖，避免逐篇串行等待；fresh 标记是否刚从 API 拉取
-    final fetched = await Future.wait(addedIds.map((id) async {
-      final cached = PostStorage.getPost(id);
-      if (cached != null) return (post: cached, fresh: false);
-      final post = await ApiService.getPost(id);
-      if (post != null) await PostStorage.savePost(post);
-      return (post: post, fresh: true);
-    }));
-    final newPosts = [for (final r in fetched) if (r.post != null) r.post!];
-    final freshIds = {for (final r in fetched) if (r.fresh && r.post != null) r.post!.id};
+    final fetched = await Future.wait(
+      addedIds.map((id) async {
+        final cached = PostStorage.getPost(id);
+        if (cached != null) return (post: cached, fresh: false);
+        final post = await ApiService.getPost(id);
+        if (post != null) await PostStorage.savePost(post);
+        return (post: post, fresh: true);
+      }),
+    );
+    final newPosts = [
+      for (final r in fetched)
+        if (r.post != null) r.post!,
+    ];
+    final freshIds = {
+      for (final r in fetched)
+        if (r.fresh && r.post != null) r.post!.id,
+    };
 
     _allIds = newIds;
     _loadedCount = _posts.length + newPosts.length;
@@ -272,10 +240,14 @@ class _SquarePageState extends State<SquarePage> {
     for (final p in top) {
       _postsNeedCommentRefresh.remove(p.id);
     }
-    unawaited(Future.wait(top.map(
-      // 刚从 API 拉过的帖评论列表已最新，跳过重复 getPost
-      (p) => _refreshPostComments(p, fetchLatest: !freshIds.contains(p.id)),
-    )));
+    unawaited(
+      Future.wait(
+        top.map(
+          // 刚从 API 拉过的帖评论列表已最新，跳过重复 getPost
+          (p) => _refreshPostComments(p, fetchLatest: !freshIds.contains(p.id)),
+        ),
+      ),
+    );
     final elapsed = stopwatch.elapsedMilliseconds;
     if (elapsed < 800) {
       await Future.delayed(Duration(milliseconds: 800 - elapsed));
@@ -294,7 +266,10 @@ class _SquarePageState extends State<SquarePage> {
 
   // 刷新单个帖子的回复：获取最新 ID → 对比本地 → 只拉取新增
   // fetchLatest=false 时直接用 post.comments（帖子刚从 API 拉取，列表已最新，省一次 getPost）
-  Future<void> _refreshPostComments(Post post, {bool fetchLatest = true}) async {
+  Future<void> _refreshPostComments(
+    Post post, {
+    bool fetchLatest = true,
+  }) async {
     List<int> newIds;
     if (fetchLatest) {
       try {
@@ -318,7 +293,8 @@ class _SquarePageState extends State<SquarePage> {
     final missingIds = newIds.where((id) => !existingIds.contains(id)).toList();
 
     if (missingIds.isEmpty) {
-      if (_comments[post.id] == null || _comments[post.id]!.length != newIds.length) {
+      if (_comments[post.id] == null ||
+          _comments[post.id]!.length != newIds.length) {
         _comments[post.id] = PostStorage.getComments(newIds);
         await PostStorage.updatePostCommentIds(post.id, newIds);
         if (mounted) setState(() {});
@@ -359,52 +335,6 @@ class _SquarePageState extends State<SquarePage> {
     if (mounted) setState(() {});
   }
 
-  Widget _drawerTile(IconData icon, String title, {VoidCallback? onTap}) {
-    return ListTile(
-      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurface),
-      title: Text(title, style: TextStyle(fontSize: 15)),
-      onTap: onTap ?? () {},
-    );
-  }
-
-  void _showSettings() {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _settingsTile(Icons.person_outline, '用户设置', () { Navigator.pop(context); navigateToSettingsPage(context, '用户设置', const UserSettingsPage()); }),
-            _settingsTile(Icons.edit_outlined, '署名设置', () { Navigator.pop(context); navigateToSettingsPage(context, '署名设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
-            _settingsTile(Icons.star_outline, '关注设置', () { Navigator.pop(context); navigateToSettingsPage(context, '关注设置', Center(child: Text('没做', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)))); }),
-            _settingsTile(Icons.palette_outlined, '颜色模式', () { Navigator.pop(context); navigateToSettingsPage(context, '颜色模式', const ColorModePage()); }),
-            SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _settingsTile(IconData icon, String title, VoidCallback onTap) {
-    final colors = Theme.of(context).extension<AppColors>()!;
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: Icon(Icons.chevron_right, color: colors.common.trailingIcon),
-      onTap: onTap,
-    );
-  }
-
-  Future<void> _openCreatePost() async {
-    final result = await Navigator.push<bool>(
-      context,
-      topDownRoute<bool>(const PostCreatePage()),
-    );
-    if (result == true && mounted) {
-      await _refresh();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -412,228 +342,67 @@ class _SquarePageState extends State<SquarePage> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) ImageOverlay.closeCurrent();
       },
-      child: Scaffold(
-      drawerEdgeDragWidth: MediaQuery.of(context).size.width / 3,
-      drawer: Builder(builder: (ctx) {
-        final colors = Theme.of(ctx).extension<AppColors>()!;
-        return Drawer(
-        shape: const RoundedRectangleBorder(),
-        width: MediaQuery.of(ctx).size.width * 4 / 5,
-        child: SafeArea(
-          child: Column(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  if (PostStorage.isRegistered()) {
-                    Navigator.of(context)
-                        .push(bottomUpRoute(const UserPage()))
-                        .then((_) => _loadAvatar());
-                  } else {
-                    Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
-                  }
-                },
-                child: Container(
-                  color: colors.common.drawerHeaderBg,
-                  padding: EdgeInsets.only(
-                    left: AppDimens.drawerHeaderPaddingLeft,
-                    right: AppDimens.drawerHeaderPaddingRight,
-                    top: AppDimens.drawerHeaderPaddingTop,
-                    bottom: AppDimens.drawerHeaderPaddingBottom,
-                  ),
-                  child: Row(
-                    children: [
-                      _avatarBytes != null
-                          ? CircleAvatar(
-                              radius: AppDimens.drawerAvatarSize / 2,
-                              backgroundImage: MemoryImage(_avatarBytes!),
-                            )
-                          : CircleAvatar(
-                              radius: AppDimens.drawerAvatarSize / 2,
-                              backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
-                              backgroundImage: const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
-                            ),
-                      SizedBox(width: AppDimens.drawerAvatarTextGap),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              PostStorage.getDisplayName() ?? PostStorage.getUserName(),
-                              style: TextStyle(fontSize: AppDimens.drawerNameFontSize, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurface),
-                            ),
-                            if (!PostStorage.isRegistered())
-                              Text(
-                                '目前未注册账号',
-                                style: TextStyle(fontSize: 11, color: colors.common.trailingIcon),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: colors.common.trailingIcon),
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    _drawerTile(Icons.home_outlined, '主页（没做）'),
-                    _drawerTile(Icons.person_outline, '用户', onTap: () {
-                      Navigator.pop(context);
-                      if (PostStorage.isRegistered()) {
-                        Navigator.of(context)
-                            .push(bottomUpRoute(const UserPage()))
-                            .then((_) => _loadAvatar());
-                      } else {
-                        Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
-                      }
-                    }),
-                    _drawerTile(Icons.settings_outlined, '设置', onTap: _showSettings),
-                    _drawerTile(Icons.menu_book_outlined, '操作教学（没做）'),
-                    _drawerTile(Icons.system_update_outlined, '更新', onTap: () {
-                      Navigator.pop(context);
-                      navigateToSettingsPage(context, '更新', const VersionPage());
-                    }),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  final latest = PostStorage.getLatestCachedVersion();
-                  if (latest != null) {
-                    Navigator.push(context, PageRouteBuilder(
-                      pageBuilder: (_, __, ___) => VersionDetailPage(version: latest),
-                      transitionsBuilder: (_, animation, __, child) => SlideTransition(
-                        position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-                            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-                        child: child,
-                      ),
-                      transitionDuration: const Duration(milliseconds: 300),
-                    ));
-                  }
-                },
-                child: Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('版本 ${VersionInfo.currentVersion}', style: TextStyle(fontSize: 12, color: colors.common.trailingIcon)),
-                    if (_updateAvailable) ...[
-                      const SizedBox(width: 4),
-                      SvgPicture.asset(
-                        'assets/icons/game-pack/front.svg',
-                        width: AppDimens.updateArrowSize,
-                        height: AppDimens.updateArrowSize,
-                        colorFilter: ColorFilter.mode(colors.common.updateArrow, BlendMode.srcIn),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              ),
-            ],
-          ),
-          ),
-        );
-      }),
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            _loading && _posts.isEmpty
-                ? const Center(child: Image(image: AssetImage('assets/loading.gif'), width: AppDimens.loadingGifSize, height: AppDimens.loadingGifSize))
-                // 有错误 → 显示错误文字
-                    : _error != null
-                        ? Center(
-                            child: Text(_error!,
-                                style: TextStyle(color: Theme.of(context).extension<AppColors>()!.common.trailingIcon)))
-                    // 正常 → 帖子列表 + 滚动加载
-                    : NotificationListener<ScrollNotification>(
-                        onNotification: (n) {
-                          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
-                            _loadMore();
-                          }
-                          // 滚动方向检测：向下滑隐藏按钮，向上滑显示
-                          if (n is ScrollUpdateNotification) {
-                            final delta = n.scrollDelta ?? 0;
-                            if (delta.abs() > 5) {
-                              if (!_commentOverlayActive) {
-                                final hide = delta > 0;
-                                if (_postButtonVisible != !hide) {
-                                  setState(() => _postButtonVisible = !hide);
-                                }
-                              }
-                            }
-                          }
-                          return false;
+      child: Scaffold(body: SafeArea(bottom: false, child: _buildBody())),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading && _posts.isEmpty) {
+      return const AppLoadingCenter(message: '加载中...');
+    }
+    if (_error != null && _posts.isEmpty) {
+      return AppErrorState(message: _error!, onRetry: _initLoad);
+    }
+    if (_posts.isEmpty) {
+      return const AppEmptyState(
+        message: '还没有帖子，快来发布第一条吧',
+        icon: Icons.inbox_outlined,
+      );
+    }
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
+          _loadMore();
+        }
+        return false;
+      },
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          decelerationRate: ScrollDecelerationRate.fast,
+        ),
+        slivers: [
+          CupertinoSliverRefreshControl(onRefresh: _refresh),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              AppDimens.listPaddingLeft,
+              AppDimens.listPaddingTop,
+              AppDimens.listPaddingRight,
+              AppDimens.listPaddingBottom,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate(
+                _posts
+                    .map(
+                      (p) => PostCard(
+                        key: ValueKey(p.id),
+                        post: p,
+                        comments: _comments[p.id] ?? [],
+                        onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id),
+                        onCommentCreated: (cmt) {
+                          setState(() {
+                            _comments[p.id] ??= [];
+                            _comments[p.id] = [..._comments[p.id]!, cmt];
+                          });
                         },
-                        child: CustomScrollView(
-                          physics: const BouncingScrollPhysics(decelerationRate: ScrollDecelerationRate.fast),
-                          cacheExtent: 3000,
-                          slivers: [
-                            CupertinoSliverRefreshControl(
-                              onRefresh: _refresh,
-                            ),
-                            SliverPadding(
-                              padding: EdgeInsets.fromLTRB(
-                                AppDimens.listPaddingLeft,
-                                AppDimens.listPaddingTop,
-                                AppDimens.listPaddingRight,
-                                AppDimens.listPaddingBottom,
-                              ),
-                              sliver: SliverList(
-                                delegate: SliverChildListDelegate(
-                                  _posts.map((p) => PostCard(key: ValueKey(p.id), post: p, comments: _comments[p.id] ?? [], onNeedCommentRefresh: () => _onNeedCommentRefresh(p.id), onCommentCreated: (cmt) {
-                                    setState(() {
-                                      _comments[p.id] ??= [];
-                                      _comments[p.id] = [..._comments[p.id]!, cmt];
-                                    });
-                                  }, onCommentOverlayChanged: (visible) {
-     setState(() {
-       _commentOverlayActive = visible;
-       if (visible) {
-         _postButtonAnimDuration = Duration.zero;
-         _postButtonVisible = false;
-       } else {
-         _postButtonAnimDuration = const Duration(milliseconds: 300);
-         _postButtonVisible = true;
-       }
-     });
-   })).toList(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
-            AnimatedPositioned(
-              duration: _postButtonAnimDuration,
-              curve: Curves.easeOut,
-              right: _postButtonVisible
-                  ? AppDimens.postCreateButtonRight
-                  : -(AppDimens.postCreateButtonSize + 16),
-              bottom: AppDimens.postCreateButtonBottom + MediaQuery.of(context).padding.bottom,
-              child: SizedBox(
-                width: AppDimens.postCreateButtonSize,
-                height: AppDimens.postCreateButtonSize,
-                child: FloatingActionButton(
-                  heroTag: 'post_create',
-                  backgroundColor: Theme.of(context).extension<AppColors>()!.postCreate.buttonBg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppDimens.postCreateButtonRadius),
-                  ),
-                  onPressed: _openCreatePost,
-                  child: Icon(Icons.edit_outlined, size: AppDimens.postCreateButtonIconSize, color: Theme.of(context).extension<AppColors>()!.postCreate.buttonIcon),
-                ),
+                    )
+                    .toList(),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    ),
     );
   }
 }

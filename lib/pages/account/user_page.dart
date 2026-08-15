@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +14,9 @@ import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../settings/settings_navigation.dart';
+import '../settings/settings_page.dart';
+import '../../widgets/app_app_bar.dart';
+import '../../widgets/app_snackbar.dart';
 import 'device_binding_page.dart';
 import 'switch_account_page.dart';
 
@@ -35,13 +37,15 @@ class _UserPageState extends State<UserPage> {
   String _externalToken = '';
   Uint8List? _avatarBytes;
   DateTime? _displayIdChangedAt;
+
   /// 用户页打开时预取绑定列表 + 切号锁；进切换页前等待完成以免闪烁
   Future<void>? _prefetchFuture;
 
   @override
   void initState() {
     super.initState();
-    _nameController.text = PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    _nameController.text =
+        PostStorage.getDisplayName() ?? PostStorage.getUserName();
     _nameFocus.addListener(_onNameFocusChange);
     _reloadAccountUi();
     // 预取绑定列表与切号锁，进入子页时首帧即可正确展示
@@ -94,8 +98,10 @@ class _UserPageState extends State<UserPage> {
     } catch (e) {
       debugPrint('[UserPage] 更换头像失败: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('头像更换失败'), duration: Duration(seconds: 1)),
+        showAppSnackBar(
+          context,
+          message: '头像更换失败',
+          duration: const Duration(seconds: 1),
         );
       }
     }
@@ -168,10 +174,10 @@ class _UserPageState extends State<UserPage> {
       'NAME_EMPTY' => '名字不能为空',
       'NAME_UNCHANGED' => '名字未改变',
       'RENAME_TOO_FREQUENT' => () {
-          final next = _nextRenameAt();
-          if (next == null) return '改名冷却中，每两周可改一次';
-          return '改名冷却中，每两周可改一次\n下一次可更改日期：${_formatRenameDate(next)}';
-        }(),
+        final next = _nextRenameAt();
+        if (next == null) return '改名冷却中，每两周可改一次';
+        return '改名冷却中，每两周可改一次\n下一次可更改日期：${_formatRenameDate(next)}';
+      }(),
       'NAME_TAKEN' => '用户名被占用',
       null => '改名失败',
       _ => raw,
@@ -194,8 +200,7 @@ class _UserPageState extends State<UserPage> {
       _exitNameEditing(error: '名字不能为空');
       return;
     }
-    final current =
-        PostStorage.getDisplayName() ?? PostStorage.getUserName();
+    final current = PostStorage.getDisplayName() ?? PostStorage.getUserName();
     if (name == current) {
       _nameFocus.unfocus();
       setState(() {
@@ -205,7 +210,10 @@ class _UserPageState extends State<UserPage> {
       return;
     }
 
-    setState(() { _submittingName = true; _error = null; });
+    setState(() {
+      _submittingName = true;
+      _error = null;
+    });
     try {
       final session = await _readySession();
       if (session == null) {
@@ -228,8 +236,7 @@ class _UserPageState extends State<UserPage> {
       _nameController.text = result.userDisplayId;
       setState(() {
         _editingName = false;
-        _displayIdChangedAt =
-            result.displayIdChangedAt ?? DateTime.now();
+        _displayIdChangedAt = result.displayIdChangedAt ?? DateTime.now();
       });
     } catch (e) {
       if (mounted) _exitNameEditing(error: '网络异常：$e');
@@ -252,8 +259,10 @@ class _UserPageState extends State<UserPage> {
   void _copyToken() {
     if (_externalToken.isEmpty) return;
     Clipboard.setData(ClipboardData(text: _externalToken));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制用户令牌'), duration: Duration(seconds: 1)),
+    showAppSnackBar(
+      context,
+      message: '已复制用户令牌',
+      duration: const Duration(seconds: 1),
     );
   }
 
@@ -292,17 +301,21 @@ class _UserPageState extends State<UserPage> {
                         onPressed: () => Navigator.of(ctx).pop(false),
                         style: TextButton.styleFrom(
                           foregroundColor: onSurface.withValues(
-                              alpha: AccentDimens.dialogCancelTextAlpha),
+                            alpha: AccentDimens.dialogCancelTextAlpha,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: AccentDimens.dialogActionHPadding),
+                            horizontal: AccentDimens.dialogActionHPadding,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                                AccentDimens.dialogActionRadius),
+                              AccentDimens.dialogActionRadius,
+                            ),
                           ),
                           textStyle: const TextStyle(
-                              fontSize: AccentDimens.dialogActionFontSize),
+                            fontSize: AccentDimens.dialogActionFontSize,
+                          ),
                         ),
                         child: const Text('取消'),
                       ),
@@ -321,13 +334,16 @@ class _UserPageState extends State<UserPage> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: AccentDimens.dialogActionHPadding),
+                            horizontal: AccentDimens.dialogActionHPadding,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                                AccentDimens.dialogActionRadius),
+                              AccentDimens.dialogActionRadius,
+                            ),
                           ),
                           textStyle: const TextStyle(
-                              fontSize: AccentDimens.dialogActionFontSize),
+                            fontSize: AccentDimens.dialogActionFontSize,
+                          ),
                         ),
                         child: const Text('确认'),
                       ),
@@ -350,8 +366,10 @@ class _UserPageState extends State<UserPage> {
       final session = await _readySession();
       if (session == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
+          showAppSnackBar(
+            context,
+            message: '会话验证失败，请稍后重试',
+            duration: const Duration(seconds: 2),
           );
         }
         return;
@@ -362,11 +380,10 @@ class _UserPageState extends State<UserPage> {
       );
       if (!mounted) return;
       if (result == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ApiService.lastError ?? '令牌重置失败'),
-            duration: const Duration(seconds: 2),
-          ),
+        showAppSnackBar(
+          context,
+          message: ApiService.lastError ?? '令牌重置失败',
+          duration: const Duration(seconds: 2),
         );
         return;
       }
@@ -377,13 +394,18 @@ class _UserPageState extends State<UserPage> {
       await DeviceCredentialStore.saveUserExternalToken(result.userToken);
       await DeviceCredentialStore.mergeKnownUserTokens([result.userToken]);
       setState(() => _externalToken = result.userToken);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('用户令牌已重置'), duration: Duration(seconds: 2)),
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        message: '用户令牌已重置',
+        duration: const Duration(seconds: 2),
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('网络异常：$e'), duration: const Duration(seconds: 2)),
+        showAppSnackBar(
+          context,
+          message: '网络异常：$e',
+          duration: const Duration(seconds: 2),
         );
       }
     } finally {
@@ -392,10 +414,17 @@ class _UserPageState extends State<UserPage> {
   }
 
   void _openDeviceBinding() {
+    HapticFeedback.lightImpact();
     Navigator.of(context).push(topDownRoute(const DeviceBindingPage()));
   }
 
+  void _openSettings() {
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(topDownRoute(const SettingsPage()));
+  }
+
   Future<void> _openLoginOther() async {
+    HapticFeedback.lightImpact();
     final pending = _prefetchFuture;
     if (pending != null) {
       try {
@@ -424,7 +453,7 @@ class _UserPageState extends State<UserPage> {
         },
         child: Column(
           children: [
-            _topBar(colors),
+            const AppAppBar(title: '用户', automaticallyImplyLeading: false),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(AccentDimens.pagePadding),
@@ -433,16 +462,22 @@ class _UserPageState extends State<UserPage> {
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(
-                          bottom: AccentDimens.errorBottomPadding),
-                      child: Text(_error!,
-                          style: TextStyle(
-                              fontSize: AccentDimens.errorFontSize,
-                              color: colors.register.errorText)),
+                        bottom: AccentDimens.errorBottomPadding,
+                      ),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          fontSize: AccentDimens.errorFontSize,
+                          color: colors.register.errorText,
+                        ),
+                      ),
                     ),
                   _itemDivider(colors),
                   _tokenRow(onSurface),
                   _itemDivider(colors),
                   _changeTokenRow(colors, onSurface),
+                  _itemDivider(colors),
+                  _navRow(colors, onSurface, '设置', _openSettings),
                   _itemDivider(colors),
                   _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
                   _itemDivider(colors),
@@ -457,44 +492,13 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  // ---- 顶部栏（与颜色模式设置页同款：淡绿背景、标题居中、向上箭头） ----
-
-  Widget _topBar(AppColors colors) {
-    final barText = colors.common.barText;
-    return Container(
-      color: colors.common.drawerHeaderBg,
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: AccentDimens.barHeight,
-          child: Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.keyboard_arrow_up, color: barText),
-                onPressed: () => Navigator.pop(context),
-              ),
-              Expanded(
-                child: Text('用户',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: AccentDimens.barTitleFontSize,
-                        fontWeight: FontWeight.w500,
-                        color: barText)),
-              ),
-              const SizedBox(width: AccentDimens.barTrailingWidth),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // ---- 头像 + ID + 更改/提交按钮 ----
 
   Widget _avatarIdRow(AppColors colors, Color onSurface) {
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(vertical: AccentDimens.avatarIdRowVPadding),
+      padding: const EdgeInsets.symmetric(
+        vertical: AccentDimens.avatarIdRowVPadding,
+      ),
       child: Row(
         children: [
           Padding(
@@ -518,73 +522,89 @@ class _UserPageState extends State<UserPage> {
                     focusNode: _nameFocus,
                     maxLength: AccentDimens.nameMaxLength,
                     style: TextStyle(
-                        fontSize: AccentDimens.idFontSize,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface),
+                      fontSize: AccentDimens.idFontSize,
+                      fontWeight: FontWeight.w600,
+                      color: onSurface,
+                    ),
                     decoration: InputDecoration(
                       isDense: true,
                       counterText: '',
                       contentPadding: const EdgeInsets.symmetric(
-                          vertical: AccentDimens.nameInputVPadding),
+                        vertical: AccentDimens.nameInputVPadding,
+                      ),
                       enabledBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
-                            color: onSurface.withValues(
-                                alpha: AccentDimens.nameInputUnderlineAlpha),
-                            width: AccentDimens.nameInputUnderlineWidth),
+                          color: onSurface.withValues(
+                            alpha: AccentDimens.nameInputUnderlineAlpha,
+                          ),
+                          width: AccentDimens.nameInputUnderlineWidth,
+                        ),
                       ),
                       focusedBorder: UnderlineInputBorder(
                         borderSide: BorderSide(
-                            color: onSurface,
-                            width: AccentDimens.nameInputUnderlineWidth),
+                          color: onSurface,
+                          width: AccentDimens.nameInputUnderlineWidth,
+                        ),
                       ),
                     ),
                   )
                 : Text(
                     _nameController.text,
                     style: TextStyle(
-                        fontSize: AccentDimens.idFontSize,
-                        fontWeight: FontWeight.w600,
-                        color: onSurface),
+                      fontSize: AccentDimens.idFontSize,
+                      fontWeight: FontWeight.w600,
+                      color: onSurface,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
           ),
           const SizedBox(width: AccentDimens.idButtonGap),
           Padding(
             padding: const EdgeInsets.only(
-                right: AccentDimens.changeButtonRightInset),
+              right: AccentDimens.changeButtonRightInset,
+            ),
             child: SizedBox(
               height: AccentDimens.buttonHeight,
               child: ElevatedButton(
                 onPressed: _submittingName ? null : _onNameButtonTap,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colors.postCreate.submitBg.withValues(
-                      alpha: _editingName
-                          ? AccentDimens.buttonSubmitBgAlpha
-                          : AccentDimens.buttonBgAlpha),
+                    alpha: _editingName
+                        ? AccentDimens.buttonSubmitBgAlpha
+                        : AccentDimens.buttonBgAlpha,
+                  ),
                   foregroundColor: colors.postCreate.submitText.withValues(
-                      alpha: _editingName
-                          ? AccentDimens.buttonSubmitTextAlpha
-                          : AccentDimens.buttonTextAlpha),
+                    alpha: _editingName
+                        ? AccentDimens.buttonSubmitTextAlpha
+                        : AccentDimens.buttonTextAlpha,
+                  ),
                   elevation: 0,
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AccentDimens.buttonHPadding, vertical: 0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AccentDimens.buttonRadius),
+                    horizontal: AccentDimens.buttonHPadding,
+                    vertical: 0,
                   ),
-                  textStyle:
-                      const TextStyle(fontSize: AccentDimens.buttonFontSize),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(
+                      AccentDimens.buttonRadius,
+                    ),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: AccentDimens.buttonFontSize,
+                  ),
                 ),
                 child: _submittingName
                     ? SizedBox(
                         width: AccentDimens.submitSpinnerSize,
                         height: AccentDimens.submitSpinnerSize,
                         child: CircularProgressIndicator(
-                            strokeWidth: AccentDimens.submitSpinnerStroke,
-                            color: colors.postCreate.submitText.withValues(
-                                alpha: AccentDimens.buttonSubmitTextAlpha)))
+                          strokeWidth: AccentDimens.submitSpinnerStroke,
+                          color: colors.postCreate.submitText.withValues(
+                            alpha: AccentDimens.buttonSubmitTextAlpha,
+                          ),
+                        ),
+                      )
                     : Text(_editingName ? '提交' : '更改'),
               ),
             ),
@@ -602,32 +622,44 @@ class _UserPageState extends State<UserPage> {
     final display = _externalToken.isEmpty
         ? '—'
         : (_externalToken.length > head + tail
-            ? '${_externalToken.substring(0, head)}...'
-                '${_externalToken.substring(_externalToken.length - tail)}'
-            : _externalToken);
+              ? '${_externalToken.substring(0, head)}...'
+                    '${_externalToken.substring(_externalToken.length - tail)}'
+              : _externalToken);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _copyToken,
       child: _itemRow(
         Row(
           children: [
-            Text('用户令牌',
-                style: TextStyle(
-                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            Text(
+              '用户令牌',
+              style: TextStyle(
+                fontSize: AccentDimens.itemFontSize,
+                color: onSurface,
+              ),
+            ),
             const Spacer(),
-            Text(display,
-                style: TextStyle(
-                    fontSize: AccentDimens.tokenValueFontSize,
-                    color: onSurface.withValues(
-                        alpha: AccentDimens.tokenValueAlpha))),
+            Text(
+              display,
+              style: TextStyle(
+                fontSize: AccentDimens.tokenValueFontSize,
+                color: onSurface.withValues(
+                  alpha: AccentDimens.tokenValueAlpha,
+                ),
+              ),
+            ),
             const SizedBox(width: AccentDimens.tokenCopyIconGap),
             Padding(
               padding: const EdgeInsets.only(
-                  right: AccentDimens.copyIconRightInset),
-              child: Icon(Icons.copy,
-                  size: AccentDimens.tokenCopyIconSize,
-                  color: onSurface.withValues(
-                      alpha: AccentDimens.tokenCopyIconAlpha)),
+                right: AccentDimens.copyIconRightInset,
+              ),
+              child: Icon(
+                Icons.copy,
+                size: AccentDimens.tokenCopyIconSize,
+                color: onSurface.withValues(
+                  alpha: AccentDimens.tokenCopyIconAlpha,
+                ),
+              ),
             ),
           ],
         ),
@@ -644,9 +676,13 @@ class _UserPageState extends State<UserPage> {
       child: _itemRow(
         Row(
           children: [
-            Text('令牌重置',
-                style: TextStyle(
-                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            Text(
+              '令牌重置',
+              style: TextStyle(
+                fontSize: AccentDimens.itemFontSize,
+                color: onSurface,
+              ),
+            ),
             const Spacer(),
             if (_resettingToken)
               const SizedBox(
@@ -662,20 +698,33 @@ class _UserPageState extends State<UserPage> {
 
   // ---- 跳转子页面行 ----
 
-  Widget _navRow(AppColors colors, Color onSurface, String label, VoidCallback onTap) {
+  Widget _navRow(
+    AppColors colors,
+    Color onSurface,
+    String label,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: _itemRow(
         Row(
           children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: AccentDimens.itemFontSize, color: onSurface)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: AccentDimens.itemFontSize,
+                color: onSurface,
+              ),
+            ),
             const Spacer(),
-            _rightAligned(Icon(Icons.chevron_right,
+            _rightAligned(
+              Icon(
+                Icons.chevron_right,
                 size: AccentDimens.arrowSize,
-                color: colors.common.arrowIcon)),
+                color: colors.common.arrowIcon,
+              ),
+            ),
           ],
         ),
       ),
@@ -686,17 +735,18 @@ class _UserPageState extends State<UserPage> {
 
   /// 每行最右侧元素统一以 rowRightInset 为右侧基准对齐
   Widget _rightAligned(Widget child) => Padding(
-        padding: const EdgeInsets.only(right: AccentDimens.rowRightInset),
-        child: child,
-      );
+    padding: const EdgeInsets.only(right: AccentDimens.rowRightInset),
+    child: child,
+  );
 
   Widget _itemRow(Widget child) => SizedBox(
-        height: AccentDimens.itemHeight,
-        child: Center(child: child),
-      );
+    height: AccentDimens.itemHeight,
+    child: Center(child: child),
+  );
 
   Widget _itemDivider(AppColors colors) => Divider(
-      height: 1,
-      thickness: AccentDimens.dividerThickness,
-      color: colors.common.divider);
+    height: 1,
+    thickness: AccentDimens.dividerThickness,
+    color: colors.common.divider,
+  );
 }

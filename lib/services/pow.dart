@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
@@ -31,10 +30,9 @@ class PoWService {
   /// 在后台 isolate 中暴力搜索 nonce，30 秒超时
   static Future<int?> solve(PoWChallenge c) async {
     try {
-      return await Isolate.run(() => _solveSync(c)).timeout(
-        _timeout,
-        onTimeout: () => null,
-      );
+      return await Isolate.run(
+        () => _solveSync(c),
+      ).timeout(_timeout, onTimeout: () => null);
     } catch (e) {
       debugPrint('[PoW] Exception: $e');
       return null;

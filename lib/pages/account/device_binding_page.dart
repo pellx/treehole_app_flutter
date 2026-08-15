@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
 import '../../services/binding_cache.dart';
@@ -7,8 +8,12 @@ import '../../services/session_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
+import '../../widgets/app_app_bar.dart';
+import '../../widgets/app_empty_state.dart';
+import '../../widgets/app_error_state.dart';
+import '../../widgets/app_loading_indicator.dart';
+import '../../widgets/app_snackbar.dart';
 import '../../widgets/device_card.dart';
-import 'user_sub_page_shell.dart';
 
 /// 设备绑定页：先展示本地缓存，再请求最新并按需更新
 class DeviceBindingPage extends StatefulWidget {
@@ -20,11 +25,14 @@ class DeviceBindingPage extends StatefulWidget {
 
 class _DeviceBindingPageState extends State<DeviceBindingPage> {
   List<DeviceCardData> _devices = [];
+
   /// 本机 device_id，用于置顶与绿点
   int? _localDeviceId;
+
   /// 仅在无缓存且首次请求未完成时显示加载
   bool _loading = false;
   bool _transferring = false;
+
   /// 已确认「进行主设备迁移」、等待点选目标
   bool _pickingPrimaryTarget = false;
   int? _primaryPendingDeviceId;
@@ -54,7 +62,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       setState(() {
         _localDeviceId = localId;
         _devices = _decorate(
-            _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList()));
+          _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList()),
+        );
       });
     }
     await _loadDevices();
@@ -100,21 +109,23 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
   /// 按主设备 / 选目标态刷新右侧操作
   List<DeviceCardData> _decorate(List<DeviceCardData> list) {
     final localIsPrimary = list.any((d) => d.isCurrent && d.isPrimary);
-    final serverPending = _primaryPendingDeviceId != null ||
-        list.any((d) => d.isPrimaryPending);
+    final serverPending =
+        _primaryPendingDeviceId != null || list.any((d) => d.isPrimaryPending);
     final showCancelOnPrimary = _pickingPrimaryTarget || serverPending;
     // 仅本地选目标且尚未提交时，其它卡显示星标；已提交待生效则只留取消
     final showTransferStars =
         _pickingPrimaryTarget && !serverPending && localIsPrimary;
     return list
-        .map((d) => d.copyWith(
-              action: _actionFor(
-                d,
-                localIsPrimary: localIsPrimary,
-                showCancelOnPrimary: showCancelOnPrimary,
-                showTransferStars: showTransferStars,
-              ),
-            ))
+        .map(
+          (d) => d.copyWith(
+            action: _actionFor(
+              d,
+              localIsPrimary: localIsPrimary,
+              showCancelOnPrimary: showCancelOnPrimary,
+              showTransferStars: showTransferStars,
+            ),
+          ),
+        )
         .toList();
   }
 
@@ -177,21 +188,23 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
   Future<void> _persistDevicesFromCards() async {
     await BindingCache.saveDevices(
       _devices
-          .map((d) => BoundDeviceInfo(
-                bindingId: d.bindingId,
-                deviceId: d.deviceId,
-                status: d.status,
-                unbindRequestedAt: d.unbindRequestedAt,
-                unbindExecuteAt: d.unbindExecuteAt,
-                deviceDisplayName: d.customName,
-                deviceName: d.deviceName,
-                brand: d.brand,
-                model: d.model,
-                os: d.os,
-                abi: d.abi,
-                isPrimary: d.isPrimary,
-                isPrimaryPending: d.isPrimaryPending,
-              ))
+          .map(
+            (d) => BoundDeviceInfo(
+              bindingId: d.bindingId,
+              deviceId: d.deviceId,
+              status: d.status,
+              unbindRequestedAt: d.unbindRequestedAt,
+              unbindExecuteAt: d.unbindExecuteAt,
+              deviceDisplayName: d.customName,
+              deviceName: d.deviceName,
+              brand: d.brand,
+              model: d.model,
+              os: d.os,
+              abi: d.abi,
+              isPrimary: d.isPrimary,
+              isPrimaryPending: d.isPrimaryPending,
+            ),
+          )
           .toList(),
     );
   }
@@ -208,8 +221,9 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
         if (_devices.isEmpty) {
           _error = ApiService.lastError ?? '加载设备失败';
         } else {
-          _devices = _decorate(_withCurrentFirst(
-              _devices.map(_refreshCurrentFlag).toList()));
+          _devices = _decorate(
+            _withCurrentFirst(_devices.map(_refreshCurrentFlag).toList()),
+          );
         }
       });
       return;
@@ -224,9 +238,14 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       _error = null;
       _primaryPendingDeviceId = pendingId;
       _primaryTransferExecuteAt = executeAt;
-      if (pendingId != null) _pickingPrimaryTarget = true;
-      if (changed || pendingId != null) _devices = next;
-      else _devices = _decorate(_devices);
+      if (pendingId != null) {
+        _pickingPrimaryTarget = true;
+      }
+      if (changed || pendingId != null) {
+        _devices = next;
+      } else {
+        _devices = _decorate(_devices);
+      }
     });
   }
 
@@ -250,7 +269,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
   }
 
   Future<void> _onPrimaryCancel() async {
-    final hasServerPending = _primaryPendingDeviceId != null ||
+    final hasServerPending =
+        _primaryPendingDeviceId != null ||
         _devices.any((d) => d.isPrimaryPending);
     if (!hasServerPending) {
       setState(() {
@@ -263,10 +283,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
     final ok = await ApiService.cancelPrimaryTransfer(
@@ -275,11 +292,9 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     );
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_primaryErrorText(ApiService.lastError)),
-          duration: const Duration(seconds: 2),
-        ),
+      showAppSnackBar(
+        context,
+        message: _primaryErrorText(ApiService.lastError),
       );
       return;
     }
@@ -288,9 +303,11 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       _primaryPendingDeviceId = null;
       _primaryTransferExecuteAt = null;
     });
-    await BindingCache.saveDevicesResult(BoundDevicesResult(
-      devices: _devices
-          .map((d) => BoundDeviceInfo(
+    await BindingCache.saveDevicesResult(
+      BoundDevicesResult(
+        devices: _devices
+            .map(
+              (d) => BoundDeviceInfo(
                 bindingId: d.bindingId,
                 deviceId: d.deviceId,
                 status: d.status,
@@ -304,16 +321,17 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                 abi: d.abi,
                 isPrimary: d.isPrimary,
                 isPrimaryPending: false,
-              ))
-          .toList(),
-    ));
+              ),
+            )
+            .toList(),
+      ),
+    );
     await _loadDevices();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已取消主设备迁移'),
-        duration: Duration(seconds: 1),
-      ),
+    showAppSnackBar(
+      context,
+      message: '已取消主设备迁移',
+      duration: const Duration(seconds: 1),
     );
   }
 
@@ -322,10 +340,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
     final result = await ApiService.requestPrimaryTransfer(
@@ -335,11 +350,9 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     );
     if (!mounted) return;
     if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_primaryErrorText(ApiService.lastError)),
-          duration: const Duration(seconds: 2),
-        ),
+      showAppSnackBar(
+        context,
+        message: _primaryErrorText(ApiService.lastError),
       );
       return;
     }
@@ -353,8 +366,10 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final tip = result.primaryTransferExecuteAt != null
         ? '主设备迁移已申请，将于 ${_formatTransferTime(result.primaryTransferExecuteAt!)} 生效'
         : '主设备迁移已申请，将于两天后生效';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tip), duration: const Duration(seconds: 2)),
+    showAppSnackBar(
+      context,
+      message: tip,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -377,16 +392,15 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
           : device.copyWith(customName: name);
     });
     await _persistDevicesFromCards();
+    if (!mounted) return;
 
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
       setState(() => _devices[index] = previous);
       await _persistDevicesFromCards();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      if (!mounted) return;
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
 
@@ -400,12 +414,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     if (result == null) {
       setState(() => _devices[index] = previous);
       await _persistDevicesFromCards();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ApiService.lastError ?? '设备改名失败'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (!mounted) return;
+      showAppSnackBar(context, message: ApiService.lastError ?? '设备改名失败');
       return;
     }
 
@@ -423,10 +433,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
 
@@ -437,11 +444,9 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     );
     if (!mounted) return;
     if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_primaryErrorText(ApiService.lastError)),
-          duration: const Duration(seconds: 2),
-        ),
+      showAppSnackBar(
+        context,
+        message: _primaryErrorText(ApiService.lastError),
       );
       return;
     }
@@ -451,11 +456,10 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
         _devices.removeAt(index);
         _devices = _decorate(_devices);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已解绑该设备'),
-          duration: Duration(seconds: 1),
-        ),
+      showAppSnackBar(
+        context,
+        message: '已解绑该设备',
+        duration: const Duration(seconds: 1),
       );
     } else {
       setState(() {
@@ -504,17 +508,21 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                         onPressed: () => Navigator.of(ctx).pop(false),
                         style: TextButton.styleFrom(
                           foregroundColor: onSurface.withValues(
-                              alpha: AccentDimens.dialogCancelTextAlpha),
+                            alpha: AccentDimens.dialogCancelTextAlpha,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: AccentDimens.dialogActionHPadding),
+                            horizontal: AccentDimens.dialogActionHPadding,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                                AccentDimens.dialogActionRadius),
+                              AccentDimens.dialogActionRadius,
+                            ),
                           ),
                           textStyle: const TextStyle(
-                              fontSize: AccentDimens.dialogActionFontSize),
+                            fontSize: AccentDimens.dialogActionFontSize,
+                          ),
                         ),
                         child: const Text('取消'),
                       ),
@@ -533,13 +541,16 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: AccentDimens.dialogActionHPadding),
+                            horizontal: AccentDimens.dialogActionHPadding,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                                AccentDimens.dialogActionRadius),
+                              AccentDimens.dialogActionRadius,
+                            ),
                           ),
                           textStyle: const TextStyle(
-                              fontSize: AccentDimens.dialogActionFontSize),
+                            fontSize: AccentDimens.dialogActionFontSize,
+                          ),
                         ),
                         child: const Text('确认'),
                       ),
@@ -560,13 +571,12 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final ok = await _confirmTransfer();
     if (!ok || !mounted) return;
 
+    HapticFeedback.lightImpact();
+
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
 
@@ -579,21 +589,15 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     setState(() => _transferring = false);
 
     if (result == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ApiService.lastError ?? '转移申请失败'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showAppSnackBar(context, message: ApiService.lastError ?? '转移申请失败');
       return;
     }
 
     final minutes = (result.expiresIn / 60).ceil();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('转移申请已创建，${minutes}分钟内有效'),
-        duration: const Duration(seconds: 3),
-      ),
+    showAppSnackBar(
+      context,
+      message: '转移申请已创建，$minutes分钟内有效',
+      duration: const Duration(seconds: 3),
     );
   }
 
@@ -602,10 +606,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     final session = await _readySession();
     if (session == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('会话验证失败，请稍后重试'), duration: Duration(seconds: 2)),
-      );
+      showAppSnackBar(context, message: '会话验证失败，请稍后重试');
       return;
     }
 
@@ -616,29 +617,15 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
     );
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ApiService.lastError ?? '取消解绑失败'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showAppSnackBar(context, message: ApiService.lastError ?? '取消解绑失败');
       return;
     }
     setState(() {
-      _devices[index] = device.copyWith(
-        status: 'active',
-        clearUnbind: true,
-      );
+      _devices[index] = device.copyWith(status: 'active', clearUnbind: true);
       _devices = _decorate(_devices);
     });
     await _persistDevicesFromCards();
   }
-
-  static const _loadingGif = Image(
-    image: AssetImage('assets/loading.gif'),
-    width: AppDimens.loadingGifSize,
-    height: AppDimens.loadingGifSize,
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -647,37 +634,13 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
 
     Widget body;
     if (_loading) {
-      body = const Center(child: _loadingGif);
+      body = const AppLoadingCenter(message: '加载中...');
     } else if (_error != null) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AccentDimens.pagePadding),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: AccentDimens.errorFontSize,
-                  color: colors.register.errorText,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(onPressed: _loadDevices, child: const Text('重试')),
-            ],
-          ),
-        ),
-      );
+      body = AppErrorState(message: _error!, onRetry: _loadDevices);
     } else if (_devices.isEmpty) {
-      body = Center(
-        child: Text(
-          '暂无绑定设备',
-          style: TextStyle(
-            fontSize: AccentDimens.itemFontSize,
-            color: onSurface.withValues(alpha: 0.55),
-          ),
-        ),
+      body = const AppEmptyState(
+        message: '暂无绑定设备',
+        icon: Icons.devices_outlined,
       );
     } else {
       body = GestureDetector(
@@ -726,7 +689,8 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
                   fontSize: AccentDimens.deviceCardPrimaryTipFontSize,
                   height: 1.4,
                   color: onSurface.withValues(
-                      alpha: AccentDimens.deviceCardPrimaryTipAlpha),
+                    alpha: AccentDimens.deviceCardPrimaryTipAlpha,
+                  ),
                 ),
               ),
             ),
@@ -735,12 +699,13 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
       }
     }
 
-    return UserSubPageShell(
+    return AppScaffold(
       title: '设备绑定',
       body: body,
       trailing: Padding(
         padding: const EdgeInsets.only(
-            right: AppDimens.postCreateSubmitMarginRight),
+          right: AppDimens.postCreateSubmitMarginRight,
+        ),
         child: SizedBox(
           height: AppDimens.postCreateSubmitHeight,
           child: ElevatedButton(
@@ -752,13 +717,17 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimens.postCreateSubmitHPadding, vertical: 0),
-              shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppDimens.postCreateSubmitRadius),
+                horizontal: AppDimens.postCreateSubmitHPadding,
+                vertical: 0,
               ),
-              textStyle:
-                  const TextStyle(fontSize: AppDimens.postCreateSubmitFontSize),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  AppDimens.postCreateSubmitRadius,
+                ),
+              ),
+              textStyle: const TextStyle(
+                fontSize: AppDimens.postCreateSubmitFontSize,
+              ),
             ),
             child: _transferring
                 ? SizedBox(

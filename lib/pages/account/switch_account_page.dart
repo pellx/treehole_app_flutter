@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../services/api.dart';
 import '../../services/binding_cache.dart';
@@ -8,9 +9,12 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../../widgets/account_card.dart';
+import '../../widgets/app_app_bar.dart';
+import '../../widgets/app_empty_state.dart';
+import '../../widgets/app_error_state.dart';
+import '../../widgets/app_snackbar.dart';
 import '../settings/settings_navigation.dart';
 import 'register_page.dart';
-import 'user_sub_page_shell.dart';
 
 /// 账户切换页：先展示本地缓存，再请求最新并按需更新
 class SwitchAccountPage extends StatefulWidget {
@@ -262,32 +266,25 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
   }
 
   Future<void> _onAccountTap(BoundAccountInfo a) async {
+    HapticFeedback.lightImpact();
     if (_switching) return;
     final card = _toCard(a);
     if (!card.enabled) return;
     if (card.isCurrent) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('已是当前账户'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      showAppSnackBar(context, message: '已是当前账户', duration: const Duration(seconds: 1));
       return;
     }
 
     final ok = await _confirmSwitch(card.displayId);
     if (!ok || !mounted) return;
 
+    HapticFeedback.mediumImpact();
+
     final token = await _resolveFullToken(a);
     if (!mounted) return;
     if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('令牌不可用，请下拉刷新后重试'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showAppSnackBar(context, message: '令牌不可用，请下拉刷新后重试');
       return;
     }
 
@@ -300,11 +297,9 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     setState(() => _switching = false);
 
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_loginErrorText(ApiService.lastError)),
-          duration: const Duration(seconds: 2),
-        ),
+      showAppSnackBar(
+        context,
+        message: _loginErrorText(ApiService.lastError),
       );
       await _loadSwitchLock();
       return;
@@ -316,11 +311,10 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
     });
     await _loadSwitchLock();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('已切换账户'),
-        duration: Duration(seconds: 1),
-      ),
+    showAppSnackBar(
+      context,
+      message: '已切换账户',
+      duration: const Duration(seconds: 1),
     );
   }
 
@@ -332,35 +326,14 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
 
     Widget body;
     if (_error != null && _accounts.isEmpty) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AccentDimens.pagePadding),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: AccentDimens.errorFontSize,
-                  color: colors.register.errorText,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(onPressed: _refreshPage, child: const Text('重试')),
-            ],
-          ),
-        ),
+      body = AppErrorState(
+        message: _error!,
+        onRetry: _refreshPage,
       );
     } else if (_accounts.isEmpty) {
-      body = Center(
-        child: Text(
-          '暂无绑定账户',
-          style: TextStyle(
-            fontSize: AccentDimens.itemFontSize,
-            color: onSurface.withValues(alpha: 0.55),
-          ),
-        ),
+      body = const AppEmptyState(
+        message: '暂无绑定账户',
+        icon: Icons.account_circle_outlined,
       );
     } else {
       body = Column(
@@ -407,7 +380,7 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
       );
     }
 
-    return UserSubPageShell(
+    return AppScaffold(
       title: '账户切换',
       body: body,
       trailing: Padding(

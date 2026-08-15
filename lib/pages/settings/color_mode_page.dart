@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/app_app_bar.dart';
+import '../../widgets/app_bottom_sheet.dart';
 
 class ColorModePage extends StatefulWidget {
   const ColorModePage({super.key});
@@ -14,7 +17,6 @@ class ColorModePage extends StatefulWidget {
 class _ColorModePageState extends State<ColorModePage> {
   ThemeMode _selectedMode = TreeholeApp.themeMode;
   bool _followSystem = TreeholeApp.themeMode == ThemeMode.system;
-  bool _modeExpanded = false;
 
   @override
   void initState() {
@@ -31,184 +33,134 @@ class _ColorModePageState extends State<ColorModePage> {
     ThemeMode.system => '浅色模式', // 不会用于下拉选项
   };
 
+  Future<void> _showModeSelector() async {
+    final selected = await showAppSelectorSheet<ThemeMode>(
+      context: context,
+      title: '颜色模式',
+      options: const [ThemeMode.light, ThemeMode.dark],
+      labelBuilder: _modeLabel,
+      selected: _selectedMode,
+    );
+    if (selected == null || !mounted) return;
+    setState(() => _selectedMode = selected);
+    TreeholeApp.setThemeMode(selected);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _dropdownCard(
-          context,
-          value: _modeLabel(_selectedMode),
-          expanded: _modeExpanded,
-          enabled: !_followSystem,
-          onTap: _followSystem
-              ? null
-              : () => setState(() => _modeExpanded = !_modeExpanded),
-          children: [
-            _optionTile('浅色模式',
-                !_followSystem && _selectedMode == ThemeMode.light,
-                () => _selectMode(ThemeMode.light)),
-            _optionTile('深色模式',
-                !_followSystem && _selectedMode == ThemeMode.dark,
-                () => _selectMode(ThemeMode.dark)),
-          ],
-        ),
-        _itemDivider(),
-        _switchCard(context, '跟随系统', _followSystem, (v) {
-          setState(() {
-            _followSystem = v;
-            _modeExpanded = false;
-          });
-          if (v) {
-            TreeholeApp.setThemeMode(ThemeMode.system);
-          } else {
-            TreeholeApp.setThemeMode(_selectedMode);
-          }
-        }),
-        _itemDivider(),
-      ],
-    );
-  }
-
-  void _selectMode(ThemeMode m) {
-    setState(() {
-      _selectedMode = m;
-      _modeExpanded = false;
-    });
-    TreeholeApp.setThemeMode(m);
-  }
-
-  // ---- 通用组件 ----
-
-  Widget _itemDivider() {
     final colors = Theme.of(context).extension<AppColors>()!;
-    return Divider(height: 1, thickness: 0.5, color: colors.common.divider);
-  }
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final enabled = !_followSystem;
+    final dimmed = onSurface.withValues(alpha: 0.3);
+    final textColor = enabled ? onSurface : dimmed;
 
-  Widget _itemRow(BuildContext ctx, Widget child) => SizedBox(
-        height: AppDimens.settingsItemHeight,
-        child: Center(child: child),
-      );
-
-  Widget _arrowBadge(Widget icon) => Padding(
-        padding:
-            const EdgeInsets.only(right: AppDimens.settingsArrowRightMargin),
-        child: icon,
-      );
-
-  Widget _dropdownCard(
-    BuildContext ctx, {
-    required String value,
-    required bool expanded,
-    required bool enabled,
-    required VoidCallback? onTap,
-    required List<Widget> children,
-  }) {
-    final c = Theme.of(ctx).colorScheme.onSurface;
-    final dimmed = c.withValues(alpha: 0.3);
-    final textColor = enabled ? c : dimmed;
-    final colors = Theme.of(ctx).extension<AppColors>()!;
-    final arrowColor = enabled ? colors.common.arrowIcon : colors.common.arrowIcon.withValues(alpha: 0.3);
-
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOut,
-      alignment: Alignment.topCenter,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return AppScaffold(
+      title: '颜色模式',
+      body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: _itemRow(
-              ctx,
-              Row(
-                children: [
-                  Text(
-                    '颜色模式',
-                    style: TextStyle(
-                      fontSize: AppDimens.settingsItemFontSize,
-                      color: textColor,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: AppDimens.settingsItemFontSize,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  _arrowBadge(
-                    AnimatedRotation(
-                      turns: expanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        Icons.expand_more,
-                        size: AppDimens.settingsArrowSize,
-                        color: arrowColor,
+            onTap: enabled ? _showModeSelector : null,
+            child: SizedBox(
+              height: AppDimens.settingsItemHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      '颜色模式',
+                      style: TextStyle(
+                        fontSize: AppDimens.settingsItemFontSize,
+                        color: textColor,
                       ),
                     ),
-                  ),
-                ],
+                    const Spacer(),
+                    Text(
+                      _modeLabel(_selectedMode),
+                      style: TextStyle(
+                        fontSize: AppDimens.settingsItemFontSize,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          right: AppDimens.settingsArrowRightMargin),
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: AppDimens.settingsArrowSize,
+                        color: enabled
+                            ? colors.common.arrowIcon
+                            : colors.common.arrowIcon.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          if (enabled && expanded) ...children,
-        ],
-      ),
-    );
-  }
-
-  Widget _switchCard(
-      BuildContext ctx, String label, bool value, ValueChanged<bool> onChanged) {
-    final colors = Theme.of(ctx).extension<AppColors>()!;
-    return _itemRow(
-      ctx,
-      Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: AppDimens.settingsItemFontSize,
-              color: Theme.of(ctx).colorScheme.onSurface,
-            ),
-          ),
-          const Spacer(),
-          Switch(value: value, activeColor: colors.common.switchActive, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-
-  Widget _optionTile(String label, bool selected, VoidCallback onTap) {
-    final c = Theme.of(context).colorScheme.onSurface;
-    final colors = Theme.of(context).extension<AppColors>()!;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        color: selected ? colors.common.switchActive.withValues(alpha: 0.08) : null,
-        child: _itemRow(
-          context,
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Icon(
-                  selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                  size: 18,
-                  color:
-                      selected ? colors.common.switchActive : colors.common.trailingIcon,
+          _itemDivider(colors),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _followSystem = !_followSystem;
+              });
+              if (_followSystem) {
+                TreeholeApp.setThemeMode(ThemeMode.system);
+              } else {
+                TreeholeApp.setThemeMode(_selectedMode);
+              }
+            },
+            child: SizedBox(
+              height: AppDimens.settingsItemHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Text(
+                      '跟随系统',
+                      style: TextStyle(
+                        fontSize: AppDimens.settingsItemFontSize,
+                        color: onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    Switch(
+                      value: _followSystem,
+                      activeTrackColor: colors.common.switchActive,
+                      thumbColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return colors.common.switchActive;
+                        }
+                        return null;
+                      }),
+                      onChanged: (v) {
+                        HapticFeedback.lightImpact();
+                        setState(() => _followSystem = v);
+                        if (v) {
+                          TreeholeApp.setThemeMode(ThemeMode.system);
+                        } else {
+                          TreeholeApp.setThemeMode(_selectedMode);
+                        }
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(label, style: TextStyle(fontSize: 13, color: c)),
-              ],
+              ),
             ),
           ),
-        ),
+          _itemDivider(colors),
+        ],
       ),
     );
   }
+
+  Widget _itemDivider(AppColors colors) => Divider(
+        height: 1,
+        thickness: 0.5,
+        color: colors.common.divider,
+      );
 }
