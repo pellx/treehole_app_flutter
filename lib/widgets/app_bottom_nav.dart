@@ -109,14 +109,33 @@ class AppBottomNav extends StatelessWidget {
                 width: AppBottomNavTheme.publishButtonBorderWidth,
               ),
             ),
-            child: Icon(
-              Icons.add,
-              size: AppBottomNavTheme.publishButtonIconSize,
-              color: buttonColor,
-            ),
+            child: _plusIcon(buttonColor),
           ),
         ),
       ),
+    );
+  }
+
+  /// 自定义加号，线段粗细与边框完全一致
+  Widget _plusIcon(Color color) {
+    final lineWidth = AppBottomNavTheme.publishButtonBorderWidth;
+    final lineLength = 14.0;
+    final radius = BorderRadius.circular(lineWidth / 2);
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: lineLength,
+          height: lineWidth,
+          decoration: BoxDecoration(color: color, borderRadius: radius),
+        ),
+        Container(
+          width: lineWidth,
+          height: lineLength,
+          decoration: BoxDecoration(color: color, borderRadius: radius),
+        ),
+      ],
     );
   }
 }
