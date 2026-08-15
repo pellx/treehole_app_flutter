@@ -55,6 +55,7 @@ class AppBottomNav extends StatelessWidget {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final colors = Theme.of(context).extension<AppColors>()!;
     final selected = logicalIndex == currentIndex;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Expanded(
       child: GestureDetector(
@@ -67,11 +68,13 @@ class AppBottomNav extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+              fontSize: 16,
+              fontWeight: FontWeight.normal,
               color: selected
-                  ? colors.common.green
-                  : onSurface.withValues(alpha: 0.55),
+                  ? (isLight ? const Color(0xFF07C160) : colors.common.green)
+                  : (isLight
+                        ? const Color(0xFF999999)
+                        : onSurface.withValues(alpha: 0.4)),
             ),
           ),
         ),
@@ -80,6 +83,11 @@ class AppBottomNav extends StatelessWidget {
   }
 
   Widget _publishButton(BuildContext context, Color onSurface) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final buttonColor = isLight
+        ? const Color(0xFF333333)
+        : onSurface.withValues(alpha: 0.8);
+
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -89,20 +97,13 @@ class AppBottomNav extends StatelessWidget {
         },
         child: Center(
           child: Container(
-            width: 40,
-            height: 28,
+            width: 44,
+            height: 30,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: onSurface.withValues(alpha: 0.7),
-                width: 1.5,
-              ),
+              border: Border.all(color: buttonColor, width: 1.8),
             ),
-            child: Icon(
-              Icons.add,
-              size: 20,
-              color: onSurface.withValues(alpha: 0.85),
-            ),
+            child: Icon(Icons.add, size: 22, color: buttonColor),
           ),
         ),
       ),
