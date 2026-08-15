@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'app_bottom_nav_theme.dart';
+
 /// 广场页顶部分类栏样式参数，可在此集中调整。
 ///
 /// 顶栏是一个高度固定的水平 Row（高度 = [height]），内部包含：
 ///   - 左侧横向滚动的分类 tab
 ///   - 右侧搜索图标按钮
+///
+/// 背景色与底部导航栏保持一致（[backgroundLight] / [backgroundDark]）。
 ///
 /// 每个 tab 内部采用「底部对齐」布局，结构如下（从下到上）：
 ///   顶栏底部
@@ -52,9 +56,16 @@ class AppSquareTopBarTheme {
 
   /// 搜索按钮的顶部内边距。
   /// [IconButton] 会把图标放在剩余空间的中心；topPadding 越大，图标越靠下。
-  static const double searchIconTopPadding = 8;
+  /// 和 [searchIconBottomPadding] 加起来必须 ≤ height - searchIconSize，否则会溢出。
+  static const double searchIconTopPadding = 5.5;
 
   /// 搜索按钮的底部内边距。
   /// 与 [searchIconTopPadding] 配合，调大一个、调小另一个即可让图标上下偏移。
-  static const double searchIconBottomPadding = 8;
+  static const double searchIconBottomPadding = 5.5;
+
+  /// 顶栏背景色（与底部导航栏保持一致）。
+  static const Color backgroundLight = AppBottomNavTheme.backgroundLight;
+
+  /// 顶栏暗色背景色（与底部导航栏保持一致）。
+  static const Color backgroundDark = AppBottomNavTheme.backgroundDark;
 }

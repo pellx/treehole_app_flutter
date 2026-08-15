@@ -480,9 +480,11 @@ class _SquarePageState extends State<SquarePage> {
             )
           else
             SliverPadding(
+              // 顶部间距为 0，第一个卡片紧贴顶栏；
+              // 卡片之间的间距由 PostCard 底部 margin 控制。
               padding: EdgeInsets.fromLTRB(
                 AppDimens.listPaddingLeft,
-                AppDimens.listPaddingTop,
+                0,
                 AppDimens.listPaddingRight,
                 AppDimens.listPaddingBottom,
               ),
@@ -598,11 +600,16 @@ class _SquarePageState extends State<SquarePage> {
 
   /// 顶部分类栏：结构与样式分离，样式全部读取 AppSquareTopBarTheme
   Widget _buildTopBar(AppColors colors, Color onSurface) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final topBarBg = isLight
+        ? AppSquareTopBarTheme.backgroundLight
+        : AppSquareTopBarTheme.backgroundDark;
+
     return SliverPersistentHeader(
       pinned: true,
       delegate: _PinnedHeaderDelegate(
         child: Container(
-          color: colors.common.surface,
+          color: topBarBg,
           child: Row(
             children: [
               Expanded(
@@ -669,6 +676,10 @@ class _SquarePageState extends State<SquarePage> {
                   right: AppSquareTopBarTheme.searchIconRightInset,
                 ),
                 child: IconButton(
+                  constraints: BoxConstraints.tightFor(
+                    width: AppSquareTopBarTheme.height,
+                    height: AppSquareTopBarTheme.height,
+                  ),
                   padding: const EdgeInsets.only(
                     top: AppSquareTopBarTheme.searchIconTopPadding,
                     bottom: AppSquareTopBarTheme.searchIconBottomPadding,
