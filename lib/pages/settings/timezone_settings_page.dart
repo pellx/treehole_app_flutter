@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/timezone_service.dart';
 import '../../theme/app_colors.dart';
-import '../../theme/app_dimens.dart';
 import '../../widgets/app_app_bar.dart';
-import '../../widgets/app_bottom_sheet.dart';
 
 class TimezoneSettingsPage extends StatefulWidget {
   const TimezoneSettingsPage({super.key});
@@ -23,78 +21,76 @@ class _TimezoneSettingsPageState extends State<TimezoneSettingsPage> {
     _selected = TimezoneService.selected;
   }
 
-  Future<void> _showSelector() async {
-    final selected = await showAppSelectorSheet<Timezone>(
-      context: context,
-      title: '选择时区',
-      options: TimezoneService.supported,
-      labelBuilder: (tz) => tz.label,
-      selected: _selected,
-    );
-    if (selected == null || !mounted) return;
-    await TimezoneService.setSelected(selected);
-    setState(() => _selected = selected);
+  Future<void> _onSelect(Timezone tz) async {
+    if (tz.name == _selected.name) return;
+    HapticFeedback.lightImpact();
+    await TimezoneService.setSelected(tz);
+    setState(() => _selected = tz);
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final options = TimezoneService.supported;
 
     return AppScaffold(
       title: '时区选择',
-      body: ListView(
+      body: ListView.builder(
         padding: const EdgeInsets.all(16),
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              HapticFeedback.lightImpact();
-              _showSelector();
-            },
-            child: SizedBox(
-              height: AppDimens.settingsItemHeight,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Text(
-                      '当前时区',
-                      style: TextStyle(
-                        fontSize: AppDimens.settingsItemFontSize,
-                        color: onSurface,
+        itemCount: options.length,
+        itemBuilder: (context, index) {
+          final tz = options[index];
+          final isSelected = tz.name == _selected.name;
+          final isLast = index == options.length - 1;
+
+          return Column(
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _onSelect(tz),
+                child: Container(
+                  height: 52,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: colors.common.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        tz.label,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: onSurface,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _selected.label,
-                      style: TextStyle(
-                        fontSize: AppDimens.settingsItemFontSize,
-                        color: onSurface,
+                      const Spacer(),
+                      Icon(
+                        isSelected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        size: 20,
+                        color: isSelected
+                            ? colors.common.green
+                            : colors.common.trailingIcon,
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        right: AppDimens.settingsArrowRightMargin,
-                      ),
-                      child: Icon(
-                        Icons.chevron_right,
-                        size: AppDimens.settingsArrowSize,
-                        color: colors.common.arrowIcon,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: colors.common.divider,
-          ),
-        ],
+              if (!isLast)
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  indent: 16,
+                  endIndent: 16,
+                  color: colors.common.divider,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
