@@ -463,7 +463,7 @@ class _PostCardState extends State<PostCard> {
       rows.add(
         Align(
           key: const ValueKey('comment_btns'),
-          alignment: Alignment.centerLeft,
+          alignment: Alignment.centerRight,
           child: GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();

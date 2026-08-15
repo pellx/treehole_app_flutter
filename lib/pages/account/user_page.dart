@@ -15,6 +15,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../settings/settings_navigation.dart';
 import '../settings/settings_page.dart';
+import '../settings/version_page.dart';
 import '../../widgets/app_snackbar.dart';
 import 'device_binding_page.dart';
 import 'switch_account_page.dart';
@@ -423,6 +424,11 @@ class _UserPageState extends State<UserPage> {
     Navigator.of(context).push(topDownRoute(const SettingsPage()));
   }
 
+  void _openVersionUpdate() {
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(topDownRoute(const VersionPage()));
+  }
+
   Future<void> _openLoginOther() async {
     HapticFeedback.lightImpact();
     final pending = _prefetchFuture;
@@ -487,6 +493,16 @@ class _UserPageState extends State<UserPage> {
                   Icons.settings_outlined,
                   _openSettings,
                 ),
+                if (Platform.isAndroid) ...[
+                  _navDivider(colors),
+                  _navTile(
+                    colors,
+                    onSurface,
+                    '更新',
+                    Icons.system_update_outlined,
+                    _openVersionUpdate,
+                  ),
+                ],
               ]),
               const SizedBox(height: 20),
               _sectionTitle('账户管理', onSurface),
