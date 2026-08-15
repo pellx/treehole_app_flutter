@@ -542,7 +542,7 @@ class _SquarePageState extends State<SquarePage> {
           bottom: 0,
           width: AppSquareRefreshTheme.triggerAreaWidth,
           child: RawGestureDetector(
-            behavior: HitTestBehavior.translucent,
+            behavior: HitTestBehavior.opaque,
             gestures: {
               _LeftPullRecognizer:
                   GestureRecognizerFactoryWithHandlers<_LeftPullRecognizer>(

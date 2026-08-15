@@ -10,7 +10,8 @@ class AppSquareRefreshTheme {
   const AppSquareRefreshTheme._();
 
   /// 左侧触发区域的宽度（从屏幕左边缘往右算）。
-  static const double triggerAreaWidth = 20;
+  /// 调大一些可以降低触发难度，避免被系统边缘手势或列表滚动抢走。
+  static const double triggerAreaWidth = 40;
 
   /// 需要下拉多少像素，刷新球才算完全拉出并触发刷新。
   static const double pullThreshold = 90;
