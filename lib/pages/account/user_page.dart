@@ -15,10 +15,10 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../settings/settings_navigation.dart';
 import '../settings/settings_page.dart';
-import '../../widgets/app_app_bar.dart';
 import '../../widgets/app_snackbar.dart';
 import 'device_binding_page.dart';
 import 'switch_account_page.dart';
+import 'user_profile_page.dart';
 
 class UserPage extends StatefulWidget {
   const UserPage({super.key});
@@ -454,80 +454,81 @@ class _UserPageState extends State<UserPage> {
         onTap: () {
           if (_editingName && !_submittingName) _exitNameEditing();
         },
-        child: Column(
-          children: [
-            const AppAppBar(title: '我的', automaticallyImplyLeading: false),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            children: [
+              _profileCard(colors, onSurface),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, left: 4, right: 4),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.register.errorText,
+                    ),
+                  ),
                 ),
-                children: [
-                  _profileCard(colors, onSurface),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        top: 12,
-                        left: 4,
-                        right: 4,
-                      ),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.register.errorText,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  _sectionTitle('账户安全', onSurface),
-                  _sectionCard(colors, [
-                    _tokenTile(colors, onSurface),
-                    _navDivider(colors),
-                    _resetTokenTile(colors, onSurface),
-                  ]),
-                  const SizedBox(height: 20),
-                  _sectionTitle('应用', onSurface),
-                  _sectionCard(colors, [
-                    _navTile(
-                      colors,
-                      onSurface,
-                      '设置',
-                      Icons.settings_outlined,
-                      _openSettings,
-                    ),
-                  ]),
-                  const SizedBox(height: 20),
-                  _sectionTitle('账户管理', onSurface),
-                  _sectionCard(colors, [
-                    _navTile(
-                      colors,
-                      onSurface,
-                      '设备绑定',
-                      Icons.devices_outlined,
-                      _openDeviceBinding,
-                    ),
-                    _navDivider(colors),
-                    _navTile(
-                      colors,
-                      onSurface,
-                      '账户切换',
-                      Icons.swap_horiz_outlined,
-                      _openLoginOther,
-                    ),
-                  ]),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              _sectionTitle('账户安全', onSurface),
+              _sectionCard(colors, [
+                _tokenTile(colors, onSurface),
+                _navDivider(colors),
+                _resetTokenTile(colors, onSurface),
+              ]),
+              const SizedBox(height: 20),
+              _sectionTitle('应用', onSurface),
+              _sectionCard(colors, [
+                _navTile(
+                  colors,
+                  onSurface,
+                  '设置',
+                  Icons.settings_outlined,
+                  _openSettings,
+                ),
+              ]),
+              const SizedBox(height: 20),
+              _sectionTitle('账户管理', onSurface),
+              _sectionCard(colors, [
+                _navTile(
+                  colors,
+                  onSurface,
+                  '设备绑定',
+                  Icons.devices_outlined,
+                  _openDeviceBinding,
+                ),
+                _navDivider(colors),
+                _navTile(
+                  colors,
+                  onSurface,
+                  '账户切换',
+                  Icons.swap_horiz_outlined,
+                  _openLoginOther,
+                ),
+              ]),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ---- 个人资料卡片 ----
+
+  void _openProfile() {
+    HapticFeedback.lightImpact();
+    Navigator.of(context).push(
+      topDownRoute(
+        UserProfilePage(
+          avatarBytes: _avatarBytes,
+          name: _nameController.text,
+          token: _externalToken,
+        ),
+      ),
+    );
+  }
 
   Widget _profileCard(AppColors colors, Color onSurface) {
     return Container(
@@ -540,107 +541,102 @@ class _UserPageState extends State<UserPage> {
         children: [
           GestureDetector(
             onTap: _pickAvatar,
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
-                  backgroundImage: _avatarBytes != null
-                      ? MemoryImage(_avatarBytes!) as ImageProvider
-                      : const AssetImage(
-                          'assets/420px-Transparent_Akkarin.jpg',
-                        ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: colors.common.green,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: colors.common.surface,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
+            child: CircleAvatar(
+              radius: 36,
+              backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
+              backgroundImage: _avatarBytes != null
+                  ? MemoryImage(_avatarBytes!) as ImageProvider
+                  : const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _editingName
-                    ? TextField(
-                        controller: _nameController,
-                        focusNode: _nameFocus,
-                        maxLength: AccentDimens.nameMaxLength,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: onSurface,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          counterText: '',
-                          hintText: '昵称',
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 6,
-                          ),
-                          enabledBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(
-                              color: onSurface.withValues(alpha: 0.3),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openProfile,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _editingName
+                            ? TextField(
+                                controller: _nameController,
+                                focusNode: _nameFocus,
+                                maxLength: AccentDimens.nameMaxLength,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: onSurface,
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  counterText: '',
+                                  hintText: '昵称',
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
+                                  enabledBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: onSurface.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  focusedBorder: UnderlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: colors.common.green,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                _nameController.text.isEmpty
+                                    ? '未设置昵称'
+                                    : _nameController.text,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: onSurface,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                        const SizedBox(height: 6),
+                        if (_submittingName)
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.common.green,
+                            ),
+                          )
+                        else
+                          GestureDetector(
+                            onTap: _onNameButtonTap,
+                            child: Text(
+                              _editingName ? '保存' : '点击修改昵称',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _editingName
+                                    ? colors.common.green
+                                    : onSurface.withValues(alpha: 0.5),
+                              ),
                             ),
                           ),
-                          focusedBorder: UnderlineInputBorder(
-                            borderSide: BorderSide(color: colors.common.green),
-                          ),
-                        ),
-                      )
-                    : Text(
-                        _nameController.text.isEmpty
-                            ? '未设置昵称'
-                            : _nameController.text,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: onSurface,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                const SizedBox(height: 6),
-                if (_submittingName)
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: colors.common.green,
-                    ),
-                  )
-                else
-                  GestureDetector(
-                    onTap: _onNameButtonTap,
-                    child: Text(
-                      _editingName ? '保存' : '点击修改昵称',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: _editingName
-                            ? colors.common.green
-                            : onSurface.withValues(alpha: 0.5),
-                      ),
+                      ],
                     ),
                   ),
-              ],
+                  if (!_editingName)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: 21,
+                        color: colors.common.arrowIcon,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           if (_editingName)
@@ -729,7 +725,7 @@ class _UserPageState extends State<UserPage> {
               color: colors.common.green,
             ),
           )
-        : Icon(Icons.chevron_right, size: 21, color: colors.common.arrowIcon),
+        : null,
   );
 
   Widget _navTile(
@@ -747,11 +743,7 @@ class _UserPageState extends State<UserPage> {
       HapticFeedback.lightImpact();
       onTap();
     },
-    trailing: Icon(
-      Icons.chevron_right,
-      size: 21,
-      color: colors.common.arrowIcon,
-    ),
+    trailing: null,
   );
 
   Widget _listTile(
