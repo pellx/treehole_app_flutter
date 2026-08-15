@@ -12,6 +12,7 @@ import 'pow.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
 import '../models/version_info.dart';
+import 'timezone_service.dart';
 
 bool _isHttpSuccess(int statusCode) => statusCode >= 200 && statusCode < 300;
 
@@ -144,8 +145,8 @@ class TokenResetResult {
 }
 
 DateTime? _parseApiDateTime(dynamic raw) {
-  if (raw is! String || raw.isEmpty) return null;
-  return DateTime.tryParse(raw);
+  if (raw is! String) return null;
+  return TimezoneService.parseServerDateTime(raw);
 }
 
 /// POST /user/devices2user 单条设备

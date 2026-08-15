@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
+import '../../services/timezone_service.dart';
 import '../../widgets/app_app_bar.dart';
 import '../../widgets/app_empty_state.dart';
 import 'color_mode_page.dart';
 import 'settings_navigation.dart';
+import 'timezone_settings_page.dart';
 
 class SystemSettingsPage extends StatelessWidget {
   const SystemSettingsPage({super.key});
@@ -28,6 +30,16 @@ class SystemSettingsPage extends StatelessWidget {
             () =>
                 Navigator.of(context).push(topDownRoute(const ColorModePage())),
           ),
+          _navTile(
+            colors,
+            onSurface,
+            '时区选择',
+            Icons.schedule_outlined,
+            () => Navigator.of(
+              context,
+            ).push(topDownRoute(const TimezoneSettingsPage())),
+            trailing: TimezoneService.selected.label,
+          ),
           const AppEmptyState(
             message: '更多系统设置即将上线',
             icon: Icons.settings_outlined,
@@ -42,8 +54,9 @@ class SystemSettingsPage extends StatelessWidget {
     Color onSurface,
     String label,
     IconData icon,
-    VoidCallback onTap,
-  ) {
+    VoidCallback onTap, {
+    String? trailing,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
@@ -63,6 +76,11 @@ class SystemSettingsPage extends StatelessWidget {
             const SizedBox(width: 12),
             Text(label, style: TextStyle(fontSize: 16, color: onSurface)),
             const Spacer(),
+            if (trailing != null)
+              Text(
+                trailing,
+                style: TextStyle(fontSize: 15, color: onSurface.withValues(alpha: 0.6)),
+              ),
             Icon(Icons.chevron_right, size: 21, color: colors.common.arrowIcon),
           ],
         ),

@@ -11,7 +11,7 @@ class AppSquareRefreshTheme {
   const AppSquareRefreshTheme._();
 
   /// 需要下拉多少像素，刷新球才算完全拉出并触发刷新。
-  static const double pullThreshold = 90;
+  static const double pullThreshold = 150;
 
   /// 刷新球直径。
   static const double ballSize = 48;
@@ -20,7 +20,7 @@ class AppSquareRefreshTheme {
   static const double ballLeftFinalInset = 16;
 
   /// 刷新球完全拉出后，球顶部到屏幕顶部的距离（在 SafeArea 内，即状态栏下方）。
-  static const double ballTopFinalInset = 16;
+  static const double ballTopFinalInset = 50;
 
   /// 刷新球阴影的不透明度。
   static const double shadowOpacity = 0.15;

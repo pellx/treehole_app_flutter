@@ -10,6 +10,7 @@ import '../../services/avatar_storage.dart';
 import '../../services/binding_cache.dart';
 import '../../services/session_service.dart';
 import '../../services/storage.dart';
+import '../../services/timezone_service.dart';
 import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
@@ -154,11 +155,7 @@ class _UserPageState extends State<UserPage> {
   }
 
   String _formatRenameDate(DateTime dt) {
-    final local = dt.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    return '$y/$m/$d';
+    return TimezoneService.formatDateTime(dt, showTime: false);
   }
 
   /// 冷却结束日：优先用错误体 next_rename_at，否则上次改名 + 14 天

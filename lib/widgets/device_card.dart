@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_dimens_accent.dart';
+import '../services/timezone_service.dart';
 
 /// 设备卡片右侧主操作（解绑 / 主设备星标）
 enum DeviceCardAction {
@@ -352,13 +353,7 @@ class _DeviceCardState extends State<DeviceCard> {
   }
 
   String _formatUnbindTime(DateTime dt) {
-    final local = dt.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '$y/$m/$d $hh:$mm';
+    return TimezoneService.formatDateTime(dt);
   }
 
   @override

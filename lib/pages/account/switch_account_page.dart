@@ -5,6 +5,7 @@ import '../../services/api.dart';
 import '../../services/binding_cache.dart';
 import '../../services/device_credential_store.dart';
 import '../../services/session_service.dart';
+import '../../services/timezone_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
@@ -256,13 +257,8 @@ class _SwitchAccountPageState extends State<SwitchAccountPage> {
   }
 
   String _formatSwitchAvailableAt(DateTime at) {
-    final local = at.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '可于 $y/$m/$d $hh:$mm 再次切换账户';
+    final formatted = TimezoneService.formatDateTime(at);
+    return '可于 $formatted 再次切换账户';
   }
 
   Future<void> _onAccountTap(BoundAccountInfo a) async {

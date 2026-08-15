@@ -8,6 +8,7 @@ import '../models/comment.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_colors.dart';
 import '../services/storage.dart';
+import '../services/timezone_service.dart';
 import '../services/api.dart';
 import '../services/session_service.dart';
 import '../pages/account/register_page.dart';
@@ -122,24 +123,11 @@ class _PostCardState extends State<PostCard> {
     super.dispose();
   }
 
-  String _dateTransform(String dateStr) {
-    if (dateStr.isEmpty) return '';
-    final date = DateTime.parse(dateStr);
-    final y = date.year.toString().substring(2);
-    final m = date.month;
-    final d = date.day;
-    final h = date.hour.toString().padLeft(2, '0');
-    final mi = date.minute.toString().padLeft(2, '0');
-    return '$y.$m.$d-$h:$mi';
-  }
+  String _dateTransform(String dateStr) =>
+      TimezoneService.format(dateStr);
 
-  String _timeTransform(String dateStr) {
-    if (dateStr.isEmpty) return '';
-    final date = DateTime.parse(dateStr);
-    final h = date.hour.toString().padLeft(2, '0');
-    final mi = date.minute.toString().padLeft(2, '0');
-    return '$h:$mi';
-  }
+  String _timeTransform(String dateStr) =>
+      TimezoneService.format(dateStr, showDate: false);
 
   @override
   Widget build(BuildContext context) {
@@ -868,14 +856,8 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
-  String _dateOnlyTransform(String dateStr) {
-    if (dateStr.isEmpty) return '';
-    final date = DateTime.parse(dateStr);
-    final y = date.year.toString().substring(2);
-    final m = date.month;
-    final d = date.day;
-    return '$y.$m.$d';
-  }
+  String _dateOnlyTransform(String dateStr) =>
+      TimezoneService.format(dateStr, showTime: false);
 
   // 单条回复行：[时间] 内容(单行截断) [署名]
   Widget _commentRow(

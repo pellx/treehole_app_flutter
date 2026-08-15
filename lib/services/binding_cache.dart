@@ -6,6 +6,7 @@ import 'package:hive/hive.dart';
 import 'api.dart';
 import 'device_credential_store.dart';
 import 'session_service.dart';
+import 'timezone_service.dart';
 
 /// 设备/账户绑定列表本地缓存；账户侧不落盘 user_token
 class BindingCache {
@@ -81,7 +82,7 @@ class BindingCache {
     }
     final raw = _box.get(_primaryTransferExecuteKey);
     if (raw is String && raw.isNotEmpty) {
-      _primaryTransferExecuteAt = DateTime.tryParse(raw)?.toLocal();
+      _primaryTransferExecuteAt = TimezoneService.parseServerDateTime(raw);
     }
     return _primaryTransferExecuteAt;
   }
@@ -168,7 +169,7 @@ class BindingCache {
       _switchLockLoaded = true;
       final raw = _box.get(_switchLockExpiresKey);
       if (raw is String && raw.isNotEmpty) {
-        _switchLockExpiresAt = DateTime.tryParse(raw)?.toLocal();
+        _switchLockExpiresAt = TimezoneService.parseServerDateTime(raw);
       }
     }
     final exp = _switchLockExpiresAt;

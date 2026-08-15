@@ -5,6 +5,7 @@ import '../../services/api.dart';
 import '../../services/binding_cache.dart';
 import '../../services/device_credential_store.dart';
 import '../../services/session_service.dart';
+import '../../services/timezone_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
@@ -374,13 +375,7 @@ class _DeviceBindingPageState extends State<DeviceBindingPage> {
   }
 
   String _formatTransferTime(DateTime dt) {
-    final local = dt.toLocal();
-    final y = local.year.toString().padLeft(4, '0');
-    final m = local.month.toString().padLeft(2, '0');
-    final d = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '$y/$m/$d $hh:$mm';
+    return TimezoneService.formatDateTime(dt);
   }
 
   Future<void> _onRename(int index, String name) async {
