@@ -459,7 +459,6 @@ class _PostCardState extends State<PostCard> {
       lastDay = cmtDay;
     }
     if (showMore || hasExpanded) {
-      final remain = all.length - _commentsShowCount;
       rows.add(
         Align(
           key: const ValueKey('comment_btns'),
@@ -481,12 +480,10 @@ class _PostCardState extends State<PostCard> {
             },
             child: Padding(
               padding: EdgeInsets.only(top: AppDimens.commentRemainTopOffset),
-              child: Text(
-                showMore ? '展开 $remain 条回复' : '收起回复',
-                style: TextStyle(
-                  fontSize: AppDimens.commentRemainFontSize,
-                  color: pc.commentRemain,
-                ),
+              child: Icon(
+                showMore ? Icons.add : Icons.remove,
+                size: 20,
+                color: pc.commentRemain,
               ),
             ),
           ),
