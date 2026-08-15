@@ -28,7 +28,10 @@ class SessionCreateResult {
   final int sessionId;
   final String sessionSecret;
 
-  const SessionCreateResult({required this.sessionId, required this.sessionSecret});
+  const SessionCreateResult({
+    required this.sessionId,
+    required this.sessionSecret,
+  });
 }
 
 /// POST /user/login 返回轮换后的 device_secret（不签发 session）
@@ -61,10 +64,7 @@ class BindingCreateResult {
   final int bindingId;
   final int deviceId;
 
-  const BindingCreateResult({
-    required this.bindingId,
-    required this.deviceId,
-  });
+  const BindingCreateResult({required this.bindingId, required this.deviceId});
 
   factory BindingCreateResult.fromJson(Map<String, dynamic> json) {
     return BindingCreateResult(
@@ -80,11 +80,7 @@ class LastSwitchResult {
   final int? ownerUserId;
   final DateTime? expiresAt;
 
-  const LastSwitchResult({
-    this.switchedAt,
-    this.ownerUserId,
-    this.expiresAt,
-  });
+  const LastSwitchResult({this.switchedAt, this.ownerUserId, this.expiresAt});
 
   bool get isLocked {
     final exp = expiresAt;
@@ -123,7 +119,9 @@ class UserProfileResult {
   factory UserProfileResult.fromJson(Map<String, dynamic> json) {
     return UserProfileResult(
       userDisplayId: json['user_display_id'] as String? ?? '',
-      displayIdChangedAt: DateTime.tryParse(json['display_id_changed_at']?.toString() ?? ''),
+      displayIdChangedAt: DateTime.tryParse(
+        json['display_id_changed_at']?.toString() ?? '',
+      ),
       tokenResetAt: DateTime.tryParse(json['token_reset_at']?.toString() ?? ''),
     );
   }
@@ -155,9 +153,11 @@ class BoundDeviceInfo {
   /// user_device_binding.id
   final int bindingId;
   final int deviceId;
+
   /// active / unbind_pending
   final String status;
   final DateTime? unbindRequestedAt;
+
   /// 仅 delete 响应可能带回；列表侧可用 requested+2天推算
   final DateTime? unbindExecuteAt;
   final String? deviceDisplayName;
@@ -166,10 +166,13 @@ class BoundDeviceInfo {
   final String? brand;
   final String? model;
   final String? os;
+
   /// CPU 架构（如 arm64-v8a；iOS 为 machine）
   final String? abi;
+
   /// 是否当前主设备
   final bool isPrimary;
+
   /// 是否主设备迁移目标（待生效）
   final bool isPrimaryPending;
 
@@ -228,21 +231,21 @@ class BoundDeviceInfo {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': bindingId,
-        'device_id': deviceId,
-        'status': status,
-        'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
-        'unbind_execute_at': unbindExecuteAt?.toIso8601String(),
-        'device_display_name': deviceDisplayName,
-        'device_name': deviceName,
-        'fingerprint': fingerprint,
-        'brand': brand,
-        'model': model,
-        'os': os,
-        'abi': abi,
-        'is_primary': isPrimary,
-        'is_primary_pending': isPrimaryPending,
-      };
+    'id': bindingId,
+    'device_id': deviceId,
+    'status': status,
+    'unbind_requested_at': unbindRequestedAt?.toIso8601String(),
+    'unbind_execute_at': unbindExecuteAt?.toIso8601String(),
+    'device_display_name': deviceDisplayName,
+    'device_name': deviceName,
+    'fingerprint': fingerprint,
+    'brand': brand,
+    'model': model,
+    'os': os,
+    'abi': abi,
+    'is_primary': isPrimary,
+    'is_primary_pending': isPrimaryPending,
+  };
 }
 
 /// POST /user/devices2user 完整响应
@@ -272,12 +275,14 @@ class BoundDevicesResult {
           .map((e) => BoundDeviceInfo.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
       primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
-      primaryDevicePendingId:
-          (json['primary_device_pending_id'] as num?)?.toInt(),
-      primaryTransferRequestedAt:
-          _parseApiDateTime(json['primary_transfer_requested_at']),
-      primaryTransferExecuteAt:
-          _parseApiDateTime(json['primary_transfer_execute_at']),
+      primaryDevicePendingId: (json['primary_device_pending_id'] as num?)
+          ?.toInt(),
+      primaryTransferRequestedAt: _parseApiDateTime(
+        json['primary_transfer_requested_at'],
+      ),
+      primaryTransferExecuteAt: _parseApiDateTime(
+        json['primary_transfer_execute_at'],
+      ),
     );
   }
 }
@@ -299,12 +304,14 @@ class PrimaryTransferResult {
   factory PrimaryTransferResult.fromJson(Map<String, dynamic> json) {
     return PrimaryTransferResult(
       primaryDeviceId: (json['primary_device_id'] as num?)?.toInt(),
-      primaryDevicePendingId:
-          (json['primary_device_pending_id'] as num?)?.toInt(),
-      primaryTransferRequestedAt:
-          _parseApiDateTime(json['primary_transfer_requested_at']),
-      primaryTransferExecuteAt:
-          _parseApiDateTime(json['primary_transfer_execute_at']),
+      primaryDevicePendingId: (json['primary_device_pending_id'] as num?)
+          ?.toInt(),
+      primaryTransferRequestedAt: _parseApiDateTime(
+        json['primary_transfer_requested_at'],
+      ),
+      primaryTransferExecuteAt: _parseApiDateTime(
+        json['primary_transfer_execute_at'],
+      ),
     );
   }
 }
@@ -318,6 +325,7 @@ class BoundAccountInfo {
   final DateTime? unbindRequestedAt;
   final String userToken;
   final String? userDisplayId;
+
   /// 用户注册时间
   final DateTime? createdAt;
 
@@ -430,10 +438,13 @@ class PoWResult {
 
 class ApiService {
   static const _base = 'https://tree.leisure.xin/node/posts';
-  static const _commentBase = 'https://tree.leisure.xin/node/posts/comment'; // 回复 API
-  static const _thumbBase = 'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
+  static const _commentBase =
+      'https://tree.leisure.xin/node/posts/comment'; // 回复 API
+  static const _thumbBase =
+      'https://tree.leisure.xin/node/file-processor/convert/2webp/upload';
   static const _originalBase = 'https://www.leisure.xin:33433/upload';
-  static const _uploadBase = 'https://tree.leisure.xin/node/file-processor/upload';
+  static const _uploadBase =
+      'https://tree.leisure.xin/node/file-processor/upload';
   static const _versionBase = 'https://tree.leisure.xin/node/versions';
   static const _timeout = Duration(seconds: 30);
   static const _useMock = false;
@@ -450,9 +461,13 @@ class ApiService {
   /// rename 返回 RENAME_TOO_FREQUENT 时解析出的上次改名时间
   static DateTime? lastDisplayIdChangedAt;
 
-  static Future<List<int>> getIdList() async {
+  static Future<List<int>> getIdList({String? search}) async {
     if (_useMock) return [12, 345, 6789];
-    final res = await _client.get(Uri.parse('$_base/idList')).timeout(_timeout);
+    var uri = Uri.parse('$_base/idList');
+    if (search != null && search.isNotEmpty) {
+      uri = uri.replace(queryParameters: {'search': search});
+    }
+    final res = await _client.get(uri).timeout(_timeout);
     return List<int>.from(jsonDecode(res.body));
   }
 
@@ -474,12 +489,12 @@ class ApiService {
   static Future<ThumbnailData?> downloadThumbnail(String fileName) async {
     try {
       final isGif = fileName.toLowerCase().endsWith('.gif');
-      final url = isGif
-          ? '$_originalBase/$fileName'
-          : '$_thumbBase/$fileName';
+      final url = isGif ? '$_originalBase/$fileName' : '$_thumbBase/$fileName';
       final res = await _client.get(Uri.parse(url)).timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] downloadThumbnail($fileName) status=${res.statusCode}');
+        debugPrint(
+          '[ApiService] downloadThumbnail($fileName) status=${res.statusCode}',
+        );
         return null;
       }
       final bytes = res.bodyBytes;
@@ -507,7 +522,10 @@ class ApiService {
     final b = bytes;
     if (b.length < 12) return null;
     // PNG：签名 + IHDR，宽高在偏移 16..24（大端）
-    if (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47 &&
+    if (b[0] == 0x89 &&
+        b[1] == 0x50 &&
+        b[2] == 0x4E &&
+        b[3] == 0x47 &&
         b.length >= 24) {
       return (
         (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19],
@@ -554,8 +572,14 @@ class ApiService {
       }
     }
     // WebP：RIFF....WEBP，按 VP8X / VP8L / VP8 三种 chunk 解析
-    if (b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46 &&
-        b[8] == 0x57 && b[9] == 0x45 && b[10] == 0x42 && b[11] == 0x50) {
+    if (b[0] == 0x52 &&
+        b[1] == 0x49 &&
+        b[2] == 0x46 &&
+        b[3] == 0x46 &&
+        b[8] == 0x57 &&
+        b[9] == 0x45 &&
+        b[10] == 0x42 &&
+        b[11] == 0x50) {
       final chunk = String.fromCharCodes(b.sublist(12, 16));
       if (chunk == 'VP8X' && b.length >= 30) {
         return (
@@ -591,7 +615,9 @@ class ApiService {
       final streamed = await _client.send(request).timeout(_timeout);
       if (!_isHttpSuccess(streamed.statusCode)) {
         final body = await streamed.stream.bytesToString();
-        debugPrint('[ApiService] uploadFile($type, ${file.path}) status=${streamed.statusCode} body=$body');
+        debugPrint(
+          '[ApiService] uploadFile($type, ${file.path}) status=${streamed.statusCode} body=$body',
+        );
         lastError = _parseErrorMessage(body);
         return null;
       }
@@ -618,7 +644,9 @@ class ApiService {
           )
           .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] createPost status=${res.statusCode} body=${res.body}');
+        debugPrint(
+          '[ApiService] createPost status=${res.statusCode} body=${res.body}',
+        );
         lastError = _parseErrorMessage(res.body);
         return null;
       }
@@ -633,7 +661,9 @@ class ApiService {
 
   static Future<Comment?> getComment(int id) async {
     try {
-      final res = await _client.get(Uri.parse('$_commentBase/$id')).timeout(_timeout);
+      final res = await _client
+          .get(Uri.parse('$_commentBase/$id'))
+          .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getComment($id) status=${res.statusCode}');
         return null;
@@ -672,7 +702,9 @@ class ApiService {
           )
           .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
-        debugPrint('[ApiService] createComment status=${res.statusCode} body=${res.body}');
+        debugPrint(
+          '[ApiService] createComment status=${res.statusCode} body=${res.body}',
+        );
         lastError = _parseErrorMessage(res.body);
         return null;
       }
@@ -701,9 +733,13 @@ class ApiService {
 
   // ---- 版本更新 ----
 
-  static Future<VersionInfo?> getLatestVersion({String platform = 'android'}) async {
+  static Future<VersionInfo?> getLatestVersion({
+    String platform = 'android',
+  }) async {
     try {
-      final res = await _client.get(Uri.parse('$_versionBase/latest?platform=$platform')).timeout(_timeout);
+      final res = await _client
+          .get(Uri.parse('$_versionBase/latest?platform=$platform'))
+          .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getLatestVersion status=${res.statusCode}');
         return null;
@@ -715,15 +751,21 @@ class ApiService {
     }
   }
 
-  static Future<List<VersionInfo>> getAllVersions({String platform = 'android'}) async {
+  static Future<List<VersionInfo>> getAllVersions({
+    String platform = 'android',
+  }) async {
     try {
-      final res = await _client.get(Uri.parse('$_versionBase?platform=$platform')).timeout(_timeout);
+      final res = await _client
+          .get(Uri.parse('$_versionBase?platform=$platform'))
+          .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getAllVersions status=${res.statusCode}');
         return [];
       }
       final list = jsonDecode(res.body) as List;
-      return list.map((j) => VersionInfo.fromJson(j as Map<String, dynamic>)).toList();
+      return list
+          .map((j) => VersionInfo.fromJson(j as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[ApiService] getAllVersions error: $e');
       return [];
@@ -740,17 +782,21 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/check'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'device_finger_print': deviceFingerPrint.toJson(),
-              }))
+          .post(
+            Uri.parse('$_userBase/check'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'device_finger_print': deviceFingerPrint.toJson(),
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return data['registered'] as bool? ?? false;
       }
-      debugPrint('[ApiService] check status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] check status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] check error: $e');
@@ -776,9 +822,11 @@ class ApiService {
         },
       };
       final res = await _client
-          .post(Uri.parse('$_userBase/register'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(requestBody))
+          .post(
+            Uri.parse('$_userBase/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(requestBody),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -792,7 +840,8 @@ class ApiService {
       } else {
         lastError = _parseErrorMessage(res.body);
         debugPrint(
-            '[ApiService] register status=${res.statusCode} body=${res.body}');
+          '[ApiService] register status=${res.statusCode} body=${res.body}',
+        );
       }
       return null;
     } catch (e) {
@@ -805,7 +854,9 @@ class ApiService {
   /// 获取 PoW hashcash challenge
   static Future<PoWChallenge?> getPoWChallenge() async {
     try {
-      final res = await _client.get(Uri.parse('$_userBase/pow-challenge')).timeout(_timeout);
+      final res = await _client
+          .get(Uri.parse('$_userBase/pow-challenge'))
+          .timeout(_timeout);
       if (!_isHttpSuccess(res.statusCode)) {
         debugPrint('[ApiService] getPoWChallenge status=${res.statusCode}');
         return null;
@@ -825,12 +876,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/login'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'user_token': userToken,
-                'fingerprint_hash': fingerprintHash,
-              }))
+          .post(
+            Uri.parse('$_userBase/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'user_token': userToken,
+              'fingerprint_hash': fingerprintHash,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -844,7 +897,8 @@ class ApiService {
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] login status=${res.statusCode} body=${res.body}');
+        '[ApiService] login status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] login error: $e');
@@ -861,13 +915,15 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/create'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'user_token': userToken,
-                'fingerprint_hash': fingerprintHash,
-                'device_secret': deviceSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/create'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'user_token': userToken,
+              'fingerprint_hash': fingerprintHash,
+              'device_secret': deviceSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -875,14 +931,16 @@ class ApiService {
           return BindingCreateResult.fromJson(data);
         } catch (e) {
           debugPrint(
-              '[ApiService] createBinding parse error: $e body=${res.body}');
+            '[ApiService] createBinding parse error: $e body=${res.body}',
+          );
           lastError = '建绑响应解析失败';
           return null;
         }
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] createBinding status=${res.statusCode} body=${res.body}');
+        '[ApiService] createBinding status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] createBinding error: $e');
@@ -900,26 +958,33 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/session/create'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'user_token': userToken,
-                'device_secret': deviceSecret,
-                'fingerprint_hash': fingerprintHash,
-              }))
+          .post(
+            Uri.parse('$_userBase/session/create'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'user_token': userToken,
+              'device_secret': deviceSecret,
+              'fingerprint_hash': fingerprintHash,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final sessionId = data['session_id'] as int?;
         final sessionSecret = data['session_secret'] as String?;
         if (sessionId != null && sessionSecret != null) {
-          return SessionCreateResult(sessionId: sessionId, sessionSecret: sessionSecret);
+          return SessionCreateResult(
+            sessionId: sessionId,
+            sessionSecret: sessionSecret,
+          );
         }
         debugPrint('[ApiService] createSession missing fields: ${res.body}');
         return null;
       }
       lastError = _parseErrorMessage(res.body);
-      debugPrint('[ApiService] createSession status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] createSession status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] createSession error: $e');
@@ -934,12 +999,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/last-switch'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/last-switch'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -947,7 +1014,8 @@ class ApiService {
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] getLastSwitch status=${res.statusCode} body=${res.body}');
+        '[ApiService] getLastSwitch status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] getLastSwitch error: $e');
@@ -963,12 +1031,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/session/validate'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/session/validate'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -977,7 +1047,9 @@ class ApiService {
           userId: data['user_id'] as int?,
         );
       }
-      debugPrint('[ApiService] validateSession status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] validateSession status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] validateSession error: $e');
@@ -992,19 +1064,23 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/profile'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/profile'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return UserProfileResult.fromJson(data);
       }
       lastError = _parseErrorMessage(res.body);
-      debugPrint('[ApiService] getUserProfile status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] getUserProfile status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] getUserProfile error: $e');
@@ -1023,13 +1099,15 @@ class ApiService {
     lastDisplayIdChangedAt = null;
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/rename'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-                'new_name': newName,
-              }))
+          .post(
+            Uri.parse('$_userBase/rename'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+              'new_name': newName,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1040,13 +1118,16 @@ class ApiService {
         }
         return RenameResult(
           userDisplayId: name,
-          displayIdChangedAt:
-              DateTime.tryParse(data['display_id_changed_at']?.toString() ?? ''),
+          displayIdChangedAt: DateTime.tryParse(
+            data['display_id_changed_at']?.toString() ?? '',
+          ),
         );
       }
       lastError = _parseErrorMessage(res.body);
       _parseRenameCooldownFields(res.body);
-      debugPrint('[ApiService] rename status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] rename status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] rename error: $e');
@@ -1059,10 +1140,12 @@ class ApiService {
   static void _parseRenameCooldownFields(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
-      lastDisplayIdChangedAt =
-          DateTime.tryParse(data['display_id_changed_at']?.toString() ?? '');
-      lastNextRenameAt =
-          DateTime.tryParse(data['next_rename_at']?.toString() ?? '');
+      lastDisplayIdChangedAt = DateTime.tryParse(
+        data['display_id_changed_at']?.toString() ?? '',
+      );
+      lastNextRenameAt = DateTime.tryParse(
+        data['next_rename_at']?.toString() ?? '',
+      );
     } catch (_) {
       // 旧后端可能无此字段，忽略
     }
@@ -1075,12 +1158,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/token/reset'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/token/reset'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1091,11 +1176,15 @@ class ApiService {
         }
         return TokenResetResult(
           userToken: token,
-          tokenResetAt: DateTime.tryParse(data['token_reset_at']?.toString() ?? ''),
+          tokenResetAt: DateTime.tryParse(
+            data['token_reset_at']?.toString() ?? '',
+          ),
         );
       }
       lastError = _parseErrorMessage(res.body);
-      debugPrint('[ApiService] resetUserToken status=${res.statusCode} body=${res.body}');
+      debugPrint(
+        '[ApiService] resetUserToken status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] resetUserToken error: $e');
@@ -1111,27 +1200,32 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/devices2user'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/devices2user'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         try {
           return BoundDevicesResult.fromJson(
-              jsonDecode(res.body) as Map<String, dynamic>);
+            jsonDecode(res.body) as Map<String, dynamic>,
+          );
         } catch (e) {
           debugPrint(
-              '[ApiService] listBoundDevices parse error: $e body=${res.body}');
+            '[ApiService] listBoundDevices parse error: $e body=${res.body}',
+          );
           lastError = '设备数据解析失败（后端可能未返回绑定 id，请重新编译部署）';
           return null;
         }
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] listBoundDevices status=${res.statusCode} body=${res.body}');
+        '[ApiService] listBoundDevices status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] listBoundDevices error: $e');
@@ -1148,21 +1242,25 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/primary-transfer'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-                'id': bindingId,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/primary-transfer'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+              'id': bindingId,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         return PrimaryTransferResult.fromJson(
-            jsonDecode(res.body) as Map<String, dynamic>);
+          jsonDecode(res.body) as Map<String, dynamic>,
+        );
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] requestPrimaryTransfer status=${res.statusCode} body=${res.body}');
+        '[ApiService] requestPrimaryTransfer status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] requestPrimaryTransfer error: $e');
@@ -1178,17 +1276,20 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/primary-transfer-cancel'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/primary-transfer-cancel'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) return true;
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] cancelPrimaryTransfer status=${res.statusCode} body=${res.body}');
+        '[ApiService] cancelPrimaryTransfer status=${res.statusCode} body=${res.body}',
+      );
       return false;
     } catch (e) {
       debugPrint('[ApiService] cancelPrimaryTransfer error: $e');
@@ -1204,12 +1305,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/user2device'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/user2device'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1225,7 +1328,8 @@ class ApiService {
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] listBoundAccounts status=${res.statusCode} body=${res.body}');
+        '[ApiService] listBoundAccounts status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] listBoundAccounts error: $e');
@@ -1241,12 +1345,14 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/transfer-request'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/transfer-request'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1254,14 +1360,16 @@ class ApiService {
           return BindingTransferResult.fromJson(data);
         } catch (e) {
           debugPrint(
-              '[ApiService] requestBindingTransfer parse error: $e body=${res.body}');
+            '[ApiService] requestBindingTransfer parse error: $e body=${res.body}',
+          );
           lastError = '转移申请响应解析失败';
           return null;
         }
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] requestBindingTransfer status=${res.statusCode} body=${res.body}');
+        '[ApiService] requestBindingTransfer status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] requestBindingTransfer error: $e');
@@ -1279,14 +1387,16 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/rename'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-                'id': bindingId,
-                'new_name': newName,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/rename'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+              'id': bindingId,
+              'new_name': newName,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1294,7 +1404,8 @@ class ApiService {
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] renameBinding status=${res.statusCode} body=${res.body}');
+        '[ApiService] renameBinding status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] renameBinding error: $e');
@@ -1311,13 +1422,15 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/delete'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-                'id': bindingId,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/delete'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+              'id': bindingId,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1325,7 +1438,8 @@ class ApiService {
       }
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] deleteBinding status=${res.statusCode} body=${res.body}');
+        '[ApiService] deleteBinding status=${res.statusCode} body=${res.body}',
+      );
       return null;
     } catch (e) {
       debugPrint('[ApiService] deleteBinding error: $e');
@@ -1342,18 +1456,21 @@ class ApiService {
   }) async {
     try {
       final res = await _client
-          .post(Uri.parse('$_userBase/binding/delete-cancel'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({
-                'session_id': sessionId,
-                'session_secret': sessionSecret,
-                'id': bindingId,
-              }))
+          .post(
+            Uri.parse('$_userBase/binding/delete-cancel'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'session_id': sessionId,
+              'session_secret': sessionSecret,
+              'id': bindingId,
+            }),
+          )
           .timeout(_timeout);
       if (_isHttpSuccess(res.statusCode)) return true;
       lastError = _parseErrorMessage(res.body);
       debugPrint(
-          '[ApiService] cancelDeleteBinding status=${res.statusCode} body=${res.body}');
+        '[ApiService] cancelDeleteBinding status=${res.statusCode} body=${res.body}',
+      );
       return false;
     } catch (e) {
       debugPrint('[ApiService] cancelDeleteBinding error: $e');
@@ -1377,5 +1494,9 @@ class ThumbnailData {
   final Uint8List bytes;
   final int width;
   final int height;
-  const ThumbnailData({required this.bytes, required this.width, required this.height});
+  const ThumbnailData({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
 }
