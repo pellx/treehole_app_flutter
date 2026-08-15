@@ -28,7 +28,9 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
-    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final bg = Theme.of(context).brightness == Brightness.light
+        ? const Color(0xFFF7F7F7)
+        : const Color(0xFF1A1A1A);
     final divider = colors.common.divider;
 
     return Container(
@@ -56,22 +58,20 @@ class AppBottomNav extends StatelessWidget {
                     children: [
                       Icon(
                         selected ? (item.activeIcon ?? item.icon) : item.icon,
-                        size: selected ? 28 : 26,
+                        size: 30,
                         color: selected
                             ? colors.common.green
-                            : colors.common.onSurface.withValues(alpha: 0.7),
+                            : colors.common.onSurface.withValues(alpha: 0.85),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         item.label,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: selected
-                              ? FontWeight.w500
-                              : FontWeight.normal,
+                          fontSize: 12,
+                          fontWeight: FontWeight.normal,
                           color: selected
                               ? colors.common.green
-                              : colors.common.onSurface.withValues(alpha: 0.7),
+                              : colors.common.onSurface.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
