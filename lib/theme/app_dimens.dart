@@ -174,15 +174,15 @@ class AppDimens {
   static const double contentLineHeight = 1.5;
 
   // ---- 两个点按钮（操作菜单触发器）----
-  static const double dotsBtnWidth = 26;
-  static const double dotsBtnHeight = 15;
-  static const double dotsBtnRadius = 4;
+  static const double dotsBtnWidth = 34;
+  static const double dotsBtnHeight = 22;
+  static const double dotsBtnRadius = 5;
   static const double dotsBtnBorderWidth = 0.5;
-  static const double dotsFontSize = 18;
+  static const double dotsFontSize = 20;
   static const double dotsGap = -20;
-  static const double dotsTopPadding = -5.2;
-  static const double dotsLeftPadding = 5;
-  static const double dotsRightPadding = 5;
+  static const double dotsTopPadding = -3.5;
+  static const double dotsLeftPadding = 6;
+  static const double dotsRightPadding = 6;
   static const double dotsBgOpacity = 0.09;
   static const double commentBgOpacity = 0.09; // 回复区域背景透明度
   static const double dotsPositionedRight = 1;

@@ -478,36 +478,22 @@ class _PostCardState extends State<PostCard> {
                 SizedBox(width: AppDimens.commentRemainBtnGap),
               ],
               if (hasMinus)
-                GestureDetector(
+                _commentActionButton(
                   onTap: () => setState(
                     () => _commentsShowCount = AppDimens.commentMaxShown,
                   ),
-                  child: SvgPicture.asset(
-                    'assets/minus.svg',
-                    width: AppDimens.commentBtnSize,
-                    height: AppDimens.commentBtnSize,
-                    colorFilter: ColorFilter.mode(
-                      pc.commentIcon,
-                      BlendMode.srcIn,
-                    ),
-                  ),
+                  asset: 'assets/minus.svg',
+                  color: pc.commentIcon,
                 ),
               if (showMore && hasMinus)
                 SizedBox(width: AppDimens.commentBtnGap),
               if (showMore)
-                GestureDetector(
+                _commentActionButton(
                   onTap: () => setState(
                     () => _commentsShowCount += AppDimens.commentStep,
                   ),
-                  child: SvgPicture.asset(
-                    'assets/plus.svg',
-                    width: AppDimens.commentBtnSize,
-                    height: AppDimens.commentBtnSize,
-                    colorFilter: ColorFilter.mode(
-                      pc.commentIcon,
-                      BlendMode.srcIn,
-                    ),
-                  ),
+                  asset: 'assets/plus.svg',
+                  color: pc.commentIcon,
                 ),
             ],
           ),
@@ -532,6 +518,29 @@ class _PostCardState extends State<PostCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: rows,
+      ),
+    );
+  }
+
+  /// 评论 +/- 按钮：图标保持原大小，但把点击区域扩大到 36×36
+  Widget _commentActionButton({
+    required VoidCallback onTap,
+    required String asset,
+    required Color color,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        child: SvgPicture.asset(
+          asset,
+          width: AppDimens.commentBtnSize,
+          height: AppDimens.commentBtnSize,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+        ),
       ),
     );
   }
@@ -587,6 +596,19 @@ class _PostCardState extends State<PostCard> {
           color: Colors.transparent,
           child: Stack(
             children: [
+              // 点击/左右滑动非输入栏区域收回回复栏
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _dismissCommentOverlay,
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity != null &&
+                        details.primaryVelocity!.abs() > 120) {
+                      _dismissCommentOverlay();
+                    }
+                  },
+                ),
+              ),
               // 署名提示（输入栏上方）
               if (_commentAuthorHint != null)
                 Positioned(
@@ -619,8 +641,8 @@ class _PostCardState extends State<PostCard> {
                 child: Container(
                   color: pc.commentInputBarBg,
                   padding: EdgeInsets.only(
-                    left: AppDimens.commentInputSectionMarginBottom,
-                    right: AppDimens.commentInputSectionMarginBottom,
+                    left: 0,
+                    right: 0,
                     top: AppDimens.commentInputSectionMarginTop,
                     bottom: bottomInset > 0
                         ? AppDimens.commentInputSectionMarginBottom
