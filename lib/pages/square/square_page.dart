@@ -378,38 +378,45 @@ class _SquarePageState extends State<SquarePage> {
         ),
         slivers: [
           CupertinoSliverRefreshControl(onRefresh: _refresh),
-          SliverToBoxAdapter(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () =>
-                  Navigator.of(context).push(topDownRoute(const SearchPage())),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? const Color(0xFFF2F2F2)
-                        : const Color(0xFF2A2A2A),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 12),
-                      Icon(
-                        Icons.search,
-                        size: 18,
-                        color: colors.common.trailingIcon,
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _SearchBarHeaderDelegate(
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(
+                    context,
+                  ).push(topDownRoute(const SearchPage())),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.light
+                            ? const Color(0xFFF2F2F2)
+                            : const Color(0xFF2A2A2A),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '搜索',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: colors.common.trailingIcon,
-                        ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 12),
+                          Icon(
+                            Icons.search,
+                            size: 18,
+                            color: colors.common.trailingIcon,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '搜索',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: colors.common.trailingIcon,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -446,5 +453,31 @@ class _SquarePageState extends State<SquarePage> {
         ],
       ),
     );
+  }
+}
+
+class _SearchBarHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _SearchBarHeaderDelegate({required this.child});
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return child;
+  }
+
+  @override
+  double get maxExtent => 52;
+
+  @override
+  double get minExtent => 52;
+
+  @override
+  bool shouldRebuild(covariant _SearchBarHeaderDelegate oldDelegate) {
+    return child != oldDelegate.child;
   }
 }
