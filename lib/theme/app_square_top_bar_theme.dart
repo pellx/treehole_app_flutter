@@ -32,7 +32,7 @@ class AppSquareTopBarTheme {
 
   /// 每个分类 tab 的左右内边距，用来控制 tab 之间的间距。
   /// 数值越大，tab 之间越疏松。
-  static const double itemHorizontalPadding = 12;
+  static const double itemHorizontalPadding = 13.4;
 
   /// 底部指示条的宽度、高度、圆角。
   static const double indicatorWidth = 20;
@@ -57,7 +57,7 @@ class AppSquareTopBarTheme {
   /// 搜索按钮的顶部内边距。
   /// [IconButton] 会把图标放在剩余空间的中心；topPadding 越大，图标越靠下。
   /// 和 [searchIconBottomPadding] 加起来必须 ≤ height - searchIconSize，否则会溢出。
-  static const double searchIconTopPadding = 5.5;
+  static const double searchIconTopPadding = 3;
 
   /// 搜索按钮的底部内边距。
   /// 与 [searchIconTopPadding] 配合，调大一个、调小另一个即可让图标上下偏移。
@@ -68,4 +68,8 @@ class AppSquareTopBarTheme {
 
   /// 顶栏暗色背景色（与底部导航栏保持一致）。
   static const Color backgroundDark = AppBottomNavTheme.backgroundDark;
+
+  /// 第一个帖子与顶栏之间的间距。
+  /// 改为 0 会让第一个卡片紧贴顶栏；调大则会出现一段背景色间隙。
+  static const double postListTopSpacing = 8;
 }

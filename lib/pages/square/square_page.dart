@@ -407,13 +407,24 @@ class _SquarePageState extends State<SquarePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final topBarBg = isLight
+        ? AppSquareTopBarTheme.backgroundLight
+        : AppSquareTopBarTheme.backgroundDark;
+
     return PopScope(
       canPop: ImageOverlay.currentEntry == null,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) ImageOverlay.closeCurrent();
       },
       child: Scaffold(
-        body: SafeArea(bottom: false, child: _buildRefreshShell(_buildBody())),
+        body: Container(
+          color: topBarBg,
+          child: SafeArea(
+            bottom: false,
+            child: _buildRefreshShell(_buildBody()),
+          ),
+        ),
       ),
     );
   }
@@ -480,11 +491,11 @@ class _SquarePageState extends State<SquarePage> {
             )
           else
             SliverPadding(
-              // 顶部间距为 0，第一个卡片紧贴顶栏；
+              // 顶部间距控制第一个卡片与顶栏之间的距离；
               // 卡片之间的间距由 PostCard 底部 margin 控制。
               padding: EdgeInsets.fromLTRB(
                 AppDimens.listPaddingLeft,
-                0,
+                AppSquareTopBarTheme.postListTopSpacing,
                 AppDimens.listPaddingRight,
                 AppDimens.listPaddingBottom,
               ),
