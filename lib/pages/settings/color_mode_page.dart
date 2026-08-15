@@ -86,7 +86,8 @@ class _ColorModePageState extends State<ColorModePage> {
                     const SizedBox(width: 4),
                     Padding(
                       padding: const EdgeInsets.only(
-                          right: AppDimens.settingsArrowRightMargin),
+                        right: AppDimens.settingsArrowRightMargin,
+                      ),
                       child: Icon(
                         Icons.chevron_right,
                         size: AppDimens.settingsArrowSize,
@@ -130,13 +131,19 @@ class _ColorModePageState extends State<ColorModePage> {
                     const Spacer(),
                     Switch(
                       value: _followSystem,
-                      activeTrackColor: colors.common.switchActive,
                       thumbColor: WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return colors.common.switchActive;
-                        }
-                        return null;
+                        return states.contains(WidgetState.selected)
+                            ? colors.common.surface
+                            : colors.common.onSurface.withValues(alpha: 0.8);
                       }),
+                      trackColor: WidgetStateProperty.resolveWith((states) {
+                        return states.contains(WidgetState.selected)
+                            ? colors.common.switchActive
+                            : colors.common.divider;
+                      }),
+                      trackOutlineColor: WidgetStateProperty.all(
+                        Colors.transparent,
+                      ),
                       onChanged: (v) {
                         HapticFeedback.lightImpact();
                         setState(() => _followSystem = v);
@@ -158,9 +165,6 @@ class _ColorModePageState extends State<ColorModePage> {
     );
   }
 
-  Widget _itemDivider(AppColors colors) => Divider(
-        height: 1,
-        thickness: 0.5,
-        color: colors.common.divider,
-      );
+  Widget _itemDivider(AppColors colors) =>
+      Divider(height: 1, thickness: 0.5, color: colors.common.divider);
 }

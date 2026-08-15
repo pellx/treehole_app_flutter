@@ -9,11 +9,7 @@ class AppNavItem {
   final IconData? activeIcon;
   final String label;
 
-  const AppNavItem({
-    required this.icon,
-    this.activeIcon,
-    required this.label,
-  });
+  const AppNavItem({required this.icon, this.activeIcon, required this.label});
 }
 
 /// 应用底部导航栏：视觉克制，不抢占贴文主体
@@ -38,9 +34,7 @@ class AppBottomNav extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        border: Border(
-          top: BorderSide(color: divider, width: 0.5),
-        ),
+        border: Border(top: BorderSide(color: divider, width: 0.5)),
       ),
       child: SafeArea(
         top: false,
@@ -62,20 +56,22 @@ class AppBottomNav extends StatelessWidget {
                     children: [
                       Icon(
                         selected ? (item.activeIcon ?? item.icon) : item.icon,
-                        size: selected ? 24 : 22,
+                        size: selected ? 28 : 26,
                         color: selected
                             ? colors.common.green
-                            : colors.common.trailingIcon,
+                            : colors.common.onSurface.withValues(alpha: 0.7),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 2),
                       Text(
                         item.label,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+                          fontWeight: selected
+                              ? FontWeight.w500
+                              : FontWeight.normal,
                           color: selected
                               ? colors.common.green
-                              : colors.common.trailingIcon,
+                              : colors.common.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
