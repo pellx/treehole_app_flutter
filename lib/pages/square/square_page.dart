@@ -538,10 +538,9 @@ class _SquarePageState extends State<SquarePage> {
     );
   }
 
-  /// 顶部下拉刷新球外壳：列表置顶时，任意位置向下拉都会唤出左侧刷新球
+  /// 顶部下拉刷新球外壳：列表置顶时，任意位置向下拉都会唤出左上角刷新球
   Widget _buildRefreshShell(Widget child) {
     final colors = Theme.of(context).extension<AppColors>()!;
-    final screenHeight = MediaQuery.of(context).size.height;
     final progress = _leftPullProgress;
 
     return Stack(
@@ -581,9 +580,12 @@ class _SquarePageState extends State<SquarePage> {
         Positioned(
           left: -AppSquareRefreshTheme.ballSize +
               (AppSquareRefreshTheme.ballSize +
-                      AppSquareRefreshTheme.ballFinalLeftInset) *
+                      AppSquareRefreshTheme.ballLeftFinalInset) *
                   progress,
-          top: screenHeight / 2 - AppSquareRefreshTheme.ballSize / 2,
+          top: -AppSquareRefreshTheme.ballSize +
+              (AppSquareRefreshTheme.ballSize +
+                      AppSquareRefreshTheme.ballTopFinalInset) *
+                  progress,
           child: Opacity(
             opacity: progress,
             child: Container(
