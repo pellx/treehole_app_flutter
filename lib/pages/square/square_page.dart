@@ -9,6 +9,7 @@ import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../theme/app_square_refresh_theme.dart';
 import '../../theme/app_square_top_bar_theme.dart';
 import '../../widgets/image_overlay.dart';
 import '../search/search_page.dart';
@@ -37,9 +38,19 @@ class _SquarePageState extends State<SquarePage> {
 
   int _selectedCategoryIndex = 0;
 
-  /// 左侧拉出刷新球的进度 0~1
-  double _leftPullProgress = 0;
+  /// 左侧拉出刷新球的累计下拉距离（像素）
+  double _leftPullDistance = 0;
+
+  /// 是否已经在本次拖拽中触发过“拉满”震动反馈
+  bool _leftPullHapticTriggered = false;
+
+  /// 是否正在执行左侧刷新
   bool _leftRefreshing = false;
+
+  /// 当前左侧拉出进度 0~1
+  double get _leftPullProgress =>
+      (_leftPullDistance / AppSquareRefreshTheme.pullThreshold)
+          .clamp(0.0, 1.0);
 
   final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
   final _categoryKeywords = {
@@ -65,26 +76,27 @@ class _SquarePageState extends State<SquarePage> {
   }
 
   void _onLeftPullEnd() {
-    if (_leftPullProgress > 0.5) {
+    if (_leftPullProgress >= 1.0) {
       _triggerLeftRefresh();
     } else {
       setState(() {
-        _leftPullProgress = 0;
+        _leftPullDistance = 0;
+        _leftPullHapticTriggered = false;
       });
     }
   }
 
   Future<void> _triggerLeftRefresh() async {
-    HapticFeedback.mediumImpact();
     setState(() {
       _leftRefreshing = true;
-      _leftPullProgress = 1;
+      _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
+      _leftPullHapticTriggered = false;
     });
     await _refresh();
     if (mounted) {
       setState(() {
         _leftRefreshing = false;
-        _leftPullProgress = 0;
+        _leftPullDistance = 0;
       });
     }
   }
@@ -454,9 +466,9 @@ class _SquarePageState extends State<SquarePage> {
         return false;
       },
       child: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          decelerationRate: ScrollDecelerationRate.fast,
-        ),
+        // 使用 ClampingScrollPhysics，避免在顶部继续下拉出现空白/回弹，
+        // 从而让左侧拉出刷新球成为唯一的下拉刷新入口。
+        physics: const ClampingScrollPhysics(),
         slivers: [
           topBar,
           if (posts.isEmpty)
@@ -504,8 +516,8 @@ class _SquarePageState extends State<SquarePage> {
   /// 左侧拉出刷新球外壳：不改变子布局，仅在左侧边缘监听纵向拖拽
   Widget _buildRefreshShell(Widget child) {
     final colors = Theme.of(context).extension<AppColors>()!;
-    final ballSize = 48.0;
     final screenHeight = MediaQuery.of(context).size.height;
+    final progress = _leftPullProgress;
 
     return Stack(
       children: [
@@ -514,14 +526,22 @@ class _SquarePageState extends State<SquarePage> {
           left: 0,
           top: 0,
           bottom: 0,
-          width: 18,
+          width: AppSquareRefreshTheme.triggerAreaWidth,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onVerticalDragStart: (_) {},
+            onVerticalDragStart: (_) {
+              setState(() {
+                _leftPullDistance = 0;
+                _leftPullHapticTriggered = false;
+              });
+            },
             onVerticalDragUpdate: (details) {
               setState(() {
-                _leftPullProgress = (_leftPullProgress + details.delta.dy / 120)
-                    .clamp(0.0, 1.0);
+                _leftPullDistance += details.delta.dy;
+                if (_leftPullProgress >= 1.0 && !_leftPullHapticTriggered) {
+                  HapticFeedback.mediumImpact();
+                  _leftPullHapticTriggered = true;
+                }
               });
             },
             onVerticalDragEnd: (_) => _onLeftPullEnd(),
@@ -529,19 +549,24 @@ class _SquarePageState extends State<SquarePage> {
           ),
         ),
         Positioned(
-          left: -ballSize + (ballSize + 20) * _leftPullProgress,
-          top: screenHeight / 2 - ballSize / 2,
+          left: -AppSquareRefreshTheme.ballSize +
+              (AppSquareRefreshTheme.ballSize +
+                      AppSquareRefreshTheme.ballFinalLeftInset) *
+                  progress,
+          top: screenHeight / 2 - AppSquareRefreshTheme.ballSize / 2,
           child: Opacity(
-            opacity: _leftPullProgress.clamp(0.0, 1.0),
+            opacity: progress,
             child: Container(
-              width: ballSize,
-              height: ballSize,
+              width: AppSquareRefreshTheme.ballSize,
+              height: AppSquareRefreshTheme.ballSize,
               decoration: BoxDecoration(
                 color: colors.common.surface,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: colors.common.onSurface.withValues(alpha: 0.15),
+                    color: colors.common.onSurface.withValues(
+                      alpha: AppSquareRefreshTheme.shadowOpacity,
+                    ),
                     blurRadius: 8,
                     offset: const Offset(2, 2),
                   ),
@@ -550,16 +575,17 @@ class _SquarePageState extends State<SquarePage> {
               child: Center(
                 child: _leftRefreshing
                     ? SizedBox(
-                        width: 22,
-                        height: 22,
+                        width: AppSquareRefreshTheme.indicatorSize,
+                        height: AppSquareRefreshTheme.indicatorSize,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
+                          strokeWidth:
+                              AppSquareRefreshTheme.indicatorStrokeWidth,
                           color: colors.common.green,
                         ),
                       )
                     : Icon(
                         Icons.refresh,
-                        size: 24,
+                        size: AppSquareRefreshTheme.iconSize,
                         color: colors.common.green,
                       ),
               ),
@@ -643,6 +669,10 @@ class _SquarePageState extends State<SquarePage> {
                   right: AppSquareTopBarTheme.searchIconRightInset,
                 ),
                 child: IconButton(
+                  padding: const EdgeInsets.only(
+                    top: AppSquareTopBarTheme.searchIconTopPadding,
+                    bottom: AppSquareTopBarTheme.searchIconBottomPadding,
+                  ),
                   icon: Icon(
                     Icons.search,
                     color: onSurface,
