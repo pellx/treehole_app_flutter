@@ -443,9 +443,12 @@ class _UserPageState extends State<UserPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: isLight
+          ? const Color(0xFFF2F2F2)
+          : const Color(0xFF111111),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {
@@ -453,36 +456,68 @@ class _UserPageState extends State<UserPage> {
         },
         child: Column(
           children: [
-            const AppAppBar(title: '用户', automaticallyImplyLeading: false),
+            const AppAppBar(title: '我的', automaticallyImplyLeading: false),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(AccentDimens.pagePadding),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 children: [
-                  _avatarIdRow(colors, onSurface),
+                  _profileCard(colors, onSurface),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(
-                        bottom: AccentDimens.errorBottomPadding,
+                        top: 12,
+                        left: 4,
+                        right: 4,
                       ),
                       child: Text(
                         _error!,
                         style: TextStyle(
-                          fontSize: AccentDimens.errorFontSize,
+                          fontSize: 13,
                           color: colors.register.errorText,
                         ),
                       ),
                     ),
-                  _itemDivider(colors),
-                  _tokenRow(onSurface),
-                  _itemDivider(colors),
-                  _changeTokenRow(colors, onSurface),
-                  _itemDivider(colors),
-                  _navRow(colors, onSurface, '设置', _openSettings),
-                  _itemDivider(colors),
-                  _navRow(colors, onSurface, '设备绑定', _openDeviceBinding),
-                  _itemDivider(colors),
-                  _navRow(colors, onSurface, '账户切换', _openLoginOther),
-                  _itemDivider(colors),
+                  const SizedBox(height: 20),
+                  _sectionTitle('账户安全', onSurface),
+                  _sectionCard(colors, [
+                    _tokenTile(colors, onSurface),
+                    _navDivider(colors),
+                    _resetTokenTile(colors, onSurface),
+                  ]),
+                  const SizedBox(height: 20),
+                  _sectionTitle('应用', onSurface),
+                  _sectionCard(colors, [
+                    _navTile(
+                      colors,
+                      onSurface,
+                      '设置',
+                      Icons.settings_outlined,
+                      _openSettings,
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+                  _sectionTitle('账户管理', onSurface),
+                  _sectionCard(colors, [
+                    _navTile(
+                      colors,
+                      onSurface,
+                      '设备绑定',
+                      Icons.devices_outlined,
+                      _openDeviceBinding,
+                    ),
+                    _navDivider(colors),
+                    _navTile(
+                      colors,
+                      onSurface,
+                      '账户切换',
+                      Icons.swap_horiz_outlined,
+                      _openLoginOther,
+                    ),
+                  ]),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -492,131 +527,161 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
-  // ---- 头像 + ID + 更改/提交按钮 ----
+  // ---- 个人资料卡片 ----
 
-  Widget _avatarIdRow(AppColors colors, Color onSurface) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        vertical: AccentDimens.avatarIdRowVPadding,
+  Widget _profileCard(AppColors colors, Color onSurface) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.common.surface,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.only(left: AccentDimens.avatarLeftInset),
-            child: GestureDetector(
-              onTap: _pickAvatar,
-              child: CircleAvatar(
-                radius: AccentDimens.avatarRadius,
-                backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
-                backgroundImage: _avatarBytes != null
-                    ? MemoryImage(_avatarBytes!) as ImageProvider
-                    : const AssetImage('assets/420px-Transparent_Akkarin.jpg'),
-              ),
-            ),
-          ),
-          const SizedBox(width: AccentDimens.avatarIdGap),
-          Expanded(
-            child: _editingName
-                ? TextField(
-                    controller: _nameController,
-                    focusNode: _nameFocus,
-                    maxLength: AccentDimens.nameMaxLength,
-                    style: TextStyle(
-                      fontSize: AccentDimens.idFontSize,
-                      fontWeight: FontWeight.w600,
-                      color: onSurface,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: AccentDimens.nameInputVPadding,
-                      ),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: onSurface.withValues(
-                            alpha: AccentDimens.nameInputUnderlineAlpha,
-                          ),
-                          width: AccentDimens.nameInputUnderlineWidth,
+          GestureDetector(
+            onTap: _pickAvatar,
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 36,
+                  backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
+                  backgroundImage: _avatarBytes != null
+                      ? MemoryImage(_avatarBytes!) as ImageProvider
+                      : const AssetImage(
+                          'assets/420px-Transparent_Akkarin.jpg',
                         ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: colors.common.green,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: colors.common.surface,
+                        width: 1.5,
                       ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(
-                          color: onSurface,
-                          width: AccentDimens.nameInputUnderlineWidth,
-                        ),
-                      ),
                     ),
-                  )
-                : Text(
-                    _nameController.text,
-                    style: TextStyle(
-                      fontSize: AccentDimens.idFontSize,
-                      fontWeight: FontWeight.w600,
-                      color: onSurface,
+                    child: const Icon(
+                      Icons.camera_alt,
+                      size: 14,
+                      color: Colors.white,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-          ),
-          const SizedBox(width: AccentDimens.idButtonGap),
-          Padding(
-            padding: const EdgeInsets.only(
-              right: AccentDimens.changeButtonRightInset,
-            ),
-            child: SizedBox(
-              height: AccentDimens.buttonHeight,
-              child: ElevatedButton(
-                onPressed: _submittingName ? null : _onNameButtonTap,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colors.postCreate.submitBg.withValues(
-                    alpha: _editingName
-                        ? AccentDimens.buttonSubmitBgAlpha
-                        : AccentDimens.buttonBgAlpha,
-                  ),
-                  foregroundColor: colors.postCreate.submitText.withValues(
-                    alpha: _editingName
-                        ? AccentDimens.buttonSubmitTextAlpha
-                        : AccentDimens.buttonTextAlpha,
-                  ),
-                  elevation: 0,
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AccentDimens.buttonHPadding,
-                    vertical: 0,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      AccentDimens.buttonRadius,
-                    ),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: AccentDimens.buttonFontSize,
                   ),
                 ),
-                child: _submittingName
-                    ? SizedBox(
-                        width: AccentDimens.submitSpinnerSize,
-                        height: AccentDimens.submitSpinnerSize,
-                        child: CircularProgressIndicator(
-                          strokeWidth: AccentDimens.submitSpinnerStroke,
-                          color: colors.postCreate.submitText.withValues(
-                            alpha: AccentDimens.buttonSubmitTextAlpha,
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _editingName
+                    ? TextField(
+                        controller: _nameController,
+                        focusNode: _nameFocus,
+                        maxLength: AccentDimens.nameMaxLength,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: onSurface,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          counterText: '',
+                          hintText: '昵称',
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                          ),
+                          enabledBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(
+                              color: onSurface.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: colors.common.green),
                           ),
                         ),
                       )
-                    : Text(_editingName ? '提交' : '更改'),
-              ),
+                    : Text(
+                        _nameController.text.isEmpty
+                            ? '未设置昵称'
+                            : _nameController.text,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: onSurface,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                const SizedBox(height: 6),
+                if (_submittingName)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.common.green,
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    onTap: _onNameButtonTap,
+                    child: Text(
+                      _editingName ? '保存' : '点击修改昵称',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _editingName
+                            ? colors.common.green
+                            : onSurface.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
+          if (_editingName)
+            IconButton(
+              icon: Icon(
+                Icons.close,
+                size: 20,
+                color: onSurface.withValues(alpha: 0.5),
+              ),
+              onPressed: _exitNameEditing,
+            ),
         ],
       ),
     );
   }
 
-  // ---- 用户 token（点击复制） ----
+  // ---- 分组卡片 ----
 
-  Widget _tokenRow(Color onSurface) {
+  Widget _sectionTitle(String title, Color onSurface) => Padding(
+    padding: const EdgeInsets.only(left: 8, bottom: 8),
+    child: Text(
+      title,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: onSurface.withValues(alpha: 0.5),
+      ),
+    ),
+  );
+
+  Widget _sectionCard(AppColors colors, List<Widget> children) => Container(
+    decoration: BoxDecoration(
+      color: colors.common.surface,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(children: children),
+  );
+
+  // ---- 列表行 ----
+
+  Widget _tokenTile(AppColors colors, Color onSurface) {
     const head = AccentDimens.tokenHeadChars;
     const tail = AccentDimens.tokenTailChars;
     final display = _externalToken.isEmpty
@@ -625,128 +690,101 @@ class _UserPageState extends State<UserPage> {
               ? '${_externalToken.substring(0, head)}...'
                     '${_externalToken.substring(_externalToken.length - tail)}'
               : _externalToken);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+
+    return _listTile(
+      colors,
+      onSurface,
+      icon: Icons.key_outlined,
+      title: '用户令牌',
       onTap: _copyToken,
-      child: _itemRow(
-        Row(
-          children: [
-            Text(
-              '用户令牌',
-              style: TextStyle(
-                fontSize: AccentDimens.itemFontSize,
-                color: onSurface,
-              ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            display,
+            style: TextStyle(
+              fontSize: 14,
+              color: onSurface.withValues(alpha: 0.6),
             ),
-            const Spacer(),
-            Text(
-              display,
-              style: TextStyle(
-                fontSize: AccentDimens.tokenValueFontSize,
-                color: onSurface.withValues(
-                  alpha: AccentDimens.tokenValueAlpha,
-                ),
-              ),
-            ),
-            const SizedBox(width: AccentDimens.tokenCopyIconGap),
-            Padding(
-              padding: const EdgeInsets.only(
-                right: AccentDimens.copyIconRightInset,
-              ),
-              child: Icon(
-                Icons.copy,
-                size: AccentDimens.tokenCopyIconSize,
-                color: onSurface.withValues(
-                  alpha: AccentDimens.tokenCopyIconAlpha,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.copy_outlined, size: 16, color: colors.common.green),
+        ],
       ),
     );
   }
 
-  // ---- 令牌重置 ----
-
-  Widget _changeTokenRow(AppColors colors, Color onSurface) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _resettingToken ? null : _confirmChangeToken,
-      child: _itemRow(
-        Row(
-          children: [
-            Text(
-              '令牌重置',
-              style: TextStyle(
-                fontSize: AccentDimens.itemFontSize,
-                color: onSurface,
-              ),
+  Widget _resetTokenTile(AppColors colors, Color onSurface) => _listTile(
+    colors,
+    onSurface,
+    icon: Icons.refresh,
+    title: '令牌重置',
+    onTap: _resettingToken ? null : _confirmChangeToken,
+    trailing: _resettingToken
+        ? SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: colors.common.green,
             ),
-            const Spacer(),
-            if (_resettingToken)
-              const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+          )
+        : Icon(Icons.chevron_right, size: 21, color: colors.common.arrowIcon),
+  );
 
-  // ---- 跳转子页面行 ----
-
-  Widget _navRow(
+  Widget _navTile(
     AppColors colors,
     Color onSurface,
-    String label,
+    String title,
+    IconData icon,
     VoidCallback onTap,
-  ) {
+  ) => _listTile(
+    colors,
+    onSurface,
+    icon: icon,
+    title: title,
+    onTap: () {
+      HapticFeedback.lightImpact();
+      onTap();
+    },
+    trailing: Icon(
+      Icons.chevron_right,
+      size: 21,
+      color: colors.common.arrowIcon,
+    ),
+  );
+
+  Widget _listTile(
+    AppColors colors,
+    Color onSurface, {
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: _itemRow(
-        Row(
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: AccentDimens.itemFontSize,
-                color: onSurface,
-              ),
-            ),
+            Icon(icon, size: 22, color: colors.common.green),
+            const SizedBox(width: 12),
+            Text(title, style: TextStyle(fontSize: 16, color: onSurface)),
             const Spacer(),
-            _rightAligned(
-              Icon(
-                Icons.chevron_right,
-                size: AccentDimens.arrowSize,
-                color: colors.common.arrowIcon,
-              ),
-            ),
+            if (trailing != null) trailing,
           ],
         ),
       ),
     );
   }
 
-  // ---- 通用（与 color_mode_page 同风格） ----
-
-  /// 每行最右侧元素统一以 rowRightInset 为右侧基准对齐
-  Widget _rightAligned(Widget child) => Padding(
-    padding: const EdgeInsets.only(right: AccentDimens.rowRightInset),
-    child: child,
-  );
-
-  Widget _itemRow(Widget child) => SizedBox(
-    height: AccentDimens.itemHeight,
-    child: Center(child: child),
-  );
-
-  Widget _itemDivider(AppColors colors) => Divider(
+  Widget _navDivider(AppColors colors) => Divider(
     height: 1,
-    thickness: AccentDimens.dividerThickness,
+    thickness: 0.5,
+    indent: 50,
     color: colors.common.divider,
   );
 }
