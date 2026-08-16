@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
@@ -28,9 +29,17 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
     final barText = colors.common.barText;
     final bg = backgroundColor ?? colors.common.drawerHeaderBg;
 
-    return Container(
-      color: bg,
-      child: SafeArea(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: bg,
+        statusBarIconBrightness:
+            ThemeData.estimateBrightnessForColor(bg) == Brightness.light
+                ? Brightness.dark
+                : Brightness.light,
+      ),
+      child: Container(
+        color: bg,
+        child: SafeArea(
         bottom: false,
         child: SizedBox(
           height: height,
@@ -57,6 +66,7 @@ class AppAppBar extends StatelessWidget implements PreferredSizeWidget {
                 : const SizedBox(width: 48),
             trailing: trailing ?? const SizedBox(width: 48),
           ),
+        ),
         ),
       ),
     );

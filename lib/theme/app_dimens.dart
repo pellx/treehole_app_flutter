@@ -361,6 +361,6 @@ class AppDimens {
   static const int versionCardLogMaxLines = 4;
 
   // ---- 我的页面 ----
-  static const double userSectionsVOffset = 20; // 栏目整体相对垂直中心的偏移
+  static const double userSectionsVOffset = -10; // 栏目整体相对垂直中心的偏移
   static const double userSectionsHOffset = 0;   // 栏目整体相对水平中心的偏移
 }
