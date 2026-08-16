@@ -44,6 +44,8 @@ class _SearchPageState extends State<SearchPage> {
   int _selectedSortIndex = 0;
   int _selectedTimeIndex = 0;
   bool _filterPanelExpanded = false;
+  DateTime? _customStart;
+  DateTime? _customEnd;
 
   @override
   void initState() {
@@ -165,6 +167,51 @@ class _SearchPageState extends State<SearchPage> {
     _loadHistory();
   }
 
+  String _formatDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final now = DateTime.now();
+    final initial = isStart
+        ? (_customStart ?? now.subtract(const Duration(days: 7)))
+        : (_customEnd ?? now);
+    final firstDate = isStart
+        ? DateTime(2000)
+        : (_customStart ?? DateTime(2000));
+    final lastDate = isStart ? (_customEnd ?? now) : now;
+    final safeInitial = initial.isBefore(firstDate)
+        ? firstDate
+        : (initial.isAfter(lastDate) ? lastDate : initial);
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: safeInitial,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (isStart) {
+        _customStart = DateTime(picked.year, picked.month, picked.day);
+      } else {
+        _customEnd = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          23,
+          59,
+          59,
+        );
+      }
+      _selectedTimeIndex = -1;
+    });
+    if (_query.isNotEmpty) _loadPosts();
+  }
+
   Future<void> _loadPosts() async {
     setState(() {
       _loading = true;
@@ -188,9 +235,16 @@ class _SearchPageState extends State<SearchPage> {
       // 发布时间筛选（客户端）
       final now = DateTime.now();
       var filtered = posts.where((p) {
-        if (_selectedTimeIndex == 0) return true;
         final created = DateTime.tryParse(p.createdAt);
         if (created == null) return true;
+
+        // 自定义时间区域优先级最高
+        if (_customStart != null && _customEnd != null) {
+          return !created.isBefore(_customStart!) &&
+              !created.isAfter(_customEnd!);
+        }
+
+        if (_selectedTimeIndex <= 0) return true;
         final days = _selectedTimeIndex == 1
             ? 1
             : _selectedTimeIndex == 2
@@ -644,10 +698,120 @@ class _SearchPageState extends State<SearchPage> {
           chipGrid(
             options: _timeOptions,
             selectedIndex: _selectedTimeIndex,
-            onSelected: (i) => _selectedTimeIndex = i,
+            onSelected: (i) {
+              _selectedTimeIndex = i;
+              _customStart = null;
+              _customEnd = null;
+            },
           ),
+          SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
+          sectionTitle(AppSearchTheme.filterPanelDateRangeTitle),
+          _buildDateRangeRow(colors, onSurface, bg),
         ],
       ),
+    );
+  }
+
+  Widget _buildDateRangeRow(AppColors colors, Color onSurface, Color bg) {
+    Widget chip({
+      required String label,
+      required DateTime? date,
+      required VoidCallback onTap,
+    }) {
+      final selected = date != null;
+      return Expanded(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(
+              vertical: AppSearchTheme.filterPanelChipVerticalPadding,
+            ),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppSearchTheme.searchAccent.withValues(alpha: 0.1)
+                  : bg,
+              borderRadius: BorderRadius.circular(
+                AppSearchTheme.filterPanelChipBorderRadius,
+              ),
+              border: Border.all(
+                color: selected
+                    ? AppSearchTheme.searchAccent
+                    : colors.common.divider,
+                width: selected
+                    ? AppSearchTheme.filterPanelSelectedBorderWidth
+                    : AppSearchTheme.filterPanelUnselectedBorderWidth,
+              ),
+            ),
+            child: Text(
+              date != null ? _formatDate(date) : label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: AppSearchTheme.filterPanelChipFontSize,
+                color: selected
+                    ? AppSearchTheme.searchAccent
+                    : onSurface.withValues(alpha: 0.75),
+                fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        chip(
+          label: '开始日期',
+          date: _customStart,
+          onTap: () => _pickDate(isStart: true),
+        ),
+        SizedBox(width: AppSearchTheme.filterPanelDateRangeChipSpacing),
+        chip(
+          label: '结束日期',
+          date: _customEnd,
+          onTap: () => _pickDate(isStart: false),
+        ),
+        if (_customStart != null || _customEnd != null) ...[
+          SizedBox(width: AppSearchTheme.filterPanelDateRangeChipSpacing),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _customStart = null;
+                _customEnd = null;
+                _selectedTimeIndex = 0;
+              });
+              if (_query.isNotEmpty) _loadPosts();
+            },
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSearchTheme.filterPanelDateRangeClearPadding,
+                vertical: AppSearchTheme.filterPanelChipVerticalPadding,
+              ),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(
+                  AppSearchTheme.filterPanelChipBorderRadius,
+                ),
+                border: Border.all(
+                  color: colors.common.divider,
+                  width: AppSearchTheme.filterPanelUnselectedBorderWidth,
+                ),
+              ),
+              child: Text(
+                '清除',
+                style: TextStyle(
+                  fontSize: AppSearchTheme.filterPanelChipFontSize,
+                  color: onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
