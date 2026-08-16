@@ -53,6 +53,18 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
+  void _onClearInput() {
+    _controller.clear();
+    if (_query.isNotEmpty || _posts.isNotEmpty) {
+      setState(() {
+        _query = '';
+        _posts = [];
+        _error = null;
+        _loading = false;
+      });
+    }
+  }
+
   Future<void> _loadHistory() async {
     final history = PostStorage.getSearchHistory();
     setState(() {
@@ -228,13 +240,7 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                   suffixIcon: _controller.text.isNotEmpty
                       ? GestureDetector(
-                          onTap: () {
-                            _controller.clear();
-                            if (_query.isNotEmpty) {
-                              _query = '';
-                              _loadPosts();
-                            }
-                          },
+                          onTap: _onClearInput,
                           child: Icon(
                             Icons.clear,
                             color: colors.common.trailingIcon,
@@ -306,7 +312,9 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSearchHistory(AppColors colors, Color onSurface) {
-    if (_history.isEmpty) return const SizedBox.shrink();
+    if (_query.isNotEmpty || _history.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final chipBg = AppSearchTheme.chipBg(context);
 
     return Container(
