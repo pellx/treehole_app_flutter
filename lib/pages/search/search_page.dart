@@ -8,7 +8,6 @@ import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_search_theme.dart';
-import '../../theme/app_square_top_bar_theme.dart';
 import '../../widgets/app_confirm_dialog.dart';
 import '../../widgets/app_empty_state.dart';
 import '../../widgets/app_error_state.dart';
@@ -36,8 +35,11 @@ class _SearchPageState extends State<SearchPage> {
   int _deletingIndex = -1;
   final Map<int, List<Comment>> _comments = {};
   final Set<int> _postsNeedCommentRefresh = {};
-  final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
-  int _selectedCategoryIndex = 0;
+  final _sortOptions = ['最新发布', '最新回复', '最先发布', '回复最多'];
+  final _timeOptions = ['不限时间', '最近一周', '最近一月', '最近半年'];
+  int _selectedSortIndex = 0;
+  int _selectedTimeIndex = 0;
+  String? _expandedFilter; // 'sort' | 'time'
 
   @override
   void initState() {
@@ -174,12 +176,24 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
-      final category = _selectedCategoryIndex == 0
+      final sort = ['latest', 'latest_reply', 'oldest', 'most_replies']
+          [_selectedSortIndex];
+      final dateStart = _selectedTimeIndex == 0
           ? null
-          : _categories[_selectedCategoryIndex];
+          : DateTime.now()
+              .subtract(Duration(
+                days: _selectedTimeIndex == 1
+                    ? 7
+                    : _selectedTimeIndex == 2
+                        ? 30
+                        : 180,
+              ))
+              .toUtc()
+              .toIso8601String();
       final ids = await ApiService.getIdList(
         search: _query.isEmpty ? null : _query,
-        category: category,
+        sort: sort,
+        dateStart: dateStart,
       );
       final posts = <Post>[];
       await Future.wait(
@@ -242,9 +256,21 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           children: [
             _buildSearchBar(colors, onSurface),
-            if (_query.isNotEmpty) _buildCategoryBar(colors, onSurface),
+            if (_query.isNotEmpty) _buildFilterBar(colors, onSurface),
+            if (_query.isNotEmpty && _expandedFilter != null)
+              _buildFilterPanel(colors, onSurface),
             _buildSearchHistory(colors, onSurface),
-            Expanded(child: _buildBody(colors)),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (_expandedFilter != null) {
+                    setState(() => _expandedFilter = null);
+                  }
+                },
+                child: _buildBody(colors),
+              ),
+            ),
           ],
         ),
       ),
@@ -365,72 +391,122 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
-  Widget _buildCategoryBar(AppColors colors, Color onSurface) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final bg = isLight
-        ? AppSquareTopBarTheme.backgroundLight
-        : AppSquareTopBarTheme.backgroundDark;
+  Widget _buildFilterBar(AppColors colors, Color onSurface) {
+    final bg = Theme.of(context).brightness == Brightness.light
+        ? Colors.white
+        : colors.common.surface;
+
+    Widget filterButton(String label, bool expanded) {
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            _expandedFilter = expanded ? null : label;
+          });
+        },
+        child: Container(
+          color: bg,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: onSurface.withValues(alpha: 0.9),
+                ),
+              ),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 18,
+                  color: onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Container(
       color: bg,
-      height: AppSquareTopBarTheme.height,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _categories.asMap().entries.map((entry) {
-            final index = entry.key;
-            final label = entry.value;
-            final selected = index == _selectedCategoryIndex;
-            return GestureDetector(
-              onTap: () {
-                if (_selectedCategoryIndex == index) return;
-                setState(() => _selectedCategoryIndex = index);
-                if (_query.isNotEmpty) _loadPosts();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSquareTopBarTheme.itemHorizontalPadding,
-                ),
-                alignment: Alignment.bottomCenter,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
+      height: 44,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          filterButton(_sortOptions[_selectedSortIndex],
+              _expandedFilter == 'sort'),
+          filterButton(_timeOptions[_selectedTimeIndex],
+              _expandedFilter == 'time'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel(AppColors colors, Color onSurface) {
+    final isSort = _expandedFilter == 'sort';
+    final options = isSort ? _sortOptions : _timeOptions;
+    final selectedIndex = isSort ? _selectedSortIndex : _selectedTimeIndex;
+
+    return Container(
+      color: Theme.of(context).brightness == Brightness.light
+          ? Colors.white
+          : colors.common.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: options.asMap().entries.map((entry) {
+          final index = entry.key;
+          final label = entry.value;
+          final selected = index == selectedIndex;
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                if (isSort) {
+                  _selectedSortIndex = index;
+                } else {
+                  _selectedTimeIndex = index;
+                }
+                _expandedFilter = null;
+              });
+              if (_query.isNotEmpty) _loadPosts();
+            },
+            child: Container(
+              height: 44,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       label,
                       style: TextStyle(
-                        fontSize: AppSquareTopBarTheme.fontSize,
+                        fontSize: 14,
+                        color: selected
+                            ? AppSearchTheme.searchAccent
+                            : onSurface.withValues(alpha: 0.85),
                         fontWeight: selected
-                            ? AppSquareTopBarTheme.selectedFontWeight
-                            : AppSquareTopBarTheme.unselectedFontWeight,
-                        color: selected
-                            ? colors.common.green
-                            : onSurface.withValues(alpha: 0.7),
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                       ),
                     ),
-                    SizedBox(
-                      height: AppSquareTopBarTheme.indicatorTopSpacing,
+                  ),
+                  if (selected)
+                    Icon(
+                      Icons.check,
+                      size: 18,
+                      color: AppSearchTheme.searchAccent,
                     ),
-                    Container(
-                      width: AppSquareTopBarTheme.indicatorWidth,
-                      height: AppSquareTopBarTheme.indicatorHeight,
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? colors.common.green
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(
-                          AppSquareTopBarTheme.indicatorBorderRadius,
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: AppSquareTopBarTheme.indicatorBottomSpacing,
-                    ),
-                  ],
-                ),
+                ],
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

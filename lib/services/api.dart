@@ -468,6 +468,7 @@ class ApiService {
     String? dateStart,
     String? dateEnd,
     String? category,
+    String? sort,
   }) async {
     if (_useMock) return [12, 345, 6789];
     final params = <String, String>{};
@@ -476,6 +477,7 @@ class ApiService {
     if (dateStart != null && dateStart.isNotEmpty) params['dateStart'] = dateStart;
     if (dateEnd != null && dateEnd.isNotEmpty) params['dateEnd'] = dateEnd;
     if (category != null && category.isNotEmpty) params['category'] = category;
+    if (sort != null && sort.isNotEmpty) params['sort'] = sort;
     var uri = Uri.parse('$_base/idList');
     if (params.isNotEmpty) {
       uri = uri.replace(queryParameters: params);
