@@ -1139,10 +1139,8 @@ class _PostCardState extends State<PostCard> {
       // 等键盘出现后再滚动
       Future.delayed(const Duration(milliseconds: 350), () {
         if (!mounted || _commentOverlay == null) return;
-        final hasComments = widget.comments.isNotEmpty;
-        final ctx = hasComments
-            ? _commentSectionKey.currentContext
-            : _dateRowKey.currentContext;
+        // 目标：把帖子底部（日期行）对齐到输入栏上方，而不是评论区底部
+        final ctx = _dateRowKey.currentContext;
         if (ctx == null || !ctx.mounted) return;
         final box = ctx.findRenderObject() as RenderBox;
         final scrollable = Scrollable.of(ctx);
