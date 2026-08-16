@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../../widgets/app_app_bar.dart';
+import '../../widgets/app_confirm_dialog.dart';
 import '../../widgets/app_snackbar.dart';
 import 'notification_settings_page.dart';
 import 'privacy_policy_page.dart';
@@ -24,93 +25,12 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _debugMode = false;
 
   Future<void> _confirmClearData() async {
-    final colors = Theme.of(context).extension<AppColors>()!;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: colors.common.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AccentDimens.dialogRadius),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AccentDimens.dialogPadding),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '确定要清空本地数据吗？此操作不会删除服务器上的账户信息，但会清除本地缓存、头像等数据。',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: AccentDimens.dialogMessageFontSize,
-                  height: AccentDimens.dialogMessageLineHeight,
-                  color: onSurface,
-                ),
-              ),
-              const SizedBox(height: AccentDimens.dialogActionsTopGap),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: AccentDimens.dialogActionHeight,
-                      child: TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        style: TextButton.styleFrom(
-                          foregroundColor: onSurface.withValues(
-                            alpha: AccentDimens.dialogCancelTextAlpha,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AccentDimens.dialogActionHPadding,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              AccentDimens.dialogActionRadius,
-                            ),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: AccentDimens.dialogActionFontSize,
-                          ),
-                        ),
-                        child: const Text('取消'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AccentDimens.dialogActionGap),
-                  Expanded(
-                    child: SizedBox(
-                      height: AccentDimens.dialogActionHeight,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.postCreate.submitBg,
-                          foregroundColor: colors.postCreate.submitText,
-                          elevation: 0,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AccentDimens.dialogActionHPadding,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              AccentDimens.dialogActionRadius,
-                            ),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: AccentDimens.dialogActionFontSize,
-                          ),
-                        ),
-                        child: const Text('确认'),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      message:
+          '确定要清空本地数据吗？此操作不会删除服务器上的账户信息，但会清除本地缓存、头像等数据。',
+      cancelText: '取消',
+      confirmText: '确认',
     );
     if (confirmed == true && mounted) {
       showAppSnackBar(

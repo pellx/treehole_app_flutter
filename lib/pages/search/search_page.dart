@@ -7,6 +7,7 @@ import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_search_theme.dart';
+import '../../widgets/app_confirm_dialog.dart';
 import '../../widgets/app_empty_state.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_loading_indicator.dart';
@@ -66,22 +67,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Future<void> _showClearHistoryConfirm() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('清空搜索历史'),
-        content: const Text('确定要清空所有搜索历史吗？此操作无法恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('清空'),
-          ),
-        ],
-      ),
+    final confirmed = await showAppConfirmDialog(
+      context,
+      title: '清空搜索历史',
+      message: '确定要清空所有搜索历史吗？此操作无法恢复。',
+      cancelText: '取消',
+      confirmText: '清空',
     );
     if (confirmed == true) {
       _clearHistory();

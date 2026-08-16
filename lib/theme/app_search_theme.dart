@@ -5,7 +5,7 @@ class AppSearchTheme {
   AppSearchTheme._();
 
   // ---- 颜色 ----
-  static const Color searchAccent = Color(0xFFFB7299);
+  static const Color searchAccent = Color(0xFF0EAB00);
   static const Color searchButtonColor = searchAccent;
 
   static const Color _chipBgLight = Color(0xFFF5F5F5);

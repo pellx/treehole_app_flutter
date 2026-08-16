@@ -985,7 +985,7 @@ class _PostCardState extends State<PostCard> {
             child: Icon(
               Icons.expand_less,
               size: AppDimens.commentIconSize,
-              color: pc.commentIcon,
+              color: colors.common.onSurface,
             ),
           ),
         ),
@@ -1003,7 +1003,7 @@ class _PostCardState extends State<PostCard> {
         Positioned(
           right: AppDimens.dotsPositionedRight,
           top: AppDimens.dotsPositionedTop,
-          child: _dotsOnly(pc),
+          child: _dotsOnly(pc, colors.common.onSurface),
         ),
         // 两点按钮扩大点击区
         Positioned(
@@ -1036,7 +1036,7 @@ class _PostCardState extends State<PostCard> {
 
   // ---- 两点按钮（点击弹出底部菜单）----
 
-  Widget _dotsOnly(PostCardColors pc) {
+  Widget _dotsOnly(PostCardColors pc, Color dotsColor) {
     return GestureDetector(
       onTap: () => _showPostActionsSheet(pc),
       child: Container(
@@ -1053,9 +1053,10 @@ class _PostCardState extends State<PostCard> {
               left: AppDimens.dotsLeftPadding,
               child: Text(
                 '·',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: AppDimens.dotsFontSize,
                   fontWeight: FontWeight.bold,
+                  color: dotsColor,
                 ),
               ),
             ),
@@ -1064,9 +1065,10 @@ class _PostCardState extends State<PostCard> {
               right: AppDimens.dotsRightPadding,
               child: Text(
                 '·',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: AppDimens.dotsFontSize,
                   fontWeight: FontWeight.bold,
+                  color: dotsColor,
                 ),
               ),
             ),
