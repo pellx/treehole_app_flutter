@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/comment.dart';
 import '../../models/post.dart';
 import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_search_theme.dart';
+import '../../theme/app_square_top_bar_theme.dart';
 import '../../widgets/app_confirm_dialog.dart';
 import '../../widgets/app_empty_state.dart';
 import '../../widgets/app_error_state.dart';
@@ -32,6 +34,10 @@ class _SearchPageState extends State<SearchPage> {
   String _query = '';
   List<String> _history = [];
   int _deletingIndex = -1;
+  final Map<int, List<Comment>> _comments = {};
+  final Set<int> _postsNeedCommentRefresh = {};
+  final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
+  int _selectedCategoryIndex = 0;
 
   @override
   void initState() {
@@ -59,10 +65,71 @@ class _SearchPageState extends State<SearchPage> {
       setState(() {
         _query = '';
         _posts = [];
+        _comments.clear();
+        _postsNeedCommentRefresh.clear();
         _error = null;
         _loading = false;
       });
     }
+  }
+
+  void _onNeedCommentRefresh(int postId) {
+    if (!_postsNeedCommentRefresh.contains(postId)) return;
+    final post = _posts.firstWhere((p) => p.id == postId);
+    _refreshPostComments(post);
+    _postsNeedCommentRefresh.remove(postId);
+  }
+
+  Future<void> _refreshPostComments(Post post) async {
+    List<int> newIds;
+    try {
+      final fresh = await ApiService.getPost(post.id);
+      if (fresh != null) {
+        await PostStorage.savePost(fresh);
+        final idx = _posts.indexWhere((p) => p.id == post.id);
+        if (idx >= 0) {
+          _posts[idx] = fresh;
+        }
+        newIds = fresh.comments;
+      } else {
+        newIds = post.comments;
+      }
+    } catch (_) {
+      newIds = post.comments;
+    }
+    if (newIds.isEmpty) return;
+
+    final existingIds = _comments[post.id]?.map((c) => c.id).toSet() ?? {};
+    final missingIds = newIds.where((id) => !existingIds.contains(id)).toList();
+
+    if (missingIds.isEmpty) {
+      if (_comments[post.id] == null ||
+          _comments[post.id]!.length != newIds.length) {
+        _comments[post.id] = PostStorage.getComments(newIds);
+        await PostStorage.updatePostCommentIds(post.id, newIds);
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+
+    final futures = missingIds.map((id) async {
+      final cmt = await ApiService.getComment(id);
+      if (cmt != null) await PostStorage.saveComment(cmt);
+      return cmt;
+    });
+    final newCmts = (await Future.wait(futures)).whereType<Comment>().toList();
+
+    final existing = _comments[post.id] ?? PostStorage.getComments(newIds);
+    final merged = <Comment>[...existing];
+    for (final cmt in newCmts) {
+      if (!merged.any((e) => e.id == cmt.id)) merged.add(cmt);
+    }
+    merged.sort(
+      (a, b) => newIds.indexOf(a.id).compareTo(newIds.indexOf(b.id)),
+    );
+
+    await PostStorage.updatePostCommentIds(post.id, newIds);
+    if (mounted) setState(() => _comments[post.id] = merged);
   }
 
   Future<void> _loadHistory() async {
@@ -107,8 +174,12 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
+      final category = _selectedCategoryIndex == 0
+          ? null
+          : _categories[_selectedCategoryIndex];
       final ids = await ApiService.getIdList(
         search: _query.isEmpty ? null : _query,
+        category: category,
       );
       final posts = <Post>[];
       await Future.wait(
@@ -117,6 +188,10 @@ class _SearchPageState extends State<SearchPage> {
           if (post != null) posts.add(post);
         }),
       );
+      for (final post in posts) {
+        _comments[post.id] ??= PostStorage.getComments(post.comments);
+        _postsNeedCommentRefresh.add(post.id);
+      }
       if (mounted) {
         setState(() {
           _posts = posts;
@@ -167,6 +242,7 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           children: [
             _buildSearchBar(colors, onSurface),
+            if (_query.isNotEmpty) _buildCategoryBar(colors, onSurface),
             _buildSearchHistory(colors, onSurface),
             Expanded(child: _buildBody(colors)),
           ],
@@ -196,94 +272,72 @@ class _SearchPageState extends State<SearchPage> {
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           Expanded(
-            child: SizedBox(
+            child: Container(
               height: AppSearchTheme.searchBarHeight,
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _onSearch(),
-                cursorColor: AppSearchTheme.searchAccent,
-                decoration: InputDecoration(
-                  hintText: AppSearchTheme.inputHint,
-                  hintStyle: TextStyle(
-                    color: colors.common.trailingIcon,
-                    fontSize: AppSearchTheme.inputHintFontSize,
+              decoration: BoxDecoration(
+                color: colors.common.surface,
+                borderRadius: BorderRadius.circular(
+                  AppSearchTheme.inputBorderRadius,
+                ),
+                border: Border.all(
+                  color: colors.common.divider,
+                  width: AppSearchTheme.inputBorderWidth,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: AppSearchTheme.searchIconVerticalAlignment,
+                children: [
+                  SizedBox(width: AppSearchTheme.searchIconLeftPadding),
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: AppSearchTheme.searchIconLeftOffset,
+                    ),
+                    child: Transform.translate(
+                      offset: Offset(
+                        0,
+                        AppSearchTheme.searchIconVerticalOffset,
+                      ),
+                      child: Icon(
+                        Icons.search,
+                        color: colors.common.trailingIcon,
+                        size: AppSearchTheme.prefixIconSize,
+                      ),
+                    ),
                   ),
-                  prefixIcon: const SizedBox.shrink(),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 0,
-                    minHeight: 0,
-                  ),
-                  prefix: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: AppSearchTheme.searchIconVerticalAlignment,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(
-                          left: AppSearchTheme.searchIconLeftOffset,
+                  SizedBox(width: AppSearchTheme.searchIconToTextGap),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _onSearch(),
+                      cursorColor: AppSearchTheme.searchAccent,
+                      decoration: InputDecoration(
+                        hintText: AppSearchTheme.inputHint,
+                        hintStyle: TextStyle(
+                          color: colors.common.trailingIcon,
+                          fontSize: AppSearchTheme.inputHintFontSize,
                         ),
-                        child: Transform.translate(
-                          offset: Offset(
-                            0,
-                            AppSearchTheme.searchIconVerticalOffset,
-                          ),
-                          child: Icon(
-                            Icons.search,
-                            color: colors.common.trailingIcon,
-                            size: AppSearchTheme.prefixIconSize,
-                          ),
+                        suffixIcon: _controller.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: _onClearInput,
+                                child: Icon(
+                                  Icons.clear,
+                                  color: colors.common.trailingIcon,
+                                  size: AppSearchTheme.clearIconSize,
+                                ),
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        filled: false,
+                        isDense: AppSearchTheme.inputIsDense,
+                        contentPadding: EdgeInsets.symmetric(
+                          vertical: AppSearchTheme.inputVerticalPadding,
                         ),
                       ),
-                      SizedBox(width: AppSearchTheme.searchIconToTextGap),
-                    ],
-                  ),
-                  suffixIcon: _controller.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: _onClearInput,
-                          child: Icon(
-                            Icons.clear,
-                            color: colors.common.trailingIcon,
-                            size: AppSearchTheme.clearIconSize,
-                          ),
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: colors.common.surface,
-                  isDense: AppSearchTheme.inputIsDense,
-                  contentPadding: const EdgeInsets.only(
-                    left: AppSearchTheme.searchIconLeftPadding,
-                    top: AppSearchTheme.inputVerticalPadding,
-                    bottom: AppSearchTheme.inputVerticalPadding,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
                     ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
-                    ),
-                  ),
-                ),
+                ],
               ),
             ),
           ),
@@ -307,6 +361,76 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryBar(AppColors colors, Color onSurface) {
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final bg = isLight
+        ? AppSquareTopBarTheme.backgroundLight
+        : AppSquareTopBarTheme.backgroundDark;
+
+    return Container(
+      color: bg,
+      height: AppSquareTopBarTheme.height,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _categories.asMap().entries.map((entry) {
+            final index = entry.key;
+            final label = entry.value;
+            final selected = index == _selectedCategoryIndex;
+            return GestureDetector(
+              onTap: () {
+                if (_selectedCategoryIndex == index) return;
+                setState(() => _selectedCategoryIndex = index);
+                if (_query.isNotEmpty) _loadPosts();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSquareTopBarTheme.itemHorizontalPadding,
+                ),
+                alignment: Alignment.bottomCenter,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: AppSquareTopBarTheme.fontSize,
+                        fontWeight: selected
+                            ? AppSquareTopBarTheme.selectedFontWeight
+                            : AppSquareTopBarTheme.unselectedFontWeight,
+                        color: selected
+                            ? colors.common.green
+                            : onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    SizedBox(
+                      height: AppSquareTopBarTheme.indicatorTopSpacing,
+                    ),
+                    Container(
+                      width: AppSquareTopBarTheme.indicatorWidth,
+                      height: AppSquareTopBarTheme.indicatorHeight,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? colors.common.green
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(
+                          AppSquareTopBarTheme.indicatorBorderRadius,
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      height: AppSquareTopBarTheme.indicatorBottomSpacing,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -449,9 +573,14 @@ class _SearchPageState extends State<SearchPage> {
         return PostCard(
           key: ValueKey(post.id),
           post: post,
-          comments: const [],
-          onNeedCommentRefresh: () {},
-          onCommentCreated: (_) {},
+          comments: _comments[post.id] ?? [],
+          onNeedCommentRefresh: () => _onNeedCommentRefresh(post.id),
+          onCommentCreated: (cmt) {
+            setState(() {
+              _comments[post.id] ??= [];
+              _comments[post.id] = [..._comments[post.id]!, cmt];
+            });
+          },
         );
       },
     );
