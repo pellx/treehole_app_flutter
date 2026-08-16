@@ -280,9 +280,10 @@ class _ImageOverlayState extends State<ImageOverlay>
     final progress = _expandAnim.value;
     final rect = Rect.lerp(startR, fullRect, progress)!;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: () {
+    return PopScope(
+      canPop: ImageOverlay.currentEntry == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
         if (_showActionBar) {
           setState(() => _showActionBar = false);
           _actionBarCtrl.reverse();
@@ -290,150 +291,161 @@ class _ImageOverlayState extends State<ImageOverlay>
           _close();
         }
       },
-      onLongPress: () {
-        setState(() => _showActionBar = true);
-        _actionBarCtrl.duration = Duration(
-          milliseconds: AppDimens.actionBarAnimMs,
-        );
-        _actionBarCtrl.forward();
-      },
-      child: Stack(
-        children: [
-          Positioned.fill(child: Container(color: _bgAnim.value)),
-          Positioned(
-            left: rect.left,
-            top: rect.top,
-            width: rect.width,
-            height: rect.height,
-            child: ClipRRect(
-              borderRadius: progress < 1
-                  ? BorderRadius.circular(4 * (1 - progress))
-                  : BorderRadius.zero,
-              child: _buildContent(),
-            ),
-          ),
-          if (widget.images.length > 1)
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          if (_showActionBar) {
+            setState(() => _showActionBar = false);
+            _actionBarCtrl.reverse();
+          } else {
+            _close();
+          }
+        },
+        onLongPress: () {
+          setState(() => _showActionBar = true);
+          _actionBarCtrl.duration = Duration(
+            milliseconds: AppDimens.actionBarAnimMs,
+          );
+          _actionBarCtrl.forward();
+        },
+        child: Stack(
+          children: [
+            Positioned.fill(child: Container(color: _bgAnim.value)),
             Positioned(
-              bottom: AppDimens.pageIndicatorBottomMargin,
-              left: 0,
-              right: 0,
-              child: FadeTransition(
-                opacity: _dotsCtrl,
-                child: Center(
-                  child: Wrap(
-                    spacing: AppDimens.pageIndicatorDotGap,
-                    runSpacing: 0,
-                    children: List.generate(widget.images.length, (i) {
-                      final active = i == _currentIndex;
-                      return Container(
-                        width: AppDimens.pageIndicatorDotSize,
-                        height: AppDimens.pageIndicatorDotSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.common.overlayPageDot.withValues(
-                            alpha: active
-                                ? AppDimens.overlayPageDotActiveOpacity
-                                : AppDimens.overlayPageDotInactiveOpacity,
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+              child: ClipRRect(
+                borderRadius: progress < 1
+                    ? BorderRadius.circular(4 * (1 - progress))
+                    : BorderRadius.zero,
+                child: _buildContent(),
+              ),
+            ),
+            if (widget.images.length > 1)
+              Positioned(
+                bottom: AppDimens.pageIndicatorBottomMargin,
+                left: 0,
+                right: 0,
+                child: FadeTransition(
+                  opacity: _dotsCtrl,
+                  child: Center(
+                    child: Wrap(
+                      spacing: AppDimens.pageIndicatorDotGap,
+                      runSpacing: 0,
+                      children: List.generate(widget.images.length, (i) {
+                        final active = i == _currentIndex;
+                        return Container(
+                          width: AppDimens.pageIndicatorDotSize,
+                          height: AppDimens.pageIndicatorDotSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: colors.common.overlayPageDot.withValues(
+                              alpha: active
+                                  ? AppDimens.overlayPageDotActiveOpacity
+                                  : AppDimens.overlayPageDotInactiveOpacity,
+                            ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      }),
+                    ),
                   ),
                 ),
               ),
-            ),
-          if (_showActionBar || _actionBarCtrl.value > 0)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: _showActionBar
-                  ? -AppDimens.actionBarHeight +
-                        _actionBarCtrl.value *
-                            (AppDimens.actionBarBottomMargin +
-                                AppDimens.actionBarHeight)
-                  : AppDimens.actionBarBottomMargin,
-              child: Opacity(
-                opacity: _actionBarCtrl.value,
-                child: Center(
-                  child: Container(
-                    height: AppDimens.actionBarHeight,
-                    decoration: BoxDecoration(
-                      color: colors.common.overlayActionBarBg,
-                      borderRadius: BorderRadius.circular(
-                        AppDimens.actionBarRadius,
+            if (_showActionBar || _actionBarCtrl.value > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: _showActionBar
+                    ? -AppDimens.actionBarHeight +
+                          _actionBarCtrl.value *
+                              (AppDimens.actionBarBottomMargin +
+                                  AppDimens.actionBarHeight)
+                    : AppDimens.actionBarBottomMargin,
+                child: Opacity(
+                  opacity: _actionBarCtrl.value,
+                  child: Center(
+                    child: Container(
+                      height: AppDimens.actionBarHeight,
+                      decoration: BoxDecoration(
+                        color: colors.common.overlayActionBarBg,
+                        borderRadius: BorderRadius.circular(
+                          AppDimens.actionBarRadius,
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(width: AppDimens.actionBarBtnGap),
-                        IconButton(
-                          icon: _saving
-                              ? SizedBox(
-                                  width: AppDimens.actionBarBtnSize,
-                                  height: AppDimens.actionBarBtnSize,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                          IconButton(
+                            icon: _saving
+                                ? SizedBox(
+                                    width: AppDimens.actionBarBtnSize,
+                                    height: AppDimens.actionBarBtnSize,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: colors.common.overlayIcon,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.download,
+                                    size: AppDimens.actionBarBtnSize,
                                     color: colors.common.overlayIcon,
                                   ),
-                                )
-                              : Icon(
-                                  Icons.download,
-                                  size: AppDimens.actionBarBtnSize,
-                                  color: colors.common.overlayIcon,
-                                ),
-                          onPressed: _saveImage,
+                            onPressed: _saveImage,
+                          ),
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                          IconButton(
+                            icon: Icon(
+                              Icons.share,
+                              size: AppDimens.actionBarBtnSize,
+                              color: colors.common.overlayIcon,
+                            ),
+                            onPressed: _shareImage,
+                          ),
+                          SizedBox(width: AppDimens.actionBarBtnGap),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (_saveToastCtrl.value > 0)
+              Positioned(
+                bottom: AppDimens.saveToastBottomMargin,
+                left: 0,
+                right: 0,
+                child: Opacity(
+                  opacity: _saveToastCtrl.value,
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: AppDimens.saveToastHPadding,
+                          vertical: AppDimens.saveToastVPadding,
                         ),
-                        SizedBox(width: AppDimens.actionBarBtnGap),
-                        IconButton(
-                          icon: Icon(
-                            Icons.share,
-                            size: AppDimens.actionBarBtnSize,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(
+                            AppDimens.saveToastRadius,
+                          ),
+                        ),
+                        child: Text(
+                          '已保存至相册',
+                          style: TextStyle(
+                            fontSize: AppDimens.saveToastFontSize,
                             color: colors.common.overlayIcon,
                           ),
-                          onPressed: _shareImage,
-                        ),
-                        SizedBox(width: AppDimens.actionBarBtnGap),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (_saveToastCtrl.value > 0)
-            Positioned(
-              bottom: AppDimens.saveToastBottomMargin,
-              left: 0,
-              right: 0,
-              child: Opacity(
-                opacity: _saveToastCtrl.value,
-                child: Center(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: AppDimens.saveToastHPadding,
-                        vertical: AppDimens.saveToastVPadding,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(
-                          AppDimens.saveToastRadius,
-                        ),
-                      ),
-                      child: Text(
-                        '已保存至相册',
-                        style: TextStyle(
-                          fontSize: AppDimens.saveToastFontSize,
-                          color: colors.common.overlayIcon,
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
