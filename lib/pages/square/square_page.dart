@@ -487,12 +487,18 @@ class SquarePageState extends State<SquarePage> {
         ? AppSquareTopBarTheme.backgroundLight
         : AppSquareTopBarTheme.backgroundDark;
 
-    return PopScope(
-      canPop: ImageOverlay.currentEntry == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) ImageOverlay.closeCurrent();
-      },
-      child: Scaffold(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: topBarBg,
+        statusBarIconBrightness:
+            isLight ? Brightness.dark : Brightness.light,
+      ),
+      child: PopScope(
+        canPop: ImageOverlay.currentEntry == null,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) ImageOverlay.closeCurrent();
+        },
+        child: Scaffold(
         // 回复栏是 OverlayEntry，键盘弹出时不需要 resize 底层列表，避免底边栏被顶动
         resizeToAvoidBottomInset: false,
         body: Container(
@@ -503,7 +509,8 @@ class SquarePageState extends State<SquarePage> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildBody() {
