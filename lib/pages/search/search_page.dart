@@ -341,42 +341,50 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
-    return Scaffold(
-      backgroundColor: colors.common.background,
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _buildSearchBar(colors, onSurface),
-            if (_query.isNotEmpty || _searchCommitted)
-              _buildCategoryBar(colors, onSurface),
-            _buildSearchHistory(colors, onSurface),
-            Expanded(
-              child: Stack(
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () {
-                      if (_filterPanelExpanded) {
-                        setState(() => _filterPanelExpanded = false);
-                      }
-                    },
-                    child: _buildBody(colors),
-                  ),
-                  if ((_query.isNotEmpty || _searchCommitted) &&
-                      _filterPanelExpanded)
-                    Positioned(
-                      top: AppSearchTheme.filterPanelOverlayTop,
-                      left: AppSearchTheme.filterPanelOverlayLeft,
-                      right: AppSearchTheme.filterPanelOverlayRight,
-                      child: _buildFilterPanel(colors, onSurface),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: colors.common.surface,
+        statusBarIconBrightness:
+            isLight ? Brightness.dark : Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: colors.common.background,
+        resizeToAvoidBottomInset: true,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _buildSearchBar(colors, onSurface),
+              if (_query.isNotEmpty || _searchCommitted)
+                _buildCategoryBar(colors, onSurface),
+              _buildSearchHistory(colors, onSurface),
+              Expanded(
+                child: Stack(
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () {
+                        if (_filterPanelExpanded) {
+                          setState(() => _filterPanelExpanded = false);
+                        }
+                      },
+                      child: _buildBody(colors),
                     ),
-                ],
+                    if ((_query.isNotEmpty || _searchCommitted) &&
+                        _filterPanelExpanded)
+                      Positioned(
+                        top: AppSearchTheme.filterPanelOverlayTop,
+                        left: AppSearchTheme.filterPanelOverlayLeft,
+                        right: AppSearchTheme.filterPanelOverlayRight,
+                        child: _buildFilterPanel(colors, onSurface),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
