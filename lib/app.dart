@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'pages/main_shell.dart';
@@ -111,6 +112,19 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
         ),
         extensions: const [AppColors.dark],
       ),
+      builder: (context, child) {
+        final brightness = Theme.of(context).brightness;
+        final bg = Theme.of(context).scaffoldBackgroundColor;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: bg,
+            statusBarIconBrightness: brightness == Brightness.light
+                ? Brightness.dark
+                : Brightness.light,
+          ),
+          child: child!,
+        );
+      },
       home: const MainShell(),
     );
   }

@@ -449,11 +449,19 @@ class _UserPageState extends State<UserPage> {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final isLight = Theme.of(context).brightness == Brightness.light;
 
-    return Scaffold(
-      backgroundColor: isLight
-          ? const Color(0xFFF2F2F2)
-          : const Color(0xFF111111),
-      body: GestureDetector(
+    final pageBg = isLight
+        ? const Color(0xFFF2F2F2)
+        : const Color(0xFF111111);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: pageBg,
+        statusBarIconBrightness:
+            isLight ? Brightness.dark : Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: pageBg,
+        body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {
           if (_editingName && !_submittingName) _exitNameEditing();
@@ -559,7 +567,8 @@ class _UserPageState extends State<UserPage> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   // ---- 个人资料卡片 ----
