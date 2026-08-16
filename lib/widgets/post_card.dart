@@ -1461,25 +1461,7 @@ class _ThumbnailImageState extends State<ThumbnailImage> {
       return Center(child: child);
     }
     if (_bytes != null) {
-      // 按显示尺寸降采样解码，避免把大图整张解到内存
-      final dpr = MediaQuery.of(context).devicePixelRatio;
-      int? cacheWidth;
-      int? cacheHeight;
-      if (widget.constrainSingle) {
-        final w = _displayW ?? defaultMax;
-        final h = _displayH ?? defaultMax;
-        cacheWidth = (w * dpr).round();
-        cacheHeight = (h * dpr).round();
-      } else {
-        cacheWidth = (AppDimens.gridImageSize * dpr).round();
-        cacheHeight = (AppDimens.gridImageSize * dpr).round();
-      }
-      Widget img = Image.memory(
-        _bytes!,
-        fit: widget.fit,
-        cacheWidth: cacheWidth,
-        cacheHeight: cacheHeight,
-      );
+      Widget img = Image.memory(_bytes!, fit: widget.fit);
       if (widget.constrainSingle) {
         final w = _displayW ?? defaultMax;
         final h = _displayH ?? defaultMax;

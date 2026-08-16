@@ -484,7 +484,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                   child: Image.memory(
                     png,
                     width: double.infinity,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     frameBuilder:
                         (context, child, frame, wasSynchronouslyLoaded) {
                           if (frame != null) {
@@ -505,7 +505,7 @@ class _ImageOverlayState extends State<ImageOverlay>
                     child: Image.memory(
                       thumb,
                       width: double.infinity,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
@@ -515,7 +515,6 @@ class _ImageOverlayState extends State<ImageOverlay>
           ),
           minScale: PhotoViewComputedScale.contained,
           maxScale: PhotoViewComputedScale.covered * 3,
-          initialScale: PhotoViewComputedScale.covered,
         );
       },
     );
