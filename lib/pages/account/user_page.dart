@@ -13,6 +13,7 @@ import '../../services/storage.dart';
 import '../../services/timezone_service.dart';
 import '../../services/device_credential_store.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../settings/settings_navigation.dart';
 import '../settings/settings_page.dart';
@@ -458,69 +459,108 @@ class _UserPageState extends State<UserPage> {
           if (_editingName && !_submittingName) _exitNameEditing();
         },
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          child: Column(
             children: [
-              _profileCard(colors, onSurface),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, left: 4, right: 4),
-                  child: Text(
-                    _error!,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: colors.register.errorText,
-                    ),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _profileCard(colors, onSurface),
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, left: 4, right: 4),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.register.errorText,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              const SizedBox(height: 20),
-              _sectionTitle('账户安全', onSurface),
-              _sectionCard(colors, [
-                _tokenTile(colors, onSurface),
-                _navDivider(colors),
-                _resetTokenTile(colors, onSurface),
-              ]),
-              const SizedBox(height: 20),
-              _sectionTitle('应用', onSurface),
-              _sectionCard(colors, [
-                _navTile(
-                  colors,
-                  onSurface,
-                  '设置',
-                  Icons.settings_outlined,
-                  _openSettings,
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: Center(
+                          child: Transform.translate(
+                            offset: Offset(
+                              AppDimens.userSectionsHOffset,
+                              AppDimens.userSectionsVOffset,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _sectionTitle('账户安全', onSurface),
+                                  _sectionCard(colors, [
+                                    _tokenTile(colors, onSurface),
+                                    _navDivider(colors),
+                                    _resetTokenTile(colors, onSurface),
+                                  ]),
+                                  const SizedBox(height: 20),
+                                  _sectionTitle('应用', onSurface),
+                                  _sectionCard(colors, [
+                                    _navTile(
+                                      colors,
+                                      onSurface,
+                                      '设置',
+                                      Icons.settings_outlined,
+                                      _openSettings,
+                                    ),
+                                    if (Platform.isAndroid) ...[
+                                      _navDivider(colors),
+                                      _navTile(
+                                        colors,
+                                        onSurface,
+                                        '更新',
+                                        Icons.system_update_outlined,
+                                        _openVersionUpdate,
+                                      ),
+                                    ],
+                                  ]),
+                                  const SizedBox(height: 20),
+                                  _sectionTitle('账户管理', onSurface),
+                                  _sectionCard(colors, [
+                                    _navTile(
+                                      colors,
+                                      onSurface,
+                                      '设备绑定',
+                                      Icons.devices_outlined,
+                                      _openDeviceBinding,
+                                    ),
+                                    _navDivider(colors),
+                                    _navTile(
+                                      colors,
+                                      onSurface,
+                                      '账户切换',
+                                      Icons.switch_account_outlined,
+                                      _openLoginOther,
+                                    ),
+                                  ]),
+                                  const SizedBox(height: 24),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                if (Platform.isAndroid) ...[
-                  _navDivider(colors),
-                  _navTile(
-                    colors,
-                    onSurface,
-                    '更新',
-                    Icons.system_update_outlined,
-                    _openVersionUpdate,
-                  ),
-                ],
-              ]),
-              const SizedBox(height: 20),
-              _sectionTitle('账户管理', onSurface),
-              _sectionCard(colors, [
-                _navTile(
-                  colors,
-                  onSurface,
-                  '设备绑定',
-                  Icons.devices_outlined,
-                  _openDeviceBinding,
-                ),
-                _navDivider(colors),
-                _navTile(
-                  colors,
-                  onSurface,
-                  '账户切换',
-                  Icons.switch_account_outlined,
-                  _openLoginOther,
-                ),
-              ]),
-              const SizedBox(height: 24),
+              ),
             ],
           ),
         ),
