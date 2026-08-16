@@ -45,36 +45,26 @@ class AppSearchTheme {
   /// 输入框整体固定高度。
   static const double searchBarHeight = 40;
 
-  /// 输入框内部文字上下内边距（配合 isDense 控制垂直居中）。
-  static const double inputVerticalPadding = 1;
-
   /// 搜索图标左侧到输入框左边缘的距离。
   static const double searchIconLeftPadding = 12;
-
-  /// 搜索图标再向右的额外偏移（正值往右移）。
-  static const double searchIconLeftOffset = 5;
 
   /// 搜索图标右侧到输入文字的距离。
   static const double searchIconToTextGap = 2;
 
-  /// 搜索图标上下偏移（正值往下移，负值往上移）。
-  static const double searchIconVerticalOffset = 0;
-
-  /// 搜索图标在输入框内的垂直对齐方式（center/start/end）。
-  static const CrossAxisAlignment searchIconVerticalAlignment =
-      CrossAxisAlignment.center;
-
-  /// 是否使用紧凑模式，true 时输入框高度更贴 contentPadding。
-  static const bool inputIsDense = true;
-
   /// 输入框提示文字字号。
   static const double inputHintFontSize = 16;
+
+  /// 输入框文字字号。
+  static const double inputTextFontSize = 16;
 
   /// 搜索图标大小。
   static const double prefixIconSize = 24;
 
   /// 清空按钮（×）图标大小。
   static const double clearIconSize = 18;
+
+  /// 清空按钮右侧到输入框右边缘的距离。
+  static const double clearIconRightPadding = 10;
 
   /// 右侧「搜索」按钮文字字号。
   static const double searchButtonFontSize = 16;

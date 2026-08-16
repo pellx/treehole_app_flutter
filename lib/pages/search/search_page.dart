@@ -291,16 +291,21 @@ class _SearchPageState extends State<SearchPage> {
 
   void _onSearch() {
     final query = _controller.text.trim();
+    if (query.isEmpty) {
+      if (_query.isNotEmpty) {
+        setState(() => _query = '');
+      }
+      _focusNode.unfocus();
+      return;
+    }
     if (query == _query) {
       _focusNode.unfocus();
       return;
     }
     _query = query;
     _focusNode.unfocus();
-    if (query.isNotEmpty) {
-      HapticFeedback.lightImpact();
-      _addHistory(query);
-    }
+    HapticFeedback.lightImpact();
+    _addHistory(query);
     _loadPosts();
   }
 
@@ -374,104 +379,83 @@ class _SearchPageState extends State<SearchPage> {
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           Expanded(
-            child: SizedBox(
-              height: AppSearchTheme.searchBarHeight,
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _onSearch(),
-                cursorColor: AppSearchTheme.searchAccent,
-                decoration: InputDecoration(
-                  hintText: AppSearchTheme.inputHint,
-                  hintStyle: TextStyle(
-                    color: colors.common.trailingIcon,
-                    fontSize: AppSearchTheme.inputHintFontSize,
+            child: GestureDetector(
+              onTap: () => _focusNode.requestFocus(),
+              child: Container(
+                height: AppSearchTheme.searchBarHeight,
+                decoration: BoxDecoration(
+                  color: colors.common.surface,
+                  borderRadius: BorderRadius.circular(
+                    AppSearchTheme.inputBorderRadius,
                   ),
-                  prefixIcon: const SizedBox.shrink(),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 0,
-                    minHeight: 0,
+                  border: Border.all(
+                    color: colors.common.divider,
+                    width: AppSearchTheme.inputBorderWidth,
                   ),
-                  prefix: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment:
-                        AppSearchTheme.searchIconVerticalAlignment,
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.only(
-                          left: AppSearchTheme.searchIconLeftOffset,
-                          top: AppSearchTheme.searchIconVerticalOffset,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(width: AppSearchTheme.searchIconLeftPadding),
+                    Icon(
+                      Icons.search,
+                      color: colors.common.trailingIcon,
+                      size: AppSearchTheme.prefixIconSize,
+                    ),
+                    SizedBox(width: AppSearchTheme.searchIconToTextGap),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => _onSearch(),
+                        cursorColor: AppSearchTheme.searchAccent,
+                        textAlignVertical: TextAlignVertical.center,
+                        style: TextStyle(
+                          color: onSurface,
+                          fontSize: AppSearchTheme.inputTextFontSize,
                         ),
-                        child: Icon(
-                          Icons.search,
-                          color: colors.common.trailingIcon,
-                          size: AppSearchTheme.prefixIconSize,
+                        decoration: InputDecoration.collapsed(
+                          hintText: AppSearchTheme.inputHint,
+                          hintStyle: TextStyle(
+                            color: colors.common.trailingIcon,
+                            fontSize: AppSearchTheme.inputHintFontSize,
+                          ),
                         ),
                       ),
-                      SizedBox(width: AppSearchTheme.searchIconToTextGap),
-                    ],
-                  ),
-                  suffixIcon: _controller.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: () {
-                            _controller.clear();
-                            if (_query.isNotEmpty) {
-                              _query = '';
-                              _loadPosts();
-                            }
-                          },
+                    ),
+                    if (_controller.text.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          if (_query.isNotEmpty) {
+                            setState(() => _query = '');
+                          }
+                          _controller.clear();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            left: 8,
+                            right: AppSearchTheme.clearIconRightPadding,
+                          ),
                           child: Icon(
                             Icons.clear,
                             color: colors.common.trailingIcon,
                             size: AppSearchTheme.clearIconSize,
                           ),
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: colors.common.surface,
-                  isDense: AppSearchTheme.inputIsDense,
-                  contentPadding: const EdgeInsets.only(
-                    left: AppSearchTheme.searchIconLeftPadding,
-                    top: AppSearchTheme.inputVerticalPadding,
-                    bottom: AppSearchTheme.inputVerticalPadding,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      AppSearchTheme.inputBorderRadius,
-                    ),
-                    borderSide: BorderSide(
-                      color: colors.common.divider,
-                      width: AppSearchTheme.inputBorderWidth,
-                    ),
-                  ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
           const SizedBox(width: AppSearchTheme.searchButtonLeftGap),
           TextButton(
-            onPressed: _onSearch,
+            onPressed: _controller.text.trim().isNotEmpty ? _onSearch : null,
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
+              foregroundColor: AppSearchTheme.searchButtonColor,
+              disabledForegroundColor: colors.common.trailingIcon,
               minimumSize: const Size(
                 AppSearchTheme.searchButtonMinWidth,
                 AppSearchTheme.searchButtonMinHeight,
@@ -480,7 +464,6 @@ class _SearchPageState extends State<SearchPage> {
             child: Text(
               AppSearchTheme.searchButtonText,
               style: TextStyle(
-                color: AppSearchTheme.searchButtonColor,
                 fontSize: AppSearchTheme.searchButtonFontSize,
                 fontWeight: AppSearchTheme.searchButtonFontWeight,
               ),
