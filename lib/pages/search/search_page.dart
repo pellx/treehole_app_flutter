@@ -44,6 +44,7 @@ class _SearchPageState extends State<SearchPage> {
   int _selectedSortIndex = 0;
   int _selectedTimeIndex = 0;
   bool _filterPanelExpanded = false;
+  bool _searchCommitted = false;
   DateTime? _customStart;
   DateTime? _customEnd;
 
@@ -292,6 +293,7 @@ class _SearchPageState extends State<SearchPage> {
   void _onSearch() {
     final query = _controller.text.trim();
     _query = query;
+    _searchCommitted = true;
     _focusNode.unfocus();
     if (query.isNotEmpty) {
       HapticFeedback.lightImpact();
@@ -319,7 +321,8 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           children: [
             _buildSearchBar(colors, onSurface),
-            if (_query.isNotEmpty) _buildCategoryBar(colors, onSurface),
+            if (_query.isNotEmpty || _searchCommitted)
+              _buildCategoryBar(colors, onSurface),
             _buildSearchHistory(colors, onSurface),
             Expanded(
               child: Stack(
@@ -333,7 +336,8 @@ class _SearchPageState extends State<SearchPage> {
                     },
                     child: _buildBody(colors),
                   ),
-                  if (_query.isNotEmpty && _filterPanelExpanded)
+                  if ((_query.isNotEmpty || _searchCommitted) &&
+                      _filterPanelExpanded)
                     Positioned(
                       top: AppSearchTheme.filterPanelOverlayTop,
                       left: AppSearchTheme.filterPanelOverlayLeft,
@@ -407,7 +411,9 @@ class _SearchPageState extends State<SearchPage> {
                           fontSize: AppSearchTheme.inputTextFontSize,
                         ),
                         decoration: InputDecoration.collapsed(
-                          hintText: AppSearchTheme.inputHint,
+                          hintText: _searchCommitted
+                              ? null
+                              : AppSearchTheme.inputHint,
                           hintStyle: TextStyle(
                             color: colors.common.trailingIcon,
                             fontSize: AppSearchTheme.inputHintFontSize,
@@ -415,13 +421,15 @@ class _SearchPageState extends State<SearchPage> {
                         ),
                       ),
                     ),
-                    if (_controller.text.isNotEmpty)
+                    if (_controller.text.isNotEmpty || _searchCommitted)
                       GestureDetector(
                         onTap: () {
-                          if (_query.isNotEmpty) {
-                            setState(() => _query = '');
-                          }
+                          setState(() {
+                            _query = '';
+                            _searchCommitted = false;
+                          });
                           _controller.clear();
+                          _focusNode.unfocus();
                         },
                         child: Padding(
                           padding: const EdgeInsets.only(
@@ -642,47 +650,73 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
-    return Container(
-      width: double.infinity,
-      padding: AppSearchTheme.filterPanelPadding,
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(
-          bottom: BorderSide(
-            color: colors.common.divider,
-            width: AppSearchTheme.filterPanelBottomBorderWidth,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final panelInnerWidth =
+            constraints.maxWidth -
+            AppSearchTheme.filterPanelPadding.left -
+            AppSearchTheme.filterPanelPadding.right;
+        final chipWidth =
+            (panelInnerWidth -
+                (AppSearchTheme.filterPanelChipCrossAxisCount - 1) *
+                    AppSearchTheme.filterPanelChipSpacing) /
+            AppSearchTheme.filterPanelChipCrossAxisCount;
+        final chipHeight =
+            chipWidth / AppSearchTheme.filterPanelChipChildAspectRatio;
+
+        return Container(
+          width: double.infinity,
+          padding: AppSearchTheme.filterPanelPadding,
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border(
+              bottom: BorderSide(
+                color: colors.common.divider,
+                width: AppSearchTheme.filterPanelBottomBorderWidth,
+              ),
+            ),
           ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          sectionTitle('排序方式'),
-          chipGrid(
-            options: _sortOptions,
-            selectedIndex: _selectedSortIndex,
-            onSelected: (i) => _selectedSortIndex = i,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              sectionTitle('排序方式'),
+              chipGrid(
+                options: _sortOptions,
+                selectedIndex: _selectedSortIndex,
+                onSelected: (i) => _selectedSortIndex = i,
+              ),
+              SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
+              sectionTitle('发布时间'),
+              chipGrid(
+                options: _timeOptions,
+                selectedIndex: _selectedTimeIndex,
+                onSelected: (i) {
+                  _selectedTimeIndex = i;
+                  _customStart = null;
+                  _customEnd = null;
+                },
+              ),
+              SizedBox(height: AppSearchTheme.filterPanelDateRangeTopGap),
+              _buildDateRangeRow(
+                colors: colors,
+                onSurface: onSurface,
+                bg: bg,
+                chipHeight: chipHeight,
+              ),
+            ],
           ),
-          SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
-          sectionTitle('发布时间'),
-          chipGrid(
-            options: _timeOptions,
-            selectedIndex: _selectedTimeIndex,
-            onSelected: (i) {
-              _selectedTimeIndex = i;
-              _customStart = null;
-              _customEnd = null;
-            },
-          ),
-          SizedBox(height: AppSearchTheme.filterPanelDateRangeTopGap),
-          _buildDateRangeRow(colors, onSurface, bg),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildDateRangeRow(AppColors colors, Color onSurface, Color bg) {
+  Widget _buildDateRangeRow({
+    required AppColors colors,
+    required Color onSurface,
+    required Color bg,
+    required double chipHeight,
+  }) {
     Widget chip({
       required String label,
       required DateTime? date,
@@ -693,6 +727,7 @@ class _SearchPageState extends State<SearchPage> {
         child: GestureDetector(
           onTap: onTap,
           child: Container(
+            height: chipHeight,
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(
               vertical: AppSearchTheme.filterPanelChipVerticalPadding,
@@ -760,7 +795,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildSearchHistory(AppColors colors, Color onSurface) {
-    if (_query.isNotEmpty || _history.isEmpty) {
+    if (_query.isNotEmpty || _searchCommitted || _history.isEmpty) {
       return const SizedBox.shrink();
     }
     final chipBg = AppSearchTheme.chipBg(context);
@@ -867,7 +902,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildBody(AppColors colors) {
-    if (_query.isEmpty) {
+    if (_query.isEmpty && !_searchCommitted) {
       return const SizedBox.shrink();
     }
     if (_loading) {

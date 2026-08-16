@@ -175,7 +175,7 @@ class AppSearchTheme {
   /// 筛选面板内边距。
   static const EdgeInsets filterPanelPadding = EdgeInsets.fromLTRB(
     7,
-    4,
+    7,
     7,
     7,
   );
@@ -194,10 +194,10 @@ class AppSearchTheme {
   static const FontWeight filterPanelTitleFontWeight = FontWeight.w600;
 
   /// 筛选分区标题与下方 chip 的垂直间距。
-  static const double filterPanelTitleBottomGap = 0;
+  static const double filterPanelTitleBottomGap = 4;
 
   /// 两个筛选分区之间的垂直间距。
-  static const double filterPanelSectionSpacing = 18;
+  static const double filterPanelSectionSpacing = 3;
 
   /// 每行固定显示的 chip 数量（排序/发布时间均一行 4 个）。
   static const int filterPanelChipCrossAxisCount = 4;
@@ -206,16 +206,16 @@ class AppSearchTheme {
   static const double filterPanelChipChildAspectRatio = 2.6;
 
   /// chip 之间的水平间距。
-  static const double filterPanelChipSpacing = 10;
+  static const double filterPanelChipSpacing = 6;
 
   /// chip 之间的垂直间距。
-  static const double filterPanelChipRunSpacing = 10;
+  static const double filterPanelChipRunSpacing = 0;
 
   /// chip 水平内边距。
-  static const double filterPanelChipHorizontalPadding = 14;
+  static const double filterPanelChipHorizontalPadding = 2;
 
   /// chip 垂直内边距。
-  static const double filterPanelChipVerticalPadding = 8;
+  static const double filterPanelChipVerticalPadding = 2;
 
   /// chip 圆角半径。
   static const double filterPanelChipBorderRadius = 6;
