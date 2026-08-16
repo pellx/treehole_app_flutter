@@ -27,9 +27,9 @@ class AppSearchTheme {
   static const double searchBarHeight = 40;
   static const double inputVerticalPadding = 10;
   static const double searchIconLeftPadding = 12;
-  static const double searchIconLeftOffset = 3;
-  static const double searchIconToTextGap = 3;
-  static const double searchIconVerticalOffset = 100;
+  static const double searchIconLeftOffset = 5;
+  static const double searchIconToTextGap = 2;
+  static const double searchIconVerticalOffset = 6;
   static const CrossAxisAlignment searchIconVerticalAlignment =
       CrossAxisAlignment.center;
   static const bool inputIsDense = true;
@@ -55,13 +55,13 @@ class AppSearchTheme {
   static const double historyClearIconAlpha = 0.3;
   static const double historyExpandIconSize = 20;
   static const double historyExpandIconAlpha = 0.35;
-  static const double historyDividerWidth = 1;
+  static const double historyDividerWidth = 0;
   static const double historyDividerHeight = 16;
   static const double historyDividerHorizontalMargin = 4;
   static const double historyIconButtonSize = 36;
   static const double historyWrapSpacing = 12;
   static const double historyWrapRunSpacing = 12;
-  static const double historyChipHorizontalPadding = 0;
+  static const double historyChipHorizontalPadding = 7;
   static const double historyChipVerticalPadding = 8;
   static const double historyChipBorderRadius = 6;
   static const double historyChipFontSize = 14;

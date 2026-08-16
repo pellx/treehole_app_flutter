@@ -65,6 +65,29 @@ class _SearchPageState extends State<SearchPage> {
     _loadHistory();
   }
 
+  Future<void> _showClearHistoryConfirm() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清空搜索历史'),
+        content: const Text('确定要清空所有搜索历史吗？此操作无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _clearHistory();
+    }
+  }
+
   Future<void> _addHistory(String query) async {
     await PostStorage.addSearchHistory(query);
     _loadHistory();
@@ -318,7 +341,7 @@ class _SearchPageState extends State<SearchPage> {
                   color: onSurface,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               IconButton(
                 icon: Icon(
                   Icons.delete_outline,
@@ -332,7 +355,7 @@ class _SearchPageState extends State<SearchPage> {
                   minWidth: AppSearchTheme.historyIconButtonSize,
                   minHeight: AppSearchTheme.historyIconButtonSize,
                 ),
-                onPressed: _clearHistory,
+                onPressed: _showClearHistoryConfirm,
               ),
             ],
           ),
