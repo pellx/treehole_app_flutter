@@ -25,11 +25,11 @@ class AppSearchTheme {
   static const double inputBorderRadius = 22;
   static const double inputBorderWidth = 1.4;
   static const double searchBarHeight = 40;
-  static const double inputVerticalPadding = 10;
+  static const double inputVerticalPadding = 1;
   static const double searchIconLeftPadding = 12;
   static const double searchIconLeftOffset = 5;
   static const double searchIconToTextGap = 2;
-  static const double searchIconVerticalOffset = 6;
+  static const double searchIconVerticalOffset = 0;
   static const CrossAxisAlignment searchIconVerticalAlignment =
       CrossAxisAlignment.center;
   static const bool inputIsDense = true;
