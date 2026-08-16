@@ -30,7 +30,7 @@ class _SearchPageState extends State<SearchPage> {
   String? _error;
   String _query = '';
   List<String> _history = [];
-  bool _historyExpanded = false;
+  int _deletingIndex = -1;
 
   @override
   void initState() {
@@ -54,7 +54,15 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _loadHistory() async {
     final history = PostStorage.getSearchHistory();
-    setState(() => _history = history);
+    setState(() {
+      _history = history;
+      _deletingIndex = -1;
+    });
+  }
+
+  Future<void> _deleteSingleHistory(String query) async {
+    await PostStorage.removeSearchHistory(query);
+    _loadHistory();
   }
 
   Future<void> _addHistory(String query) async {
@@ -280,11 +288,6 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildSearchHistory(AppColors colors, Color onSurface) {
     if (_history.isEmpty) return const SizedBox.shrink();
-    final canExpand =
-        _history.length > AppSearchTheme.historyCollapseThreshold;
-    final display = _historyExpanded || !canExpand
-        ? _history
-        : _history.take(AppSearchTheme.historyCollapseThreshold).toList();
     final chipBg = AppSearchTheme.chipBg(context);
 
     return Container(
@@ -326,47 +329,19 @@ class _SearchPageState extends State<SearchPage> {
                 ),
                 onPressed: _clearHistory,
               ),
-              Container(
-                width: AppSearchTheme.historyDividerWidth,
-                height: AppSearchTheme.historyDividerHeight,
-                margin: const EdgeInsets.symmetric(
-                  horizontal: AppSearchTheme.historyDividerHorizontalMargin,
-                ),
-                color: colors.common.divider,
-              ),
-              if (canExpand)
-                IconButton(
-                  icon: AnimatedRotation(
-                    turns: _historyExpanded ? 0.5 : 0,
-                    duration: AppSearchTheme.historyExpandAnimationDuration,
-                    child: Icon(
-                      Icons.keyboard_arrow_down,
-                      size: AppSearchTheme.historyExpandIconSize,
-                      color: onSurface.withValues(
-                        alpha: AppSearchTheme.historyExpandIconAlpha,
-                      ),
-                    ),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: AppSearchTheme.historyIconButtonSize,
-                    minHeight: AppSearchTheme.historyIconButtonSize,
-                  ),
-                  onPressed: () => setState(
-                    () => _historyExpanded = !_historyExpanded,
-                  ),
-                )
-              else
-                const SizedBox(width: AppSearchTheme.historyIconButtonSize),
             ],
           ),
           SizedBox(height: AppSearchTheme.historyTitleChipGap),
           Wrap(
             spacing: AppSearchTheme.historyWrapSpacing,
             runSpacing: AppSearchTheme.historyWrapRunSpacing,
-            children: display.map((q) {
+            children: _history.asMap().entries.map((entry) {
+              final index = entry.key;
+              final q = entry.value;
+              final showDelete = _deletingIndex == index;
               return GestureDetector(
                 onTap: () => _onHistoryTap(q),
+                onLongPress: () => setState(() => _deletingIndex = index),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSearchTheme.historyChipHorizontalPadding,
@@ -378,16 +353,34 @@ class _SearchPageState extends State<SearchPage> {
                       AppSearchTheme.historyChipBorderRadius,
                     ),
                   ),
-                  child: Text(
-                    q,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppSearchTheme.historyChipFontSize,
-                      color: onSurface.withValues(
-                        alpha: AppSearchTheme.historyChipTextAlpha,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        q,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppSearchTheme.historyChipFontSize,
+                          color: onSurface.withValues(
+                            alpha: AppSearchTheme.historyChipTextAlpha,
+                          ),
+                        ),
                       ),
-                    ),
+                      if (showDelete)
+                        GestureDetector(
+                          onTap: () => _deleteSingleHistory(q),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               );

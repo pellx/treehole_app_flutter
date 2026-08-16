@@ -286,6 +286,12 @@ class PostStorage {
     await _searchHistoryBox.delete('queries');
   }
 
+  static Future<void> removeSearchHistory(String query) async {
+    final history = getSearchHistory();
+    history.remove(query);
+    await saveSearchHistory(history);
+  }
+
   // ---- 自定义颜色 ----
 
   static Map<String, int> getCustomColors() {
