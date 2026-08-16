@@ -590,64 +590,66 @@ class _SearchPageState extends State<SearchPage> {
       required List<String> options,
       required int selectedIndex,
       required ValueChanged<int> onSelected,
+      required double chipHeight,
     }) {
-      return GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: AppSearchTheme.filterPanelChipCrossAxisCount,
-        mainAxisSpacing: AppSearchTheme.filterPanelChipRunSpacing,
-        crossAxisSpacing: AppSearchTheme.filterPanelChipSpacing,
-        childAspectRatio: AppSearchTheme.filterPanelChipChildAspectRatio,
-        children: options.asMap().entries.map((entry) {
-          final index = entry.key;
-          final label = entry.value;
-          final selected = index == selectedIndex;
-          return GestureDetector(
-            onTap: () {
-              if (selected) return;
-              onSelected(index);
-              setState(() {});
-              if (_query.isNotEmpty) _loadPosts();
-            },
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSearchTheme.filterPanelChipHorizontalPadding,
-                vertical: AppSearchTheme.filterPanelChipVerticalPadding,
-              ),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppSearchTheme.searchAccent.withValues(alpha: 0.1)
-                    : bg,
-                borderRadius: BorderRadius.circular(
-                  AppSearchTheme.filterPanelChipBorderRadius,
+      final children = <Widget>[];
+      for (var i = 0; i < options.length; i++) {
+        final label = options[i];
+        final selected = i == selectedIndex;
+        if (i > 0) {
+          children.add(SizedBox(width: AppSearchTheme.filterPanelChipSpacing));
+        }
+        children.add(
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (selected) return;
+                onSelected(i);
+                setState(() {});
+                if (_query.isNotEmpty || _searchCommitted) _loadPosts();
+              },
+              child: Container(
+                height: chipHeight,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSearchTheme.filterPanelChipHorizontalPadding,
+                  vertical: AppSearchTheme.filterPanelChipVerticalPadding,
                 ),
-                border: Border.all(
+                decoration: BoxDecoration(
                   color: selected
-                      ? AppSearchTheme.searchAccent
-                      : colors.common.divider,
-                  width: selected
-                      ? AppSearchTheme.filterPanelSelectedBorderWidth
-                      : AppSearchTheme.filterPanelUnselectedBorderWidth,
+                      ? AppSearchTheme.searchAccent.withValues(alpha: 0.1)
+                      : bg,
+                  borderRadius: BorderRadius.circular(
+                    AppSearchTheme.filterPanelChipBorderRadius,
+                  ),
+                  border: Border.all(
+                    color: selected
+                        ? AppSearchTheme.searchAccent
+                        : colors.common.divider,
+                    width: selected
+                        ? AppSearchTheme.filterPanelSelectedBorderWidth
+                        : AppSearchTheme.filterPanelUnselectedBorderWidth,
+                  ),
                 ),
-              ),
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: AppSearchTheme.filterPanelChipFontSize,
-                  color: selected
-                      ? AppSearchTheme.searchAccent
-                      : onSurface.withValues(alpha: 0.75),
-                  fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: AppSearchTheme.filterPanelChipFontSize,
+                    color: selected
+                        ? AppSearchTheme.searchAccent
+                        : onSurface.withValues(alpha: 0.75),
+                    fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+                  ),
                 ),
               ),
             ),
-          );
-        }).toList(),
-      );
+          ),
+        );
+      }
+      return Row(children: children);
     }
 
     return LayoutBuilder(
@@ -685,6 +687,7 @@ class _SearchPageState extends State<SearchPage> {
                 options: _sortOptions,
                 selectedIndex: _selectedSortIndex,
                 onSelected: (i) => _selectedSortIndex = i,
+                chipHeight: chipHeight,
               ),
               SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
               sectionTitle('发布时间'),
@@ -696,6 +699,7 @@ class _SearchPageState extends State<SearchPage> {
                   _customStart = null;
                   _customEnd = null;
                 },
+                chipHeight: chipHeight,
               ),
               SizedBox(height: AppSearchTheme.filterPanelDateRangeTopGap),
               _buildDateRangeRow(

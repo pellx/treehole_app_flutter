@@ -194,7 +194,7 @@ class AppSearchTheme {
   static const FontWeight filterPanelTitleFontWeight = FontWeight.w600;
 
   /// 筛选分区标题与下方 chip 的垂直间距。
-  static const double filterPanelTitleBottomGap = 4;
+  static const double filterPanelTitleBottomGap = 6;
 
   /// 两个筛选分区之间的垂直间距。
   static const double filterPanelSectionSpacing = 3;
@@ -231,7 +231,7 @@ class AppSearchTheme {
 
   // ---- 筛选按钮（顶边栏右侧漏斗图标） ----
   /// 筛选按钮容器水平内边距。
-  static const double filterButtonHorizontalPadding = 12;
+  static const double filterButtonHorizontalPadding = 14;
 
   /// 筛选按钮图标大小。
   static const double filterButtonIconSize = 22;
@@ -241,7 +241,7 @@ class AppSearchTheme {
 
   // ---- 自定义时间区域（属于「发布时间」块） ----
   /// 时间 chip 与下方自定义日期选择行之间的垂直间距。
-  static const double filterPanelDateRangeTopGap = 10;
+  static const double filterPanelDateRangeTopGap = 0;
 
   /// 开始/结束日期 chip 与中间「至」字之间的水平间距。
   static const double filterPanelDateRangeChipSpacing = 10;
