@@ -39,6 +39,12 @@ class _SearchPageState extends State<SearchPage> {
   final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
   int _selectedCategoryIndex = 0;
 
+  final _sortOptions = ['默认排序', '最新发布', '最新回复', '最先发布', '回复最多'];
+  final _timeOptions = ['不限时间', '最近一天', '最近一周', '最近一月', '最近半年'];
+  int _selectedSortIndex = 0;
+  int _selectedTimeIndex = 0;
+  bool _filterPanelExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -118,6 +124,20 @@ class _SearchPageState extends State<SearchPage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
+  static int _compareCreatedAtDesc(Post a, Post b) {
+    final da = DateTime.tryParse(a.createdAt);
+    final db = DateTime.tryParse(b.createdAt);
+    if (da == null || db == null) return 0;
+    return db.compareTo(da);
+  }
+
+  static int _compareCreatedAtAsc(Post a, Post b) {
+    final da = DateTime.tryParse(a.createdAt);
+    final db = DateTime.tryParse(b.createdAt);
+    if (da == null || db == null) return 0;
+    return da.compareTo(db);
+  }
+
   Future<void> _loadHistory() async {
     final history = PostStorage.getSearchHistory();
     setState(() {
@@ -174,13 +194,47 @@ class _SearchPageState extends State<SearchPage> {
           if (post != null) posts.add(post);
         }),
       );
-      for (final post in posts) {
+      // 发布时间筛选（客户端）
+      final now = DateTime.now();
+      var filtered = posts.where((p) {
+        if (_selectedTimeIndex == 0) return true;
+        final created = DateTime.tryParse(p.createdAt);
+        if (created == null) return true;
+        final days = _selectedTimeIndex == 1
+            ? 1
+            : _selectedTimeIndex == 2
+                ? 7
+                : _selectedTimeIndex == 3
+                    ? 30
+                    : 180;
+        return now.difference(created).inDays <= days;
+      }).toList();
+
+      // 排序方式（客户端）
+      switch (_selectedSortIndex) {
+        case 2: // 最新回复
+          filtered.sort((a, b) {
+            final cmp = b.comments.length.compareTo(a.comments.length);
+            if (cmp != 0) return cmp;
+            return _compareCreatedAtDesc(a, b);
+          });
+        case 3: // 最先发布
+          filtered.sort(_compareCreatedAtAsc);
+        case 4: // 回复最多
+          filtered.sort((a, b) => b.comments.length.compareTo(a.comments.length));
+        case 0: // 默认排序
+        case 1: // 最新发布
+        default:
+          filtered.sort(_compareCreatedAtDesc);
+      }
+
+      for (final post in filtered) {
         _comments[post.id] ??= PostStorage.getComments(post.comments);
         _postsNeedCommentRefresh.add(post.id);
       }
       if (mounted) {
         setState(() {
-          _posts = posts;
+          _posts = filtered;
           _loading = false;
         });
       }
@@ -229,8 +283,20 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             _buildSearchBar(colors, onSurface),
             if (_query.isNotEmpty) _buildCategoryBar(colors, onSurface),
+            if (_query.isNotEmpty && _filterPanelExpanded)
+              _buildFilterPanel(colors, onSurface),
             _buildSearchHistory(colors, onSurface),
-            Expanded(child: _buildBody(colors)),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (_filterPanelExpanded) {
+                    setState(() => _filterPanelExpanded = false);
+                  }
+                },
+                child: _buildBody(colors),
+              ),
+            ),
           ],
         ),
       ),
@@ -382,63 +448,178 @@ class _SearchPageState extends State<SearchPage> {
     return Container(
       color: bg,
       height: AppSquareTopBarTheme.height,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _categories.asMap().entries.map((entry) {
-            final index = entry.key;
-            final label = entry.value;
-            final selected = index == _selectedCategoryIndex;
-            return GestureDetector(
-              onTap: () {
-                if (_selectedCategoryIndex == index) return;
-                setState(() => _selectedCategoryIndex = index);
-                if (_query.isNotEmpty) _loadPosts();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSquareTopBarTheme.itemHorizontalPadding,
-                ),
-                alignment: Alignment.bottomCenter,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: AppSquareTopBarTheme.fontSize,
-                        fontWeight: selected
-                            ? AppSquareTopBarTheme.selectedFontWeight
-                            : AppSquareTopBarTheme.unselectedFontWeight,
-                        color: selected
-                            ? colors.common.green
-                            : onSurface.withValues(alpha: 0.7),
+      child: Row(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _categories.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final label = entry.value;
+                  final selected = index == _selectedCategoryIndex;
+                  return GestureDetector(
+                    onTap: () {
+                      if (_selectedCategoryIndex == index) return;
+                      setState(() => _selectedCategoryIndex = index);
+                      if (_query.isNotEmpty) _loadPosts();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSquareTopBarTheme.itemHorizontalPadding,
+                      ),
+                      alignment: Alignment.bottomCenter,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: AppSquareTopBarTheme.fontSize,
+                              fontWeight: selected
+                                  ? AppSquareTopBarTheme.selectedFontWeight
+                                  : AppSquareTopBarTheme.unselectedFontWeight,
+                              color: selected
+                                  ? colors.common.green
+                                  : onSurface.withValues(alpha: 0.7),
+                            ),
+                          ),
+                          SizedBox(
+                            height: AppSquareTopBarTheme.indicatorTopSpacing,
+                          ),
+                          Container(
+                            width: AppSquareTopBarTheme.indicatorWidth,
+                            height: AppSquareTopBarTheme.indicatorHeight,
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? colors.common.green
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(
+                                AppSquareTopBarTheme.indicatorBorderRadius,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            height: AppSquareTopBarTheme.indicatorBottomSpacing,
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(
-                      height: AppSquareTopBarTheme.indicatorTopSpacing,
-                    ),
-                    Container(
-                      width: AppSquareTopBarTheme.indicatorWidth,
-                      height: AppSquareTopBarTheme.indicatorHeight,
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? colors.common.green
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(
-                          AppSquareTopBarTheme.indicatorBorderRadius,
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: AppSquareTopBarTheme.indicatorBottomSpacing,
-                    ),
-                  ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(
+              () => _filterPanelExpanded = !_filterPanelExpanded,
+            ),
+            child: Container(
+              color: bg,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.filter_alt_outlined,
+                size: 22,
+                color: onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel(AppColors colors, Color onSurface) {
+    final bg = Theme.of(context).brightness == Brightness.light
+        ? Colors.white
+        : colors.common.surface;
+
+    Widget sectionTitle(String title) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: onSurface.withValues(alpha: 0.9),
+          ),
+        ),
+      );
+    }
+
+    Widget chipGrid({
+      required List<String> options,
+      required int selectedIndex,
+      required ValueChanged<int> onSelected,
+    }) {
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: options.asMap().entries.map((entry) {
+          final index = entry.key;
+          final label = entry.value;
+          final selected = index == selectedIndex;
+          return GestureDetector(
+            onTap: () {
+              if (selected) return;
+              onSelected(index);
+              setState(() {});
+              if (_query.isNotEmpty) _loadPosts();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppSearchTheme.searchAccent.withValues(alpha: 0.1)
+                    : bg,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: selected
+                      ? AppSearchTheme.searchAccent
+                      : colors.common.divider,
+                  width: selected ? 1.2 : 0.8,
                 ),
               ),
-            );
-          }).toList(),
-        ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: selected
+                      ? AppSearchTheme.searchAccent
+                      : onSurface.withValues(alpha: 0.75),
+                  fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      );
+    }
+
+    return Container(
+      color: bg,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          sectionTitle('排序方式'),
+          chipGrid(
+            options: _sortOptions,
+            selectedIndex: _selectedSortIndex,
+            onSelected: (i) => _selectedSortIndex = i,
+          ),
+          const SizedBox(height: 18),
+          sectionTitle('发布时间'),
+          chipGrid(
+            options: _timeOptions,
+            selectedIndex: _selectedTimeIndex,
+            onSelected: (i) => _selectedTimeIndex = i,
+          ),
+        ],
       ),
     );
   }
