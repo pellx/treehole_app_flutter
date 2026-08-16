@@ -163,6 +163,7 @@ class _PostCardState extends State<PostCard> {
         children: [
           Container(
             decoration: BoxDecoration(
+              color: pc.cardBackground,
               border: Border.all(
                 color: pc.cardBorder,
                 width: AppDimens.cardBorderWidth,
