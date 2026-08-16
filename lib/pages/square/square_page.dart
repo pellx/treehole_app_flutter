@@ -59,30 +59,39 @@ class _SquarePageState extends State<SquarePage> {
 
   /// 当前左侧拉出进度 0~1
   double get _leftPullProgress =>
-      (_leftPullDistance / AppSquareRefreshTheme.pullThreshold)
-          .clamp(0.0, 1.0);
+      (_leftPullDistance / AppSquareRefreshTheme.pullThreshold).clamp(0.0, 1.0);
 
   final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
-  final _categoryKeywords = {
-    '问答': ['问', '求助', '怎么办', '帮忙', '求', '？', '?'],
-    '资料': ['资料', '资源', '下载', '链接', '文件', '附件', '教程', '攻略'],
-    '兴趣': ['兴趣', '闲聊', '吐槽', '八卦', '聊聊', '讨论', '经验', '分享'],
-    '梗图': ['梗', '图', '图片', '表情包', '笑', 'meme'],
-  };
 
-  List<Post> get _filteredPosts {
-    final category = _categories[_selectedCategoryIndex];
-    if (category == '默认') return _posts;
-    final keywords = _categoryKeywords[category] ?? [];
-    return _posts.where((p) {
-      final text = '${p.title} ${p.content}'.toLowerCase();
-      return keywords.any((k) => text.contains(k));
-    }).toList();
+  List<Post> get _filteredPosts => _posts;
+
+  String? get _currentCategory {
+    final index = _selectedCategoryIndex;
+    if (index == 0) return null;
+    return _categories[index];
   }
 
   void _onCategoryTap(int index) {
+    if (_selectedCategoryIndex == index) return;
     HapticFeedback.lightImpact();
     setState(() => _selectedCategoryIndex = index);
+    _reloadCategory();
+  }
+
+  Future<void> _reloadCategory() async {
+    setState(() {
+      _posts = [];
+      _allIds = [];
+      _loadedCount = 0;
+      _comments.clear();
+      _postsNeedCommentRefresh.clear();
+      _loading = true;
+      _error = null;
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await _initLoad();
   }
 
   void _onLeftPullEnd() {
@@ -147,11 +156,13 @@ class _SquarePageState extends State<SquarePage> {
   //
   Future<void> _initLoad() async {
     // 1. 获取最新 ID 列表
+    final category = _currentCategory;
     try {
-      _allIds = await ApiService.getIdList();
-      await PostStorage.saveIdList(_allIds);
+      _allIds = await ApiService.getIdList(category: category);
+      // 只有「默认」才覆盖全局缓存
+      if (category == null) await PostStorage.saveIdList(_allIds);
     } catch (_) {
-      _allIds = PostStorage.getIdList(); // API 失败，用本地缓存
+      _allIds = category == null ? PostStorage.getIdList() : [];
     }
 
     if (_allIds.isEmpty) {
@@ -248,11 +259,12 @@ class _SquarePageState extends State<SquarePage> {
     final stopwatch = Stopwatch()..start();
     _loading = true;
     List<int> newIds;
+    final category = _currentCategory;
     try {
-      newIds = await ApiService.getIdList();
-      await PostStorage.saveIdList(newIds);
+      newIds = await ApiService.getIdList(category: category);
+      if (category == null) await PostStorage.saveIdList(newIds);
     } catch (_) {
-      newIds = PostStorage.getIdList();
+      newIds = category == null ? PostStorage.getIdList() : [];
     }
     if (newIds.isEmpty) {
       final elapsed = stopwatch.elapsedMilliseconds;
@@ -407,7 +419,8 @@ class _SquarePageState extends State<SquarePage> {
     final idx = _posts.indexWhere((p) => p.id == fresh.id);
     if (idx < 0) return;
     final old = _posts[idx];
-    final same = old.author == fresh.author &&
+    final same =
+        old.author == fresh.author &&
         old.isAnonymous == fresh.isAnonymous &&
         old.updateAt == fresh.updateAt &&
         old.title == fresh.title &&
@@ -494,7 +507,9 @@ class _SquarePageState extends State<SquarePage> {
         child: CustomScrollView(
           slivers: [
             topBar,
-            const SliverFillRemaining(child: AppLoadingCenter(message: '加载中...')),
+            const SliverFillRemaining(
+              child: AppLoadingCenter(message: '加载中...'),
+            ),
           ],
         ),
       );
@@ -535,62 +550,63 @@ class _SquarePageState extends State<SquarePage> {
       color: colors.common.background,
       child: NotificationListener<ScrollNotification>(
         onNotification: (n) {
-          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
+          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 &&
+              !_loading) {
             _loadMore();
           }
           return false;
         },
         child: CustomScrollView(
-        controller: _scrollController,
-        // 使用 ClampingScrollPhysics，避免在顶部继续下拉出现空白/回弹，
-        // 从而让左侧拉出刷新球成为唯一的下拉刷新入口。
-        physics: const ClampingScrollPhysics(),
-        slivers: [
-          topBar,
-          if (posts.isEmpty)
-            const SliverFillRemaining(
-              child: AppEmptyState(
-                message: '该分类下暂无帖子',
-                icon: Icons.inbox_outlined,
-              ),
-            )
-          else
-            SliverPadding(
-              // 顶部间距控制第一个卡片与顶栏之间的距离；
-              // 卡片之间的间距由 PostCard 底部 margin 控制。
-              padding: EdgeInsets.fromLTRB(
-                AppDimens.listPaddingLeft,
-                AppSquareTopBarTheme.postListTopSpacing,
-                AppDimens.listPaddingRight,
-                AppDimens.listPaddingBottom,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(
-                  posts
-                      .map(
-                        (p) => PostCard(
-                          key: ValueKey(p.id),
-                          post: p,
-                          comments: _comments[p.id] ?? [],
-                          onNeedCommentRefresh: () =>
-                              _onNeedCommentRefresh(p.id),
-                          onRefreshPost: () => _refreshSinglePost(p),
-                          onCommentCreated: (cmt) {
-                            setState(() {
-                              _comments[p.id] ??= [];
-                              _comments[p.id] = [..._comments[p.id]!, cmt];
-                            });
-                          },
-                        ),
-                      )
-                      .toList(),
+          controller: _scrollController,
+          // 使用 ClampingScrollPhysics，避免在顶部继续下拉出现空白/回弹，
+          // 从而让左侧拉出刷新球成为唯一的下拉刷新入口。
+          physics: const ClampingScrollPhysics(),
+          slivers: [
+            topBar,
+            if (posts.isEmpty)
+              const SliverFillRemaining(
+                child: AppEmptyState(
+                  message: '该分类下暂无帖子',
+                  icon: Icons.inbox_outlined,
+                ),
+              )
+            else
+              SliverPadding(
+                // 顶部间距控制第一个卡片与顶栏之间的距离；
+                // 卡片之间的间距由 PostCard 底部 margin 控制。
+                padding: EdgeInsets.fromLTRB(
+                  AppDimens.listPaddingLeft,
+                  AppSquareTopBarTheme.postListTopSpacing,
+                  AppDimens.listPaddingRight,
+                  AppDimens.listPaddingBottom,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate(
+                    posts
+                        .map(
+                          (p) => PostCard(
+                            key: ValueKey(p.id),
+                            post: p,
+                            comments: _comments[p.id] ?? [],
+                            onNeedCommentRefresh: () =>
+                                _onNeedCommentRefresh(p.id),
+                            onRefreshPost: () => _refreshSinglePost(p),
+                            onCommentCreated: (cmt) {
+                              setState(() {
+                                _comments[p.id] ??= [];
+                                _comments[p.id] = [..._comments[p.id]!, cmt];
+                              });
+                            },
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 
   /// 顶部下拉刷新球外壳：列表置顶时，任意位置向下拉都会唤出左上角刷新球
@@ -613,37 +629,39 @@ class _SquarePageState extends State<SquarePage> {
             gestures: {
               _TopPullRecognizer:
                   GestureRecognizerFactoryWithHandlers<_TopPullRecognizer>(
-                _TopPullRecognizer.new,
-                (instance) {
-                  instance.isAtTop = () => _isAtTop;
-                  instance.onStart = () {
-                    // 只在手势开始时重置内部状态，不要 setState，
-                    // 否则每次在顶部点击（如切换 tab）都会触发重建，导致 tab 点击失效。
-                    _leftPullDistance = 0;
-                    _leftPullHapticTriggered = false;
-                  };
-                  instance.onMove = (cumulativeDy) {
-                    setState(() {
-                      _leftPullDistance = cumulativeDy;
-                      if (_leftPullProgress >= 1.0 &&
-                          !_leftPullHapticTriggered) {
-                        HapticFeedback.mediumImpact();
-                        _leftPullHapticTriggered = true;
-                      }
-                    });
-                  };
-                  instance.onEnd = _onLeftPullEnd;
-                },
-              ),
+                    _TopPullRecognizer.new,
+                    (instance) {
+                      instance.isAtTop = () => _isAtTop;
+                      instance.onStart = () {
+                        // 只在手势开始时重置内部状态，不要 setState，
+                        // 否则每次在顶部点击（如切换 tab）都会触发重建，导致 tab 点击失效。
+                        _leftPullDistance = 0;
+                        _leftPullHapticTriggered = false;
+                      };
+                      instance.onMove = (cumulativeDy) {
+                        setState(() {
+                          _leftPullDistance = cumulativeDy;
+                          if (_leftPullProgress >= 1.0 &&
+                              !_leftPullHapticTriggered) {
+                            HapticFeedback.mediumImpact();
+                            _leftPullHapticTriggered = true;
+                          }
+                        });
+                      };
+                      instance.onEnd = _onLeftPullEnd;
+                    },
+                  ),
             },
           ),
         ),
         Positioned(
-          left: -AppSquareRefreshTheme.ballSize +
+          left:
+              -AppSquareRefreshTheme.ballSize +
               (AppSquareRefreshTheme.ballSize +
                       AppSquareRefreshTheme.ballLeftFinalInset) *
                   progress,
-          top: -AppSquareRefreshTheme.ballSize +
+          top:
+              -AppSquareRefreshTheme.ballSize +
               (AppSquareRefreshTheme.ballSize +
                       AppSquareRefreshTheme.ballTopFinalInset) *
                   progress,
@@ -736,7 +754,8 @@ class _SquarePageState extends State<SquarePage> {
                                 ),
                               ),
                               SizedBox(
-                                height: AppSquareTopBarTheme.indicatorTopSpacing,
+                                height:
+                                    AppSquareTopBarTheme.indicatorTopSpacing,
                               ),
                               Container(
                                 width: AppSquareTopBarTheme.indicatorWidth,

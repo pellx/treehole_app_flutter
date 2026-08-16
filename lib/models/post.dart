@@ -4,6 +4,7 @@ class Post {
   final String content;
   final String author;
   final bool isAnonymous;
+  final String category;
   final String createdAt;
   final String updateAt;
   final List<PostImage> images;
@@ -16,6 +17,7 @@ class Post {
     this.content = '',
     this.author = '',
     this.isAnonymous = false,
+    this.category = '默认',
     this.createdAt = '',
     this.updateAt = '',
     this.images = const [],
@@ -36,21 +38,26 @@ class Post {
       content: json['content'] as String? ?? '',
       author: json['author'] as String? ?? '',
       isAnonymous: _asBool(json['is_anonymous']),
+      category: json['category'] as String? ?? '默认',
       createdAt: json['created_at'] as String? ?? '',
       updateAt: json['update_at'] as String? ?? '',
-      images: (json['images'] as List<dynamic>?)
+      images:
+          (json['images'] as List<dynamic>?)
               ?.map((e) => PostImage(fileName: e['file_name'] as String))
               .toList() ??
           [],
-      attachments: (json['attachments'] as List<dynamic>?)
-              ?.map((e) => PostAttachment(
+      attachments:
+          (json['attachments'] as List<dynamic>?)
+              ?.map(
+                (e) => PostAttachment(
                   fileName: e['file_name'] as String,
-                  sourceName: e['source_name'] as String? ?? ''))
+                  sourceName: e['source_name'] as String? ?? '',
+                ),
+              )
               .toList() ??
           [],
-      comments: (json['comments'] as List<dynamic>?)
-              ?.map((e) => e as int)
-              .toList() ??
+      comments:
+          (json['comments'] as List<dynamic>?)?.map((e) => e as int).toList() ??
           [],
     );
   }
