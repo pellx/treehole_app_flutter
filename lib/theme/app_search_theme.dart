@@ -197,7 +197,7 @@ class AppSearchTheme {
   static const double filterPanelTitleBottomGap = 6;
 
   /// 两个筛选分区之间的垂直间距。
-  static const double filterPanelSectionSpacing = 3;
+  static const double filterPanelSectionSpacing = 7;
 
   /// 每行固定显示的 chip 数量（排序/发布时间均一行 4 个）。
   static const int filterPanelChipCrossAxisCount = 4;
@@ -241,7 +241,7 @@ class AppSearchTheme {
 
   // ---- 自定义时间区域（属于「发布时间」块） ----
   /// 时间 chip 与下方自定义日期选择行之间的垂直间距。
-  static const double filterPanelDateRangeTopGap = 0;
+  static const double filterPanelDateRangeTopGap = 4;
 
   /// 开始/结束日期 chip 与中间「至」字之间的水平间距。
   static const double filterPanelDateRangeChipSpacing = 10;

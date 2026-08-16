@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/comment.dart';
 import '../../models/post.dart';
+import '../../models/post_meta.dart';
 import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
@@ -125,11 +126,52 @@ class _SearchPageState extends State<SearchPage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
-  static int _compareCreatedAtDesc(Post a, Post b) {
-    final da = DateTime.tryParse(a.createdAt);
-    final db = DateTime.tryParse(b.createdAt);
-    if (da == null || db == null) return 0;
-    return db.compareTo(da);
+  String _formatDateIso(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  static int _compareDateTimeDesc(DateTime? a, DateTime? b) {
+    if (a == null || b == null) return 0;
+    return b.compareTo(a);
+  }
+
+  List<PostMeta> _sortMeta(List<PostMeta> items) {
+    final copy = List<PostMeta>.from(items);
+    switch (_selectedSortIndex) {
+      case 2: // 最新回复：按 update_at 倒序
+        copy.sort((a, b) {
+          final cmp = _compareDateTimeDesc(
+            DateTime.tryParse(a.updateAt),
+            DateTime.tryParse(b.updateAt),
+          );
+          if (cmp != 0) return cmp;
+          return _compareDateTimeDesc(
+            DateTime.tryParse(a.createdAt),
+            DateTime.tryParse(b.createdAt),
+          );
+        });
+      case 3: // 回复最多：按 reply_times 倒序
+        copy.sort((a, b) {
+          final cmp = b.replyTimes.compareTo(a.replyTimes);
+          if (cmp != 0) return cmp;
+          return _compareDateTimeDesc(
+            DateTime.tryParse(a.createdAt),
+            DateTime.tryParse(b.createdAt),
+          );
+        });
+      case 0: // 默认排序
+      case 1: // 最新发布
+      default:
+        copy.sort(
+          (a, b) => _compareDateTimeDesc(
+            DateTime.tryParse(a.createdAt),
+            DateTime.tryParse(b.createdAt),
+          ),
+        );
+    }
+    return copy;
   }
 
   Future<void> _loadHistory() async {
@@ -208,7 +250,7 @@ class _SearchPageState extends State<SearchPage> {
       }
       _selectedTimeIndex = -1;
     });
-    if (_query.isNotEmpty) _loadPosts();
+    if (_query.isNotEmpty || _searchCommitted) _loadPosts();
   }
 
   Future<void> _loadPosts() async {
@@ -220,63 +262,50 @@ class _SearchPageState extends State<SearchPage> {
       final category = _selectedCategoryIndex == 0
           ? null
           : _categories[_selectedCategoryIndex];
-      final ids = await ApiService.getIdList(
+      final result = await ApiService.getIdListV2(
         search: _query.isEmpty ? null : _query,
         category: category,
+        dateStart: _customStart != null ? _formatDateIso(_customStart!) : null,
+        dateEnd: _customEnd != null ? _formatDateIso(_customEnd!) : null,
       );
-      final posts = <Post>[];
-      await Future.wait(
-        ids.take(30).map((id) async {
-          final post = await ApiService.getPost(id);
-          if (post != null) posts.add(post);
-        }),
-      );
-      // 发布时间筛选（客户端）
+      var items = result.items;
+
+      // 发布时间筛选（基于元数据，客户端）
       final now = DateTime.now();
-      var filtered = posts.where((p) {
-        final created = DateTime.tryParse(p.createdAt);
-        if (created == null) return true;
-
-        // 自定义时间区域优先级最高
-        if (_customStart != null && _customEnd != null) {
-          return !created.isBefore(_customStart!) &&
-              !created.isAfter(_customEnd!);
-        }
-
-        if (_selectedTimeIndex <= 0) return true;
+      if (_selectedTimeIndex > 0) {
         final days = _selectedTimeIndex == 1
             ? 1
             : _selectedTimeIndex == 2
             ? 30
             : 180;
-        return now.difference(created).inDays <= days;
-      }).toList();
-
-      // 排序方式（客户端）
-      switch (_selectedSortIndex) {
-        case 2: // 最新回复
-          filtered.sort((a, b) {
-            final cmp = b.comments.length.compareTo(a.comments.length);
-            if (cmp != 0) return cmp;
-            return _compareCreatedAtDesc(a, b);
-          });
-        case 3: // 回复最多
-          filtered.sort(
-            (a, b) => b.comments.length.compareTo(a.comments.length),
-          );
-        case 0: // 默认排序
-        case 1: // 最新发布
-        default:
-          filtered.sort(_compareCreatedAtDesc);
+        items = items.where((m) {
+          final created = DateTime.tryParse(m.createdAt);
+          if (created == null) return true;
+          return now.difference(created).inDays <= days;
+        }).toList();
       }
 
-      for (final post in filtered) {
+      // 排序方式（基于元数据）
+      items = _sortMeta(items);
+
+      final ids = items.take(30).map((m) => m.id).toList();
+      final posts = <Post>[];
+      await Future.wait(
+        ids.map((id) async {
+          final post = await ApiService.getPost(id);
+          if (post != null) posts.add(post);
+        }),
+      );
+      // 保持排序后的顺序
+      posts.sort((a, b) => ids.indexOf(a.id).compareTo(ids.indexOf(b.id)));
+
+      for (final post in posts) {
         _comments[post.id] ??= PostStorage.getComments(post.comments);
         _postsNeedCommentRefresh.add(post.id);
       }
       if (mounted) {
         setState(() {
-          _posts = filtered;
+          _posts = posts;
           _loading = false;
         });
       }

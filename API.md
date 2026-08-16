@@ -34,6 +34,7 @@ Base URL: `http://<host>:7300/node`（`GLOBAL_PREFIX` 默认 `node`，端口默�
   - [21. POST /posts](#21-post-posts)
   - [22. POST /posts/comment](#22-post-postscomment)
   - [23. GET /posts/idList](#23-get-postsidlist)
+  - [23b. GET /posts/idListv2](#23b-get-postsidlistv2)
   - [24. POST /posts/idListUpdate](#24-post-postsidlistupdate)
   - [25. GET /posts/idListByAuthor/:author](#25-get-postsidlistbyauthorauthor)
   - [26. GET /posts/:id](#26-get-postsid)
@@ -1052,7 +1053,7 @@ Session 须对应本机活绑定（`user_id` + `device_id`）。
 |---|---|
 | `search` | 可选，全文检索关键词 |
 | `author` | 可选，精确匹配落库 `author` 字符串 |
-| `category` | 可选，品类精确匹配（`问答` \| `资料` \| `兴趣` \| `梗图` \| `默认`）；空字符串视为未传 |
+| `category` | 可选，品类精确匹配（`问答` \| `资料` \| `兴趣` \| `梗图`）；**`默认` 视为不限品类，返回全部**；空字符串视为未传 |
 | `dateStart` / `dateEnd` | 可选，ISO 日期，按创建时间区间；**需同时传两个才生效**，只传一个忽略 |
 | `offset` | 可选，分页偏移，默认 0 |
 | `limit` | 可选，每页条数，上限 200；不传返回全部（无分页） |
@@ -1073,9 +1074,41 @@ Session 须对应本机活绑定（`user_id` + `device_id`）。
 - 检索字段：`title` / `content` / `author`，使用 `multi_match` 查询 + `fuzziness: AUTO`（容忍拼写错误）
 - 发帖成功提交后自动写入 ES 索引；历史存量数据需 `syncES` 全量重建（路由 `GET /posts/syncES` 仅 `TEST_MODEL=true` 时开放，否则 404）。重建步骤：带 `TEST_MODEL=true` 重启应用 → `curl 'http://localhost:7300/node/posts/syncES'`（返回 `{message:"同步完成",total,hasErrors}`）→ 恢复正常重启。注意 syncES 只 upsert、不删除，DB 已删帖子的旧文档会残留在 ES（不影响结果，可选清理）
 - 与其他条件为 **AND** 关系：先用 ES 得到候选 id 集合，再在 MySQL 叠加 `author` / 时间区间过滤；ES 无命中直接返回 `[]`
-- `category` 带 `search` 时在 **ES 层**用 `term` 精确匹配 `category.keyword`（避免拉全量 id 再过滤）；不带 `search` 时在 MySQL 走 `idx_posts_category` 索引等值过滤
+- `category` 带 `search` 时在 **ES 层**用 `term` 精确匹配 `category.keyword`（避免拉全量 id 再过滤）；不带 `search` 时在 MySQL 走 `idx_posts_category` 索引等值过滤；`category=默认` 两处均**不加过滤**（视为不限品类）
 - 分页（`offset` / `limit`）在 MySQL 侧对最终 id 集合叠加 `skip` / `take`；排序仍为 `created_at` 倒序（MySQL 排序，**非** ES 相关度排序）
 - 不带 `search` 时走纯 MySQL 查询
+
+---
+
+### 23b. GET /posts/idListv2
+
+按条件列出贴文**元数据列表**（含分页信息）。查询参数与 [23. GET /posts/idList](#23-get-postsidlist) 完全一致（`search` / `author` / `category` / `dateStart` / `dateEnd` / `offset` / `limit`），组合逻辑相同（AND、`category=默认` 不限品类、ES/MySQL 双路径）。区别仅在返回结构：**v1 返回纯 id 数组，v2 返回对象列表 + total**。
+
+**响应**
+
+```json
+{
+  "total": 342,
+  "offset": 0,
+  "limit": 20,
+  "items": [
+    {
+      "id": 100,
+      "title": "标题",
+      "author": "昵称或null（匿名）",
+      "category": "问答",
+      "reply_times": 2,
+      "created_at": "2026-08-16T08:00:00.000Z",
+      "update_at": "2026-08-16T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+- `total`：**分页前的完整命中数**（前端分页/展示总量用）
+- `offset` / `limit`：回显请求值；未传 `limit` 时为 `null`（返回全部）
+- 排序固定 `created_at` 倒序（与 v1 一致）；前端可用 `created_at` / `update_at` 自行排序
+- **不返回 `user_id`**（隐私：匿名帖不泄露发帖人身份）
 
 ---
 
@@ -1749,6 +1782,11 @@ ALTER TABLE posts
 
 -- 迁移后需以 TEST_MODEL=true 重启并调用 GET /posts/syncES 全量重建 ES 索引，
 -- 否则历史贴文的 search+category 组合查不到（旧 ES 文档无 category 字段）。
+
+-- 历史贴文分类回填（一次性数据脚本，模型逐条分类结果）：
+-- 见 database/migrations/20260816_backfill_posts_model.sql
+-- 规则：有图片→梗图；其余按内容语义判定 问答/资料/兴趣；未判定保持「默认」。
+-- 执行后同样需重建 ES 索引（syncES），否则 ES 里的 category 为旧值。
 ```
 
 历史迁移示例：

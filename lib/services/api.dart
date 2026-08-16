@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../models/comment.dart';
 import '../models/device_fingerprint.dart';
 import '../models/post.dart';
+import '../models/post_meta.dart';
 import 'pow.dart';
 import '../models/post_draft.dart';
 import '../models/upload_result.dart';
@@ -474,8 +475,12 @@ class ApiService {
     final params = <String, String>{};
     if (search != null && search.isNotEmpty) params['search'] = search;
     if (author != null && author.isNotEmpty) params['author'] = author;
-    if (dateStart != null && dateStart.isNotEmpty) params['dateStart'] = dateStart;
-    if (dateEnd != null && dateEnd.isNotEmpty) params['dateEnd'] = dateEnd;
+    if (dateStart != null && dateStart.isNotEmpty) {
+      params['dateStart'] = dateStart;
+    }
+    if (dateEnd != null && dateEnd.isNotEmpty) {
+      params['dateEnd'] = dateEnd;
+    }
     if (category != null && category.isNotEmpty) params['category'] = category;
     if (sort != null && sort.isNotEmpty) params['sort'] = sort;
     var uri = Uri.parse('$_base/idList');
@@ -486,6 +491,50 @@ class ApiService {
     final decoded = jsonDecode(res.body);
     if (decoded is List) {
       return List<int>.from(decoded);
+    }
+    throw Exception(
+      decoded is Map && decoded['message'] != null
+          ? decoded['message']
+          : 'Unexpected response: ${res.body}',
+    );
+  }
+
+  /// v2 返回贴文元数据列表，支持前端按 created_at / update_at / reply_times 排序。
+  static Future<IdListV2Result> getIdListV2({
+    String? search,
+    String? author,
+    String? dateStart,
+    String? dateEnd,
+    String? category,
+  }) async {
+    if (_useMock) {
+      return IdListV2Result(
+        total: 3,
+        items: [
+          PostMeta(id: 12, replyTimes: 0),
+          PostMeta(id: 345, replyTimes: 1),
+          PostMeta(id: 6789, replyTimes: 2),
+        ],
+      );
+    }
+    final params = <String, String>{};
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (author != null && author.isNotEmpty) params['author'] = author;
+    if (dateStart != null && dateStart.isNotEmpty) {
+      params['dateStart'] = dateStart;
+    }
+    if (dateEnd != null && dateEnd.isNotEmpty) {
+      params['dateEnd'] = dateEnd;
+    }
+    if (category != null && category.isNotEmpty) params['category'] = category;
+    var uri = Uri.parse('$_base/idListv2');
+    if (params.isNotEmpty) {
+      uri = uri.replace(queryParameters: params);
+    }
+    final res = await _client.get(uri).timeout(_timeout);
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      return IdListV2Result.fromJson(decoded);
     }
     throw Exception(
       decoded is Map && decoded['message'] != null
