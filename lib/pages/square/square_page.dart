@@ -458,10 +458,7 @@ class _SquarePageState extends State<SquarePage> {
 
   @override
   Widget build(BuildContext context) {
-    final isLight = Theme.of(context).brightness == Brightness.light;
-    final topBarBg = isLight
-        ? AppSquareTopBarTheme.backgroundLight
-        : AppSquareTopBarTheme.backgroundDark;
+    final colors = Theme.of(context).extension<AppColors>()!;
 
     return PopScope(
       canPop: ImageOverlay.currentEntry == null,
@@ -472,7 +469,7 @@ class _SquarePageState extends State<SquarePage> {
         // 回复栏是 OverlayEntry，键盘弹出时不需要 resize 底层列表，避免底边栏被顶动
         resizeToAvoidBottomInset: false,
         body: Container(
-          color: topBarBg,
+          color: colors.common.background,
           child: SafeArea(
             bottom: false,
             child: _buildRefreshShell(_buildBody()),

@@ -63,7 +63,6 @@ class CommonColors {
 // ============================================================
 class PostCardColors {
   final Color cardBorder;
-  final Color cardBackground;
   final Color bodyDivider;
   final Color title;
   final Color content;
@@ -96,7 +95,6 @@ class PostCardColors {
 
   const PostCardColors({
     required this.cardBorder,
-    required this.cardBackground,
     required this.bodyDivider,
     required this.title,
     required this.content,
@@ -360,7 +358,6 @@ static const commonDark = CommonColors(
 
 static const postCardLight = PostCardColors(
   cardBorder:             Color(0x2E999999),
-  cardBackground:         Color(0xFFFFFFFF),
   bodyDivider:            Color(0x2E999999),
   title:                  Color(0xFF333333),
   content:                Color(0xFF333333),
@@ -394,7 +391,6 @@ static const postCardLight = PostCardColors(
 
 static const postCardDark = PostCardColors(
   cardBorder:             Color(0x39AEAEAE),
-  cardBackground:         Color(0xFF191919),
   bodyDivider:            Color(0x2EFF0000),
   title:                  Color(0xFFd3d3d3),
   content:                Color(0xFFd3d3d3),
