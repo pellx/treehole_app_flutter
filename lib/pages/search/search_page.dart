@@ -134,6 +134,20 @@ class _SearchPageState extends State<SearchPage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
+  static int _compareCreatedAtDesc(Post a, Post b) {
+    final da = DateTime.tryParse(a.createdAt);
+    final db = DateTime.tryParse(b.createdAt);
+    if (da == null || db == null) return 0;
+    return db.compareTo(da);
+  }
+
+  static int _compareCreatedAtAsc(Post a, Post b) {
+    final da = DateTime.tryParse(a.createdAt);
+    final db = DateTime.tryParse(b.createdAt);
+    if (da == null || db == null) return 0;
+    return da.compareTo(db);
+  }
+
   Future<void> _loadHistory() async {
     final history = PostStorage.getSearchHistory();
     setState(() {
@@ -176,24 +190,8 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
-      final sort = ['latest', 'latest_reply', 'oldest', 'most_replies']
-          [_selectedSortIndex];
-      final dateStart = _selectedTimeIndex == 0
-          ? null
-          : DateTime.now()
-              .subtract(Duration(
-                days: _selectedTimeIndex == 1
-                    ? 7
-                    : _selectedTimeIndex == 2
-                        ? 30
-                        : 180,
-              ))
-              .toUtc()
-              .toIso8601String();
       final ids = await ApiService.getIdList(
         search: _query.isEmpty ? null : _query,
-        sort: sort,
-        dateStart: dateStart,
       );
       final posts = <Post>[];
       await Future.wait(
@@ -202,13 +200,45 @@ class _SearchPageState extends State<SearchPage> {
           if (post != null) posts.add(post);
         }),
       );
-      for (final post in posts) {
+
+      // 时间筛选（客户端）
+      final now = DateTime.now();
+      var filtered = posts.where((p) {
+        if (_selectedTimeIndex == 0) return true;
+        final created = DateTime.tryParse(p.createdAt);
+        if (created == null) return true;
+        final days = _selectedTimeIndex == 1
+            ? 7
+            : _selectedTimeIndex == 2
+                ? 30
+                : 180;
+        return now.difference(created).inDays <= days;
+      }).toList();
+
+      // 排序（客户端）
+      switch (_selectedSortIndex) {
+        case 1: // 最新回复：优先按评论数量降序，再按发布时间降序
+          filtered.sort((a, b) {
+            final cmp = b.comments.length.compareTo(a.comments.length);
+            if (cmp != 0) return cmp;
+            return _compareCreatedAtDesc(a, b);
+          });
+        case 2: // 最先发布
+          filtered.sort(_compareCreatedAtAsc);
+        case 3: // 回复最多
+          filtered.sort((a, b) => b.comments.length.compareTo(a.comments.length));
+        case 0: // 最新发布
+        default:
+          filtered.sort(_compareCreatedAtDesc);
+      }
+
+      for (final post in filtered) {
         _comments[post.id] ??= PostStorage.getComments(post.comments);
         _postsNeedCommentRefresh.add(post.id);
       }
       if (mounted) {
         setState(() {
-          _posts = posts;
+          _posts = filtered;
           _loading = false;
         });
       }

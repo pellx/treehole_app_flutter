@@ -483,7 +483,15 @@ class ApiService {
       uri = uri.replace(queryParameters: params);
     }
     final res = await _client.get(uri).timeout(_timeout);
-    return List<int>.from(jsonDecode(res.body));
+    final decoded = jsonDecode(res.body);
+    if (decoded is List) {
+      return List<int>.from(decoded);
+    }
+    throw Exception(
+      decoded is Map && decoded['message'] != null
+          ? decoded['message']
+          : 'Unexpected response: ${res.body}',
+    );
   }
 
   static Future<Post?> getPost(int id) async {
