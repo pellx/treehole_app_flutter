@@ -168,9 +168,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   String _formatDate(DateTime d) {
-    final m = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$m-$day';
+    return '${d.year}年${d.month}月${d.day}日';
   }
 
   Future<void> _pickDate({required bool isStart}) async {
@@ -704,8 +702,7 @@ class _SearchPageState extends State<SearchPage> {
               _customEnd = null;
             },
           ),
-          SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
-          sectionTitle(AppSearchTheme.filterPanelDateRangeTitle),
+          SizedBox(height: AppSearchTheme.filterPanelDateRangeTopGap),
           _buildDateRangeRow(colors, onSurface, bg),
         ],
       ),
@@ -768,49 +765,23 @@ class _SearchPageState extends State<SearchPage> {
           date: _customStart,
           onTap: () => _pickDate(isStart: true),
         ),
-        SizedBox(width: AppSearchTheme.filterPanelDateRangeChipSpacing),
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppSearchTheme.filterPanelDateRangeChipSpacing,
+          ),
+          child: Text(
+            AppSearchTheme.filterPanelDateRangeMiddleText,
+            style: TextStyle(
+              fontSize: AppSearchTheme.filterPanelChipFontSize,
+              color: onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
         chip(
           label: '结束日期',
           date: _customEnd,
           onTap: () => _pickDate(isStart: false),
         ),
-        if (_customStart != null || _customEnd != null) ...[
-          SizedBox(width: AppSearchTheme.filterPanelDateRangeChipSpacing),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _customStart = null;
-                _customEnd = null;
-                _selectedTimeIndex = 0;
-              });
-              if (_query.isNotEmpty) _loadPosts();
-            },
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSearchTheme.filterPanelDateRangeClearPadding,
-                vertical: AppSearchTheme.filterPanelChipVerticalPadding,
-              ),
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: BorderRadius.circular(
-                  AppSearchTheme.filterPanelChipBorderRadius,
-                ),
-                border: Border.all(
-                  color: colors.common.divider,
-                  width: AppSearchTheme.filterPanelUnselectedBorderWidth,
-                ),
-              ),
-              child: Text(
-                '清除',
-                style: TextStyle(
-                  fontSize: AppSearchTheme.filterPanelChipFontSize,
-                  color: onSurface.withValues(alpha: 0.75),
-                ),
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }

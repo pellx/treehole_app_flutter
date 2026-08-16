@@ -249,16 +249,13 @@ class AppSearchTheme {
   /// 筛选按钮图标颜色透明度（0~1）。
   static const double filterButtonIconAlpha = 0.7;
 
-  // ---- 自定义时间区域 ----
-  /// 自定义时间区域标题文字。
-  static const String filterPanelDateRangeTitle = '选择时间区域';
+  // ---- 自定义时间区域（属于「发布时间」块） ----
+  /// 时间 chip 与下方自定义日期选择行之间的垂直间距。
+  static const double filterPanelDateRangeTopGap = 10;
 
-  /// 自定义时间区域标题与下方选择器的垂直间距。
-  static const double filterPanelDateRangeTitleBottomGap = 10;
-
-  /// 开始/结束日期 chip 之间的水平间距。
+  /// 开始/结束日期 chip 与中间「至」字之间的水平间距。
   static const double filterPanelDateRangeChipSpacing = 10;
 
-  /// 「清除」按钮的水平内边距。
-  static const double filterPanelDateRangeClearPadding = 12;
+  /// 开始/结束日期之间的连接文字。
+  static const String filterPanelDateRangeMiddleText = '至';
 }
