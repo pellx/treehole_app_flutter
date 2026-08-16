@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'pages/main_shell.dart';
 import 'app_navigator.dart';
@@ -60,9 +61,19 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
       navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('zh', 'CN'),
+      ],
       theme: ThemeData.light().copyWith(
         scaffoldBackgroundColor: AppColors.light.common.background,
         colorScheme: ColorScheme.light(
+          primary: AppColors.light.common.green,
+          onPrimary: Colors.white,
           surface: AppColors.light.common.surface,
           onSurface: AppColors.light.common.onSurface,
         ),
@@ -82,6 +93,8 @@ class TreeholeAppState extends State<TreeholeApp> with WidgetsBindingObserver {
       darkTheme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: AppColors.dark.common.background,
         colorScheme: ColorScheme.dark(
+          primary: AppColors.dark.common.green,
+          onPrimary: Colors.black,
           surface: AppColors.dark.common.surface,
           onSurface: AppColors.dark.common.onSurface,
         ),
