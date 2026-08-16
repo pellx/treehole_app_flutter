@@ -196,12 +196,17 @@ class _SearchPageState extends State<SearchPage> {
                       Padding(
                         padding: EdgeInsets.only(
                           left: AppSearchTheme.searchIconLeftOffset,
-                          top: AppSearchTheme.searchIconVerticalOffset,
                         ),
-                        child: Icon(
-                          Icons.search,
-                          color: colors.common.trailingIcon,
-                          size: AppSearchTheme.prefixIconSize,
+                        child: Transform.translate(
+                          offset: Offset(
+                            0,
+                            AppSearchTheme.searchIconVerticalOffset,
+                          ),
+                          child: Icon(
+                            Icons.search,
+                            color: colors.common.trailingIcon,
+                            size: AppSearchTheme.prefixIconSize,
+                          ),
                         ),
                       ),
                       SizedBox(width: AppSearchTheme.searchIconToTextGap),

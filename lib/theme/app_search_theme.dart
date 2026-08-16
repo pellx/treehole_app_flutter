@@ -29,7 +29,7 @@ class AppSearchTheme {
   static const double searchIconLeftPadding = 12;
   static const double searchIconLeftOffset = 3;
   static const double searchIconToTextGap = 3;
-  static const double searchIconVerticalOffset = 5;
+  static const double searchIconVerticalOffset = 100;
   static const CrossAxisAlignment searchIconVerticalAlignment =
       CrossAxisAlignment.center;
   static const bool inputIsDense = true;
