@@ -85,7 +85,8 @@ class _SquarePageState extends State<SquarePage> {
       _loadedCount = 0;
       _comments.clear();
       _postsNeedCommentRefresh.clear();
-      _loading = true;
+      _loadingIds.clear();
+      _loading = false;
       _error = null;
     });
     if (_scrollController.hasClients) {
