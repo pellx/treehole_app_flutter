@@ -174,10 +174,10 @@ class AppSearchTheme {
 
   /// 筛选面板内边距。
   static const EdgeInsets filterPanelPadding = EdgeInsets.fromLTRB(
-    16,
-    14,
-    16,
-    16,
+    7,
+    4,
+    7,
+    7,
   );
 
   /// 筛选面板背景色（与顶边栏共用纯白/暗色 surface）。
@@ -194,7 +194,7 @@ class AppSearchTheme {
   static const FontWeight filterPanelTitleFontWeight = FontWeight.w600;
 
   /// 筛选分区标题与下方 chip 的垂直间距。
-  static const double filterPanelTitleBottomGap = 10;
+  static const double filterPanelTitleBottomGap = 0;
 
   /// 两个筛选分区之间的垂直间距。
   static const double filterPanelSectionSpacing = 18;

@@ -291,21 +291,12 @@ class _SearchPageState extends State<SearchPage> {
 
   void _onSearch() {
     final query = _controller.text.trim();
-    if (query.isEmpty) {
-      if (_query.isNotEmpty) {
-        setState(() => _query = '');
-      }
-      _focusNode.unfocus();
-      return;
-    }
-    if (query == _query) {
-      _focusNode.unfocus();
-      return;
-    }
     _query = query;
     _focusNode.unfocus();
-    HapticFeedback.lightImpact();
-    _addHistory(query);
+    if (query.isNotEmpty) {
+      HapticFeedback.lightImpact();
+      _addHistory(query);
+    }
     _loadPosts();
   }
 
@@ -451,11 +442,10 @@ class _SearchPageState extends State<SearchPage> {
           ),
           const SizedBox(width: AppSearchTheme.searchButtonLeftGap),
           TextButton(
-            onPressed: _controller.text.trim().isNotEmpty ? _onSearch : null,
+            onPressed: _onSearch,
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
               foregroundColor: AppSearchTheme.searchButtonColor,
-              disabledForegroundColor: colors.common.trailingIcon,
               minimumSize: const Size(
                 AppSearchTheme.searchButtonMinWidth,
                 AppSearchTheme.searchButtonMinHeight,
