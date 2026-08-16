@@ -174,19 +174,35 @@ class AppDimens {
   static const double contentLineHeight = 1.5;
 
   // ---- 两个点按钮（操作菜单触发器）----
-  static const double dotsBtnWidth = 34;
-  static const double dotsBtnHeight = 22;
-  static const double dotsBtnRadius = 5;
+  static const double dotsBtnWidth = 26;
+  static const double dotsBtnHeight = 15;
+  static const double dotsBtnRadius = 4;
   static const double dotsBtnBorderWidth = 0.5;
-  static const double dotsFontSize = 20;
+  static const double dotsFontSize = 18;
   static const double dotsGap = -20;
-  static const double dotsTopPadding = -3.5;
-  static const double dotsLeftPadding = 6;
-  static const double dotsRightPadding = 6;
+  static const double dotsTopPadding = -5.2;
+  static const double dotsLeftPadding = 5;
+  static const double dotsRightPadding = 5;
   static const double dotsBgOpacity = 0.09;
   static const double commentBgOpacity = 0.09; // 回复区域背景透明度
   static const double dotsPositionedRight = 1;
   static const double dotsPositionedTop = 2;
+  // 两点按钮放大点击区（宽度48/有展开按钮时收窄为33，避免压住展开图标）
+  static const double dotsHitWidth = 48;
+  static const double dotsHitWidthWithExpand = 33;
+  static const double dotsHitHeight = 24; // 日期行高度需不低于此值，超出部分下方延伸
+  static const double dotsHitRight = -4;  // 向右略入卡片内边距
+  static const double dotsHitTop = 0;
+
+  // ---- 评论图标按钮（在两点按钮左侧，用于唤出回复栏）----
+  static const double commentIconSize = 16; // V 形图标大小
+  static const double commentIconWidth = 26; // 容器宽度（与两点按钮一致）
+  static const double commentIconHeight = 15; // 容器高度（与两点按钮一致）
+  static const double commentIconGap = 8; // 与两点按钮间距
+  static const double commentIconRight = dotsPositionedRight + dotsBtnWidth + commentIconGap;
+  static const double commentIconHitWidth = 34; // 透明点击区宽度
+  static const double commentIconHitHeight = dotsHitHeight;
+  static const double commentIconHitRight = commentIconRight; // 右对齐，避免侵入 .. 点击区
 
   // ---- 操作浮层（从两点按钮上方弹出）----
   static const double actionMenuBtnWidth = 50;               // 操作图标容器宽度
@@ -206,7 +222,7 @@ class AppDimens {
 
   // ---- 时间行 ----
   static const double dateRowTopSpacing = 2;
-  static const double dateRowBottomSpacing = 2;
+  static const double dateRowBottomSpacing = 0; // 已并入日期行高度，减少额外空隙
 
   // ---- 列表 ----
   static const double listPaddingLeft = 12;
@@ -286,6 +302,8 @@ class AppDimens {
   static const double commentSectionMarginTop = 0; // 回复区域距上方日期行间距
   static const double commentBgRadius = 4; // 回复区域背景圆角
   static const double commentBtnSize = 18; // +/- 按钮大小
+  // +/- 按钮透明点击区高度：按钮 18 + 向上延伸 4 + 向下覆盖底部内边距 2
+  static const double commentBtnHitHeight = 24;
   static const double commentBtnGap = 2; // +/- 按钮间距
   static const double commentRemainFontSize = 12; // 剩余回复数字号
   static const double commentRemainTopOffset = 0; // 剩余回复数竖直偏移

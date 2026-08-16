@@ -16,6 +16,7 @@ class PostStorage {
   static late Box _customColorsBox;
   static late Box _versionBox;
   static late Box _accountBox;
+  static late Box _searchHistoryBox;
 
   static Future<void> init() async {
     // 并行打开各 box，缩短首帧前阻塞
@@ -27,6 +28,7 @@ class PostStorage {
       Hive.openBox('custom_colors').then((b) => _customColorsBox = b),
       Hive.openBox('versions').then((b) => _versionBox = b),
       Hive.openBox('account').then((b) => _accountBox = b),
+      Hive.openBox('search_history').then((b) => _searchHistoryBox = b),
     ]);
   }
 
@@ -256,6 +258,32 @@ class PostStorage {
 
   static Future<void> clearCommentDraft(int postId) async {
     await _commentBox.delete('draft_$postId');
+  }
+
+  // ---- 搜索历史 ----
+
+  static List<String> getSearchHistory() {
+    final raw = _searchHistoryBox.get('queries');
+    if (raw == null) return [];
+    return (raw as List).cast<String>();
+  }
+
+  static Future<void> saveSearchHistory(List<String> queries) async {
+    await _searchHistoryBox.put('queries', queries);
+  }
+
+  static Future<void> addSearchHistory(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    final history = getSearchHistory();
+    history.remove(q);
+    history.insert(0, q);
+    if (history.length > 20) history.removeLast();
+    await saveSearchHistory(history);
+  }
+
+  static Future<void> clearSearchHistory() async {
+    await _searchHistoryBox.delete('queries');
   }
 
   // ---- 自定义颜色 ----

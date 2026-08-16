@@ -3,16 +3,16 @@ import 'package:flutter/services.dart';
 
 import '../../models/post.dart';
 import '../../services/api.dart';
+import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
-import '../../widgets/app_app_bar.dart';
-import '../../widgets/app_bottom_sheet.dart';
+import '../../theme/app_search_theme.dart';
 import '../../widgets/app_empty_state.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_loading_indicator.dart';
 import '../../widgets/post_card.dart';
 
-/// 搜索页：现代风格，支持关键词/作者/时间段/品类筛选
+/// 搜索页：顶部输入栏 + 搜索历史
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -26,28 +26,21 @@ class _SearchPageState extends State<SearchPage> {
   final _scrollController = ScrollController();
 
   List<Post> _posts = [];
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
-
   String _query = '';
-  String? _author;
-  DateTime? _dateStart;
-  DateTime? _dateEnd;
-  String _selectedCategory = '全部';
-
-  final _categories = ['全部', '问答', '资料', '兴趣', '梗图'];
-  final _categoryKeywords = {
-    '问答': ['问', '求助', '怎么办', '帮忙', '求', '？', '?'],
-    '资料': ['资料', '资源', '下载', '链接', '文件', '附件', '教程', '攻略'],
-    '兴趣': ['兴趣', '闲聊', '吐槽', '八卦', '聊聊', '讨论', '经验', '分享'],
-    '梗图': ['梗', '图', '图片', '表情包', '笑', 'meme'],
-  };
+  List<String> _history = [];
+  bool _historyExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _controller.addListener(() => setState(() {}));
-    _loadPosts();
+    _loadHistory();
+    // 进入页面后自动聚焦，唤出键盘
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
   }
 
   @override
@@ -59,6 +52,21 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
+  Future<void> _loadHistory() async {
+    final history = PostStorage.getSearchHistory();
+    setState(() => _history = history);
+  }
+
+  Future<void> _addHistory(String query) async {
+    await PostStorage.addSearchHistory(query);
+    _loadHistory();
+  }
+
+  Future<void> _clearHistory() async {
+    await PostStorage.clearSearchHistory();
+    _loadHistory();
+  }
+
   Future<void> _loadPosts() async {
     setState(() {
       _loading = true;
@@ -67,10 +75,6 @@ class _SearchPageState extends State<SearchPage> {
     try {
       final ids = await ApiService.getIdList(
         search: _query.isEmpty ? null : _query,
-        author: _author,
-        dateStart: _dateStart != null ? _formatApiDate(_dateStart!) : null,
-        dateEnd: _dateEnd != null ? _formatApiDate(_dateEnd!) : null,
-        // category 参数等后端支持后再传，目前先客户端关键词兜底
       );
       final posts = <Post>[];
       await Future.wait(
@@ -97,151 +101,23 @@ class _SearchPageState extends State<SearchPage> {
 
   void _onSearch() {
     final query = _controller.text.trim();
-    if (query == _query &&
-        _author == null &&
-        _dateStart == null &&
-        _dateEnd == null) {
+    if (query == _query) {
       _focusNode.unfocus();
       return;
     }
     _query = query;
     _focusNode.unfocus();
-    _loadPosts();
-  }
-
-  void _onCategoryTap(int index) {
-    HapticFeedback.lightImpact();
-    setState(() => _selectedCategory = _categories[index]);
-  }
-
-  List<Post> get _filteredPosts {
-    final category = _selectedCategory;
-    if (category == '全部') return _posts;
-    final keywords = _categoryKeywords[category] ?? [];
-    return _posts.where((p) {
-      final text = '${p.title} ${p.content}'.toLowerCase();
-      return keywords.any((k) => text.contains(k));
-    }).toList();
-  }
-
-  String _formatApiDate(DateTime dt) {
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
-
-  Future<void> _showAuthorPicker() async {
-    final controller = TextEditingController(text: _author ?? '');
-    final author = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        final colors = Theme.of(ctx).extension<AppColors>()!;
-        final onSurface = Theme.of(ctx).colorScheme.onSurface;
-        return AlertDialog(
-          backgroundColor: colors.common.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text('指定作者', style: TextStyle(color: onSurface)),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              hintText: '输入作者名',
-              hintStyle: TextStyle(color: colors.common.trailingIcon),
-              filled: true,
-              fillColor: colors.common.background,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(
-                '取消',
-                style: TextStyle(color: onSurface.withValues(alpha: 0.7)),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                final value = controller.text.trim();
-                Navigator.of(ctx).pop(value.isEmpty ? null : value);
-              },
-              child: Text(
-                '确定',
-                style: TextStyle(color: colors.common.green),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-    controller.dispose();
-    if (author != _author) {
-      setState(() => _author = author);
-      _loadPosts();
+    if (query.isNotEmpty) {
+      HapticFeedback.lightImpact();
+      _addHistory(query);
     }
-  }
-
-  Future<void> _showDatePicker() async {
-    final now = DateTime.now();
-    final range = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(now.year - 5),
-      lastDate: now,
-      initialDateRange: _dateStart != null && _dateEnd != null
-          ? DateTimeRange(start: _dateStart!, end: _dateEnd!)
-          : null,
-      builder: (context, child) {
-        final colors = Theme.of(context).extension<AppColors>()!;
-        return Theme(
-          data: Theme.of(context).copyWith(
-            appBarTheme: Theme.of(context).appBarTheme.copyWith(
-                  backgroundColor: colors.common.surface,
-                  foregroundColor: colors.common.onSurface,
-                ),
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: colors.common.green,
-                  surface: colors.common.surface,
-                ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (range == null) return;
-    setState(() {
-      _dateStart = range.start;
-      _dateEnd = range.end;
-    });
     _loadPosts();
   }
 
-  Future<void> _showCategoryPicker() async {
-    final selected = await showAppSelectorSheet<String>(
-      context: context,
-      title: '选择品类',
-      options: _categories,
-      labelBuilder: (c) => c,
-      selected: _selectedCategory,
-    );
-    if (selected == null) return;
-    _onCategoryTap(_categories.indexOf(selected));
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _author = null;
-      _dateStart = null;
-      _dateEnd = null;
-      _selectedCategory = '全部';
-    });
-    _loadPosts();
+  void _onHistoryTap(String query) {
+    _controller.text = query;
+    _controller.selection = TextSelection.collapsed(offset: query.length);
+    _onSearch();
   }
 
   @override
@@ -249,14 +125,18 @@ class _SearchPageState extends State<SearchPage> {
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
-    return AppScaffold(
-      title: '搜索',
-      body: Column(
-        children: [
-          _buildSearchBar(colors, onSurface),
-          _buildFilterChips(colors, onSurface),
-          Expanded(child: _buildBody(colors)),
-        ],
+    return Scaffold(
+      backgroundColor: colors.common.background,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildSearchBar(colors, onSurface),
+            _buildSearchHistory(colors, onSurface),
+            Expanded(child: _buildBody(colors)),
+          ],
+        ),
       ),
     );
   }
@@ -264,114 +144,270 @@ class _SearchPageState extends State<SearchPage> {
   Widget _buildSearchBar(AppColors colors, Color onSurface) {
     return Container(
       color: colors.common.surface,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => _onSearch(),
-        decoration: InputDecoration(
-          hintText: '搜索帖子关键词...',
-          hintStyle: TextStyle(color: colors.common.trailingIcon),
-          prefixIcon: Icon(
-            Icons.search,
-            color: colors.common.trailingIcon,
+      padding: const EdgeInsets.fromLTRB(
+        AppSearchTheme.barHorizontalPadding,
+        AppSearchTheme.barVerticalPadding,
+        AppSearchTheme.barTrailingPadding,
+        AppSearchTheme.barVerticalPadding,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: Icon(
+              Icons.chevron_left,
+              color: onSurface,
+              size: AppSearchTheme.backIconSize,
+            ),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
-          suffixIcon: _controller.text.isNotEmpty
-              ? IconButton(
-                  icon: Icon(
-                    Icons.clear,
+          Expanded(
+            child: SizedBox(
+              height: AppSearchTheme.searchBarHeight,
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _onSearch(),
+                cursorColor: AppSearchTheme.searchAccent,
+                decoration: InputDecoration(
+                  hintText: AppSearchTheme.inputHint,
+                  hintStyle: TextStyle(
                     color: colors.common.trailingIcon,
+                    fontSize: AppSearchTheme.inputHintFontSize,
                   ),
-                  onPressed: () {
-                    _controller.clear();
-                    if (_query.isNotEmpty) {
-                      _query = '';
-                      _loadPosts();
-                    }
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: colors.common.background,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+                  prefixIcon: const SizedBox.shrink(),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 0,
+                    minHeight: 0,
+                  ),
+                  prefix: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: AppSearchTheme.searchIconVerticalAlignment,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: AppSearchTheme.searchIconLeftOffset,
+                        ),
+                        child: Icon(
+                          Icons.search,
+                          color: colors.common.trailingIcon,
+                          size: AppSearchTheme.prefixIconSize,
+                        ),
+                      ),
+                      SizedBox(width: AppSearchTheme.searchIconToTextGap),
+                    ],
+                  ),
+                  suffixIcon: _controller.text.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () {
+                            _controller.clear();
+                            if (_query.isNotEmpty) {
+                              _query = '';
+                              _loadPosts();
+                            }
+                          },
+                          child: Icon(
+                            Icons.clear,
+                            color: colors.common.trailingIcon,
+                            size: AppSearchTheme.clearIconSize,
+                          ),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: colors.common.surface,
+                  isDense: AppSearchTheme.inputIsDense,
+                  contentPadding: const EdgeInsets.only(
+                    left: AppSearchTheme.searchIconLeftPadding,
+                    top: AppSearchTheme.inputVerticalPadding,
+                    bottom: AppSearchTheme.inputVerticalPadding,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AppSearchTheme.inputBorderRadius,
+                    ),
+                    borderSide: BorderSide(
+                      color: colors.common.divider,
+                      width: AppSearchTheme.inputBorderWidth,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AppSearchTheme.inputBorderRadius,
+                    ),
+                    borderSide: BorderSide(
+                      color: colors.common.divider,
+                      width: AppSearchTheme.inputBorderWidth,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      AppSearchTheme.inputBorderRadius,
+                    ),
+                    borderSide: BorderSide(
+                      color: colors.common.divider,
+                      width: AppSearchTheme.inputBorderWidth,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+          const SizedBox(width: AppSearchTheme.searchButtonLeftGap),
+          TextButton(
+            onPressed: _onSearch,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(
+                AppSearchTheme.searchButtonMinWidth,
+                AppSearchTheme.searchButtonMinHeight,
+              ),
+            ),
+            child: Text(
+              AppSearchTheme.searchButtonText,
+              style: TextStyle(
+                color: AppSearchTheme.searchButtonColor,
+                fontSize: AppSearchTheme.searchButtonFontSize,
+                fontWeight: AppSearchTheme.searchButtonFontWeight,
+              ),
+            ),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: colors.common.green, width: 1.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildFilterChips(AppColors colors, Color onSurface) {
+  Widget _buildSearchHistory(AppColors colors, Color onSurface) {
+    if (_history.isEmpty) return const SizedBox.shrink();
+    final canExpand =
+        _history.length > AppSearchTheme.historyCollapseThreshold;
+    final display = _historyExpanded || !canExpand
+        ? _history
+        : _history.take(AppSearchTheme.historyCollapseThreshold).toList();
+    final chipBg = AppSearchTheme.chipBg(context);
+
     return Container(
       color: colors.common.surface,
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _FilterChip(
-              label: _author == null || _author!.isEmpty
-                  ? '作者'
-                  : '作者: $_author',
-              active: _author != null && _author!.isNotEmpty,
-              onTap: _showAuthorPicker,
-            ),
-            const SizedBox(width: 10),
-            _FilterChip(
-              label: _dateStart != null && _dateEnd != null
-                  ? '${_formatApiDate(_dateStart!)} ~ ${_formatApiDate(_dateEnd!)}'
-                  : '时间段',
-              active: _dateStart != null && _dateEnd != null,
-              onTap: _showDatePicker,
-            ),
-            const SizedBox(width: 10),
-            _FilterChip(
-              label: _selectedCategory == '全部'
-                  ? '品类'
-                  : '品类: $_selectedCategory',
-              active: _selectedCategory != '全部',
-              onTap: _showCategoryPicker,
-            ),
-            if (_hasActiveFilters) ...[
-              const SizedBox(width: 10),
-              _FilterChip(
-                label: '清除',
-                active: false,
-                onTap: _clearFilters,
-                isAction: true,
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(
+        AppSearchTheme.historySectionHorizontalPadding,
+        AppSearchTheme.historySectionTopPadding,
+        AppSearchTheme.historySectionHorizontalPadding,
+        AppSearchTheme.historySectionBottomPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(
+                AppSearchTheme.historyTitle,
+                style: TextStyle(
+                  fontSize: AppSearchTheme.historyTitleFontSize,
+                  fontWeight: AppSearchTheme.historyTitleFontWeight,
+                  color: onSurface,
+                ),
               ),
+              const Spacer(),
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: AppSearchTheme.historyClearIconSize,
+                  color: onSurface.withValues(
+                    alpha: AppSearchTheme.historyClearIconAlpha,
+                  ),
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: AppSearchTheme.historyIconButtonSize,
+                  minHeight: AppSearchTheme.historyIconButtonSize,
+                ),
+                onPressed: _clearHistory,
+              ),
+              Container(
+                width: AppSearchTheme.historyDividerWidth,
+                height: AppSearchTheme.historyDividerHeight,
+                margin: const EdgeInsets.symmetric(
+                  horizontal: AppSearchTheme.historyDividerHorizontalMargin,
+                ),
+                color: colors.common.divider,
+              ),
+              if (canExpand)
+                IconButton(
+                  icon: AnimatedRotation(
+                    turns: _historyExpanded ? 0.5 : 0,
+                    duration: AppSearchTheme.historyExpandAnimationDuration,
+                    child: Icon(
+                      Icons.keyboard_arrow_down,
+                      size: AppSearchTheme.historyExpandIconSize,
+                      color: onSurface.withValues(
+                        alpha: AppSearchTheme.historyExpandIconAlpha,
+                      ),
+                    ),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: AppSearchTheme.historyIconButtonSize,
+                    minHeight: AppSearchTheme.historyIconButtonSize,
+                  ),
+                  onPressed: () => setState(
+                    () => _historyExpanded = !_historyExpanded,
+                  ),
+                )
+              else
+                const SizedBox(width: AppSearchTheme.historyIconButtonSize),
             ],
-          ],
-        ),
+          ),
+          SizedBox(height: AppSearchTheme.historyTitleChipGap),
+          Wrap(
+            spacing: AppSearchTheme.historyWrapSpacing,
+            runSpacing: AppSearchTheme.historyWrapRunSpacing,
+            children: display.map((q) {
+              return GestureDetector(
+                onTap: () => _onHistoryTap(q),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSearchTheme.historyChipHorizontalPadding,
+                    vertical: AppSearchTheme.historyChipVerticalPadding,
+                  ),
+                  decoration: BoxDecoration(
+                    color: chipBg,
+                    borderRadius: BorderRadius.circular(
+                      AppSearchTheme.historyChipBorderRadius,
+                    ),
+                  ),
+                  child: Text(
+                    q,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppSearchTheme.historyChipFontSize,
+                      color: onSurface.withValues(
+                        alpha: AppSearchTheme.historyChipTextAlpha,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
 
-  bool get _hasActiveFilters =>
-      _author != null && _author!.isNotEmpty ||
-      _dateStart != null ||
-      _dateEnd != null ||
-      _selectedCategory != '全部';
-
   Widget _buildBody(AppColors colors) {
+    if (_query.isEmpty) {
+      return const SizedBox.shrink();
+    }
     if (_loading) {
       return const AppLoadingCenter(message: '加载中...');
     }
     if (_error != null) {
       return AppErrorState(message: _error!, onRetry: _loadPosts);
     }
-    final posts = _filteredPosts;
+    final posts = _posts;
     if (posts.isEmpty) {
       return const AppEmptyState(
         message: '没有找到相关帖子',
@@ -397,64 +433,6 @@ class _SearchPageState extends State<SearchPage> {
           onCommentCreated: (_) {},
         );
       },
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  final bool isAction;
-
-  const _FilterChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.isAction = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColors>()!;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: isAction
-              ? colors.common.background
-              : active
-                  ? colors.common.green.withValues(alpha: 0.1)
-                  : colors.common.background,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isAction
-                ? colors.common.divider
-                : active
-                    ? colors.common.green
-                    : colors.common.divider,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: isAction
-                ? onSurface.withValues(alpha: 0.7)
-                : active
-                    ? colors.common.green
-                    : onSurface.withValues(alpha: 0.8),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -14,11 +14,11 @@ import '../../theme/app_square_refresh_theme.dart';
 import '../../theme/app_square_top_bar_theme.dart';
 import '../../widgets/image_overlay.dart';
 import '../search/search_page.dart';
-import '../settings/settings_navigation.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/app_error_state.dart';
 import '../../widgets/app_loading_indicator.dart';
 import '../../widgets/app_empty_state.dart';
+import '../../widgets/app_snackbar.dart';
 
 class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
@@ -88,7 +88,8 @@ class _SquarePageState extends State<SquarePage> {
   void _onLeftPullEnd() {
     if (_leftPullProgress >= 1.0) {
       _triggerLeftRefresh();
-    } else {
+    } else if (_leftPullDistance != 0 || _leftPullHapticTriggered) {
+      // 状态未变化时（如纯点击）不重建，避免多余的开销
       setState(() {
         _leftPullDistance = 0;
         _leftPullHapticTriggered = false;
@@ -401,19 +402,58 @@ class _SquarePageState extends State<SquarePage> {
     if (mounted) setState(() => _comments[post.id] = merged);
   }
 
-  /// 用最新帖数据替换列表中同 id 项（署名变更时刷新 UI）
+  /// 用最新帖数据替换列表中同 id 项（内容/署名/评论变化时刷新 UI）
   void _replaceLoadedPost(Post fresh) {
     final idx = _posts.indexWhere((p) => p.id == fresh.id);
     if (idx < 0) return;
     final old = _posts[idx];
-    if (old.author == fresh.author &&
+    final same = old.author == fresh.author &&
         old.isAnonymous == fresh.isAnonymous &&
         old.updateAt == fresh.updateAt &&
-        _sameIntList(old.comments, fresh.comments)) {
-      return;
-    }
+        old.title == fresh.title &&
+        old.content == fresh.content &&
+        _sameIntList(old.comments, fresh.comments) &&
+        _sameStringList(
+          old.images.map((e) => e.fileName).toList(),
+          fresh.images.map((e) => e.fileName).toList(),
+        ) &&
+        _sameStringList(
+          old.attachments.map((e) => e.fileName).toList(),
+          fresh.attachments.map((e) => e.fileName).toList(),
+        ) &&
+        _sameStringList(
+          old.attachments.map((e) => e.sourceName).toList(),
+          fresh.attachments.map((e) => e.sourceName).toList(),
+        );
+    if (same) return;
     _posts[idx] = fresh;
     if (mounted) setState(() {});
+  }
+
+  static bool _sameStringList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// 刷新单个帖子：重新拉取帖数据 + 回复，并更新 UI/缓存
+  Future<void> _refreshSinglePost(Post post) async {
+    Post? fresh;
+    try {
+      fresh = await ApiService.getPost(post.id);
+    } catch (_) {
+      fresh = null;
+    }
+    if (fresh == null) {
+      if (mounted) showAppSnackBar(context, message: '刷新失败，请检查网络');
+      return;
+    }
+    await PostStorage.savePost(fresh);
+    _replaceLoadedPost(fresh);
+    await _refreshPostComments(fresh, fetchLatest: false);
+    if (mounted) showAppSnackBar(context, message: '已刷新该帖子');
   }
 
   @override
@@ -429,6 +469,8 @@ class _SquarePageState extends State<SquarePage> {
         if (!didPop) ImageOverlay.closeCurrent();
       },
       child: Scaffold(
+        // 回复栏是 OverlayEntry，键盘弹出时不需要 resize 底层列表，避免底边栏被顶动
+        resizeToAvoidBottomInset: false,
         body: Container(
           color: topBarBg,
           child: SafeArea(
@@ -521,6 +563,7 @@ class _SquarePageState extends State<SquarePage> {
                           comments: _comments[p.id] ?? [],
                           onNeedCommentRefresh: () =>
                               _onNeedCommentRefresh(p.id),
+                          onRefreshPost: () => _refreshSinglePost(p),
                           onCommentCreated: (cmt) {
                             setState(() {
                               _comments[p.id] ??= [];
@@ -727,7 +770,7 @@ class _SquarePageState extends State<SquarePage> {
                   ),
                   onPressed: () => Navigator.of(
                     context,
-                  ).push(topDownRoute(const SearchPage())),
+                  ).push(MaterialPageRoute(builder: (_) => const SearchPage())),
                 ),
               ),
             ],
@@ -765,13 +808,17 @@ class _TopPullRecognizer extends OneSequenceGestureRecognizer {
   @override
   void addAllowedPointer(PointerDownEvent event) {
     startTrackingPointer(event.pointer, event.transform);
-    if (isAtTop == null || !isAtTop!()) {
-      resolve(GestureDisposition.rejected);
-      return;
-    }
+    // 每次新手指按下都重置状态，避免上一次成功刷新后 _accepted 残留 true，
+    // 导致在列表非顶部时继续响应下拉。
     _dx = 0;
     _dy = 0;
     _accepted = false;
+
+    if (isAtTop == null || !isAtTop!()) {
+      resolve(GestureDisposition.rejected);
+      stopTrackingPointer(event.pointer);
+      return;
+    }
     onStart?.call();
   }
 
@@ -805,6 +852,13 @@ class _TopPullRecognizer extends OneSequenceGestureRecognizer {
         onMove?.call(_dy);
       }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      // 未被接管的轻点必须主动让出手势竞技场，
+      // 否则该识别器作为竞技场第一个成员会在 sweep 时抢先获胜，
+      // 导致列表置顶时内容区所有点击（评论按钮等）失效。
+      if (!_accepted) {
+        resolve(GestureDisposition.rejected);
+      }
+      _accepted = false;
       onEnd?.call();
       stopTrackingPointer(event.pointer);
     }
