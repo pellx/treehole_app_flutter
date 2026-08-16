@@ -470,37 +470,10 @@ class _UserPageState extends State<UserPage> {
           child: CustomScrollView(
             physics: const ClampingScrollPhysics(),
             slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _profileCard(colors, onSurface),
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            top: 12,
-                            left: 4,
-                            right: 4,
-                          ),
-                          child: Text(
-                            _error!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.register.errorText,
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
                   child: Center(
                     child: Transform.translate(
                       offset: Offset(
@@ -510,6 +483,23 @@ class _UserPageState extends State<UserPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          _profileCard(colors, onSurface),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: 12,
+                                left: 4,
+                                right: 4,
+                              ),
+                              child: Text(
+                                _error!,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: colors.register.errorText,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 20),
                           _sectionTitle('账户安全', onSurface),
                           _sectionCard(colors, [
                             _tokenTile(colors, onSurface),
