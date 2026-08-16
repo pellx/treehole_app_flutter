@@ -188,6 +188,7 @@ class _SearchPageState extends State<SearchPage> {
                       Padding(
                         padding: EdgeInsets.only(
                           left: AppSearchTheme.searchIconLeftOffset,
+                          top: AppSearchTheme.searchIconVerticalOffset,
                         ),
                         child: Icon(
                           Icons.search,
