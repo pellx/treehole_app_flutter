@@ -39,8 +39,8 @@ class _SearchPageState extends State<SearchPage> {
   final _categories = ['默认', '问答', '资料', '兴趣', '梗图'];
   int _selectedCategoryIndex = 0;
 
-  final _sortOptions = ['默认排序', '最新发布', '最新回复', '最先发布', '回复最多'];
-  final _timeOptions = ['不限时间', '最近一天', '最近一周', '最近一月', '最近半年'];
+  final _sortOptions = ['默认排序', '最新发布', '最新回复', '回复最多'];
+  final _timeOptions = ['不限时间', '最近一天', '最近一月', '最近半年'];
   int _selectedSortIndex = 0;
   int _selectedTimeIndex = 0;
   bool _filterPanelExpanded = false;
@@ -116,9 +116,7 @@ class _SearchPageState extends State<SearchPage> {
     for (final cmt in newCmts) {
       if (!merged.any((e) => e.id == cmt.id)) merged.add(cmt);
     }
-    merged.sort(
-      (a, b) => newIds.indexOf(a.id).compareTo(newIds.indexOf(b.id)),
-    );
+    merged.sort((a, b) => newIds.indexOf(a.id).compareTo(newIds.indexOf(b.id)));
 
     await PostStorage.updatePostCommentIds(post.id, newIds);
     if (mounted) setState(() => _comments[post.id] = merged);
@@ -129,13 +127,6 @@ class _SearchPageState extends State<SearchPage> {
     final db = DateTime.tryParse(b.createdAt);
     if (da == null || db == null) return 0;
     return db.compareTo(da);
-  }
-
-  static int _compareCreatedAtAsc(Post a, Post b) {
-    final da = DateTime.tryParse(a.createdAt);
-    final db = DateTime.tryParse(b.createdAt);
-    if (da == null || db == null) return 0;
-    return da.compareTo(db);
   }
 
   Future<void> _loadHistory() async {
@@ -203,10 +194,8 @@ class _SearchPageState extends State<SearchPage> {
         final days = _selectedTimeIndex == 1
             ? 1
             : _selectedTimeIndex == 2
-                ? 7
-                : _selectedTimeIndex == 3
-                    ? 30
-                    : 180;
+            ? 30
+            : 180;
         return now.difference(created).inDays <= days;
       }).toList();
 
@@ -218,10 +207,10 @@ class _SearchPageState extends State<SearchPage> {
             if (cmp != 0) return cmp;
             return _compareCreatedAtDesc(a, b);
           });
-        case 3: // 最先发布
-          filtered.sort(_compareCreatedAtAsc);
-        case 4: // 回复最多
-          filtered.sort((a, b) => b.comments.length.compareTo(a.comments.length));
+        case 3: // 回复最多
+          filtered.sort(
+            (a, b) => b.comments.length.compareTo(a.comments.length),
+          );
         case 0: // 默认排序
         case 1: // 最新发布
         default:
@@ -283,18 +272,27 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             _buildSearchBar(colors, onSurface),
             if (_query.isNotEmpty) _buildCategoryBar(colors, onSurface),
-            if (_query.isNotEmpty && _filterPanelExpanded)
-              _buildFilterPanel(colors, onSurface),
             _buildSearchHistory(colors, onSurface),
             Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: () {
-                  if (_filterPanelExpanded) {
-                    setState(() => _filterPanelExpanded = false);
-                  }
-                },
-                child: _buildBody(colors),
+              child: Stack(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () {
+                      if (_filterPanelExpanded) {
+                        setState(() => _filterPanelExpanded = false);
+                      }
+                    },
+                    child: _buildBody(colors),
+                  ),
+                  if (_query.isNotEmpty && _filterPanelExpanded)
+                    Positioned(
+                      top: AppSearchTheme.filterPanelOverlayTop,
+                      left: AppSearchTheme.filterPanelOverlayLeft,
+                      right: AppSearchTheme.filterPanelOverlayRight,
+                      child: _buildFilterPanel(colors, onSurface),
+                    ),
+                ],
               ),
             ),
           ],
@@ -345,7 +343,8 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                   prefix: Row(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: AppSearchTheme.searchIconVerticalAlignment,
+                    crossAxisAlignment:
+                        AppSearchTheme.searchIconVerticalAlignment,
                     children: [
                       Padding(
                         padding: EdgeInsets.only(
@@ -511,17 +510,20 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ),
           GestureDetector(
-            onTap: () => setState(
-              () => _filterPanelExpanded = !_filterPanelExpanded,
-            ),
+            onTap: () =>
+                setState(() => _filterPanelExpanded = !_filterPanelExpanded),
             child: Container(
               color: bg,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSearchTheme.filterButtonHorizontalPadding,
+              ),
               alignment: Alignment.center,
               child: Icon(
                 Icons.filter_alt_outlined,
-                size: 22,
-                color: onSurface.withValues(alpha: 0.7),
+                size: AppSearchTheme.filterButtonIconSize,
+                color: onSurface.withValues(
+                  alpha: AppSearchTheme.filterButtonIconAlpha,
+                ),
               ),
             ),
           ),
@@ -537,12 +539,14 @@ class _SearchPageState extends State<SearchPage> {
 
     Widget sectionTitle(String title) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.only(
+          bottom: AppSearchTheme.filterPanelTitleBottomGap,
+        ),
         child: Text(
           title,
           style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontSize: AppSearchTheme.filterPanelTitleFontSize,
+            fontWeight: AppSearchTheme.filterPanelTitleFontWeight,
             color: onSurface.withValues(alpha: 0.9),
           ),
         ),
@@ -554,9 +558,13 @@ class _SearchPageState extends State<SearchPage> {
       required int selectedIndex,
       required ValueChanged<int> onSelected,
     }) {
-      return Wrap(
-        spacing: 10,
-        runSpacing: 10,
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: AppSearchTheme.filterPanelChipCrossAxisCount,
+        mainAxisSpacing: AppSearchTheme.filterPanelChipRunSpacing,
+        crossAxisSpacing: AppSearchTheme.filterPanelChipSpacing,
+        childAspectRatio: AppSearchTheme.filterPanelChipChildAspectRatio,
         children: options.asMap().entries.map((entry) {
           final index = entry.key;
           final label = entry.value;
@@ -569,23 +577,34 @@ class _SearchPageState extends State<SearchPage> {
               if (_query.isNotEmpty) _loadPosts();
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSearchTheme.filterPanelChipHorizontalPadding,
+                vertical: AppSearchTheme.filterPanelChipVerticalPadding,
+              ),
               decoration: BoxDecoration(
                 color: selected
                     ? AppSearchTheme.searchAccent.withValues(alpha: 0.1)
                     : bg,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(
+                  AppSearchTheme.filterPanelChipBorderRadius,
+                ),
                 border: Border.all(
                   color: selected
                       ? AppSearchTheme.searchAccent
                       : colors.common.divider,
-                  width: selected ? 1.2 : 0.8,
+                  width: selected
+                      ? AppSearchTheme.filterPanelSelectedBorderWidth
+                      : AppSearchTheme.filterPanelUnselectedBorderWidth,
                 ),
               ),
               child: Text(
                 label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppSearchTheme.filterPanelChipFontSize,
                   color: selected
                       ? AppSearchTheme.searchAccent
                       : onSurface.withValues(alpha: 0.75),
@@ -599,9 +618,17 @@ class _SearchPageState extends State<SearchPage> {
     }
 
     return Container(
-      color: bg,
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      padding: AppSearchTheme.filterPanelPadding,
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(
+          bottom: BorderSide(
+            color: colors.common.divider,
+            width: AppSearchTheme.filterPanelBottomBorderWidth,
+          ),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -612,7 +639,7 @@ class _SearchPageState extends State<SearchPage> {
             selectedIndex: _selectedSortIndex,
             onSelected: (i) => _selectedSortIndex = i,
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: AppSearchTheme.filterPanelSectionSpacing),
           sectionTitle('发布时间'),
           chipGrid(
             options: _timeOptions,
