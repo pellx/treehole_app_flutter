@@ -458,7 +458,10 @@ class _SquarePageState extends State<SquarePage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppColors>()!;
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final topBarBg = isLight
+        ? AppSquareTopBarTheme.backgroundLight
+        : AppSquareTopBarTheme.backgroundDark;
 
     return PopScope(
       canPop: ImageOverlay.currentEntry == null,
@@ -469,7 +472,7 @@ class _SquarePageState extends State<SquarePage> {
         // 回复栏是 OverlayEntry，键盘弹出时不需要 resize 底层列表，避免底边栏被顶动
         resizeToAvoidBottomInset: false,
         body: Container(
-          color: colors.common.background,
+          color: topBarBg,
           child: SafeArea(
             bottom: false,
             child: _buildRefreshShell(_buildBody()),
@@ -486,47 +489,58 @@ class _SquarePageState extends State<SquarePage> {
 
     // 顶部栏始终保留，加载/错误/空状态以 SliverFillRemaining 嵌入列表
     if (_loading && _posts.isEmpty) {
-      return CustomScrollView(
-        slivers: [
-          topBar,
-          const SliverFillRemaining(child: AppLoadingCenter(message: '加载中...')),
-        ],
+      return Container(
+        color: colors.common.background,
+        child: CustomScrollView(
+          slivers: [
+            topBar,
+            const SliverFillRemaining(child: AppLoadingCenter(message: '加载中...')),
+          ],
+        ),
       );
     }
     if (_error != null && _posts.isEmpty) {
-      return CustomScrollView(
-        slivers: [
-          topBar,
-          SliverFillRemaining(
-            child: AppErrorState(message: _error!, onRetry: _initLoad),
-          ),
-        ],
+      return Container(
+        color: colors.common.background,
+        child: CustomScrollView(
+          slivers: [
+            topBar,
+            SliverFillRemaining(
+              child: AppErrorState(message: _error!, onRetry: _initLoad),
+            ),
+          ],
+        ),
       );
     }
     if (_posts.isEmpty) {
-      return CustomScrollView(
-        slivers: [
-          topBar,
-          const SliverFillRemaining(
-            child: AppEmptyState(
-              message: '还没有帖子，快来发布第一条吧',
-              icon: Icons.inbox_outlined,
+      return Container(
+        color: colors.common.background,
+        child: CustomScrollView(
+          slivers: [
+            topBar,
+            const SliverFillRemaining(
+              child: AppEmptyState(
+                message: '还没有帖子，快来发布第一条吧',
+                icon: Icons.inbox_outlined,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
     final posts = _filteredPosts;
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (n) {
-        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
-          _loadMore();
-        }
-        return false;
-      },
-      child: CustomScrollView(
+    return Container(
+      color: colors.common.background,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n.metrics.pixels >= n.metrics.maxScrollExtent - 300 && !_loading) {
+            _loadMore();
+          }
+          return false;
+        },
+        child: CustomScrollView(
         controller: _scrollController,
         // 使用 ClampingScrollPhysics，避免在顶部继续下拉出现空白/回弹，
         // 从而让左侧拉出刷新球成为唯一的下拉刷新入口。
@@ -575,7 +589,8 @@ class _SquarePageState extends State<SquarePage> {
             ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   /// 顶部下拉刷新球外壳：列表置顶时，任意位置向下拉都会唤出左上角刷新球
