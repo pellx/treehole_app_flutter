@@ -24,10 +24,10 @@ class SquarePage extends StatefulWidget {
   const SquarePage({super.key});
 
   @override
-  State<SquarePage> createState() => _SquarePageState();
+  State<SquarePage> createState() => SquarePageState();
 }
 
-class _SquarePageState extends State<SquarePage> {
+class SquarePageState extends State<SquarePage> {
   List<Post> _posts = []; // 当前展示的帖子列表
   List<int> _allIds = []; // 全部帖子 ID（按 API 返回顺序）
   int _loadedCount = 0; // 已加载到第几个 ID
@@ -75,6 +75,16 @@ class _SquarePageState extends State<SquarePage> {
     if (_selectedCategoryIndex == index) return;
     HapticFeedback.lightImpact();
     setState(() => _selectedCategoryIndex = index);
+    _reloadCategory();
+  }
+
+  /// 切换到默认分类并重新加载
+  void resetToDefault() {
+    if (_selectedCategoryIndex == 0) {
+      _reloadCategory();
+      return;
+    }
+    _selectedCategoryIndex = 0;
     _reloadCategory();
   }
 

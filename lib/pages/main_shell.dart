@@ -19,7 +19,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
-  final _homeKey = GlobalKey();
+  final _homeKey = GlobalKey<SquarePageState>();
   final _favoritesKey = GlobalKey();
   final _messagesKey = GlobalKey();
   final _userKey = GlobalKey();
@@ -32,8 +32,9 @@ class _MainShellState extends State<MainShell> {
       context,
     ).push<bool>(topDownRoute(const PostCreatePage()));
     if (result == true && mounted) {
-      // 发布成功后切回主页并刷新
+      // 发布成功后切回主页默认分类并刷新
       setState(() => _currentIndex = 0);
+      _homeKey.currentState?.resetToDefault();
     }
   }
 
