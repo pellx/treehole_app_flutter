@@ -27,7 +27,8 @@ class SquarePage extends StatefulWidget {
   State<SquarePage> createState() => SquarePageState();
 }
 
-class SquarePageState extends State<SquarePage> {
+class SquarePageState extends State<SquarePage>
+    with SingleTickerProviderStateMixin {
   List<Post> _posts = []; // 当前展示的帖子列表
   List<int> _allIds = []; // 全部帖子 ID（按 API 返回顺序）
   int _loadedCount = 0; // 已加载到第几个 ID
@@ -47,6 +48,25 @@ class SquarePageState extends State<SquarePage> {
 
   /// 是否正在执行左侧刷新
   bool _leftRefreshing = false;
+
+  /// 释放触发刷新时球体的视觉抖动动画（水平来回摆动）
+  late final AnimationController _ballShakeController;
+  late final Animation<double> _ballShakeOffset;
+
+  void _initBallShake() {
+    _ballShakeController = AnimationController(
+      vsync: this,
+      duration: AppSquareRefreshTheme.ballShakeDuration,
+    );
+    final amp = AppSquareRefreshTheme.ballShakeAmplitude;
+    _ballShakeOffset = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -amp), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -amp, end: amp), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: amp, end: -amp), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -amp, end: amp), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: amp, end: 0.0), weight: 1),
+    ]).animate(_ballShakeController);
+  }
 
   final _scrollController = ScrollController();
 
@@ -118,8 +138,10 @@ class SquarePageState extends State<SquarePage> {
   }
 
   Future<void> _triggerLeftRefresh() async {
-    // 释放触发刷新时震动
+    // 释放触发刷新：可选触觉 + 球体视觉抖动
     AppSquareRefreshTheme.hapticOnRefresh.trigger();
+    if (_ballShakeController.isAnimating) _ballShakeController.stop();
+    _ballShakeController.forward(from: 0);
     setState(() {
       _leftRefreshing = true;
       _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
@@ -144,6 +166,7 @@ class SquarePageState extends State<SquarePage> {
   @override
   void initState() {
     super.initState();
+    _initBallShake();
     _initLoad();
     ImageOverlay.onChanged = () {
       if (mounted) setState(() {});
@@ -152,6 +175,7 @@ class SquarePageState extends State<SquarePage> {
 
   @override
   void dispose() {
+    _ballShakeController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -675,11 +699,8 @@ class SquarePageState extends State<SquarePage> {
           ),
         ),
         Positioned(
-          left:
-              -AppSquareRefreshTheme.ballSize +
-              (AppSquareRefreshTheme.ballSize +
-                      AppSquareRefreshTheme.ballLeftFinalInset) *
-                  progress,
+          // 水平固定在右侧，竖直方向从顶部栏上方直落下来
+          right: AppSquareRefreshTheme.ballRightFinalInset,
           top:
               -AppSquareRefreshTheme.ballSize +
               (AppSquareRefreshTheme.ballSize +
@@ -687,33 +708,41 @@ class SquarePageState extends State<SquarePage> {
                   progress,
           child: Opacity(
             opacity: progress,
-            child: Container(
-              width: AppSquareRefreshTheme.ballSize,
-              height: AppSquareRefreshTheme.ballSize,
-              decoration: BoxDecoration(
-                color: colors.common.surface,
-                shape: BoxShape.circle,
-                // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
-                border: Border.all(
-                  color: AppSquareRefreshTheme.ballBorderColor,
-                  width: AppSquareRefreshTheme.ballBorderWidth,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors.common.onSurface.withValues(
-                      alpha: AppSquareRefreshTheme.shadowOpacity,
+            // 释放时水平抖动
+            child: AnimatedBuilder(
+              animation: _ballShakeController,
+              builder: (context, child) => Transform.translate(
+                offset: Offset(_ballShakeOffset.value, 0),
+                child: child,
+              ),
+              child: Container(
+                width: AppSquareRefreshTheme.ballSize,
+                height: AppSquareRefreshTheme.ballSize,
+                decoration: BoxDecoration(
+                  color: colors.common.surface,
+                  shape: BoxShape.circle,
+                  // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
+                  border: Border.all(
+                    color: AppSquareRefreshTheme.ballBorderColor,
+                    width: AppSquareRefreshTheme.ballBorderWidth,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.common.onSurface.withValues(
+                        alpha: AppSquareRefreshTheme.shadowOpacity,
+                      ),
+                      blurRadius: 8,
+                      offset: const Offset(2, 2),
                     ),
-                    blurRadius: 8,
-                    offset: const Offset(2, 2),
+                  ],
+                  image: DecorationImage(
+                    image: AssetImage(
+                      _leftRefreshing
+                          ? AppSquareRefreshTheme.putonImage
+                          : AppSquareRefreshTheme.waitingImage,
+                    ),
+                    fit: AppSquareRefreshTheme.ballImageFit,
                   ),
-                ],
-                image: DecorationImage(
-                  image: AssetImage(
-                    _leftRefreshing
-                        ? AppSquareRefreshTheme.putonImage
-                        : AppSquareRefreshTheme.waitingImage,
-                  ),
-                  fit: AppSquareRefreshTheme.ballImageFit,
                 ),
               ),
             ),
