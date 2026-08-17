@@ -5,6 +5,7 @@ import '../../services/api.dart';
 import '../../services/storage.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
+import '../../widgets/app_app_bar.dart';
 import '../../widgets/version_card.dart';
 import 'version_detail_page.dart';
 
@@ -49,30 +50,51 @@ class _VersionPageState extends State<VersionPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
 
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
-      return Center(child: Text(_error!, style: TextStyle(color: colors.common.trailingIcon)));
-    }
-    if (_versions.isEmpty) {
-      return Center(child: Text('暂无版本记录', style: TextStyle(color: colors.common.trailingIcon)));
+    Widget content;
+    if (_loading) {
+      content = const Center(child: CircularProgressIndicator());
+    } else if (_error != null) {
+      content = Center(
+        child: Text(_error!, style: TextStyle(color: colors.common.trailingIcon)),
+      );
+    } else if (_versions.isEmpty) {
+      content = Center(
+        child: Text('暂无版本记录', style: TextStyle(color: colors.common.trailingIcon)),
+      );
+    } else {
+      content = ListView.builder(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimens.cardHPadding,
+          vertical: 12,
+        ),
+        itemCount: _versions.length,
+        itemBuilder: (_, i) => VersionCard(
+          version: _versions[i],
+          isLatest: i == 0,
+          onTap: () => Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) =>
+                  VersionDetailPage(version: _versions[i]),
+              transitionsBuilder: (_, animation, __, child) => SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 1),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                ),
+                child: child,
+              ),
+              transitionDuration: const Duration(milliseconds: 300),
+            ),
+          ),
+        ),
+      );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: AppDimens.cardHPadding, vertical: 12),
-      itemCount: _versions.length,
-      itemBuilder: (_, i) => VersionCard(
-        version: _versions[i],
-        isLatest: i == 0,
-        onTap: () => Navigator.push(context, PageRouteBuilder(
-          pageBuilder: (_, __, ___) => VersionDetailPage(version: _versions[i]),
-          transitionsBuilder: (_, animation, __, child) => SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-            child: child,
-          ),
-          transitionDuration: const Duration(milliseconds: 300),
-        )),
-      ),
+    return AppScaffold(
+      title: '版本更新',
+      body: content,
     );
   }
 }

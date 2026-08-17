@@ -11,8 +11,6 @@ import '../../models/version_info.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_dimens_accent.dart';
-import '../../widgets/app_app_bar.dart';
-import '../../widgets/app_snackbar.dart';
 
 class VersionDetailPage extends StatefulWidget {
   final VersionInfo version;
@@ -51,25 +49,21 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
 
   void _toast(String message) {
     if (!mounted) return;
-    showAppSnackBar(
-      context,
-      message: message,
-      duration: const Duration(seconds: 5),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
     );
   }
 
   Future<bool> _ensureInstallAllowed() async {
     if (!Platform.isAndroid) return true;
     try {
-      final allowed = await _installChannel.invokeMethod<bool>(
-        'canRequestPackageInstalls',
-      );
+      final allowed = await _installChannel.invokeMethod<bool>('canRequestPackageInstalls');
       if (allowed == true) return true;
     } catch (e) {
       debugPrint('[VersionDetail] canRequestPackageInstalls: $e');
     }
-    if (!mounted) return true;
 
+    if (!mounted) return false;
     final colors = Theme.of(context).extension<AppColors>()!;
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final go = await showDialog<bool>(
@@ -103,21 +97,17 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
                         onPressed: () => Navigator.of(ctx).pop(false),
                         style: TextButton.styleFrom(
                           foregroundColor: onSurface.withValues(
-                            alpha: AccentDimens.dialogCancelTextAlpha,
-                          ),
+                              alpha: AccentDimens.dialogCancelTextAlpha),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: AccentDimens.dialogActionHPadding,
-                          ),
+                              horizontal: AccentDimens.dialogActionHPadding),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                              AccentDimens.dialogActionRadius,
-                            ),
+                                AccentDimens.dialogActionRadius),
                           ),
                           textStyle: const TextStyle(
-                            fontSize: AccentDimens.dialogActionFontSize,
-                          ),
+                              fontSize: AccentDimens.dialogActionFontSize),
                         ),
                         child: const Text('取消'),
                       ),
@@ -136,16 +126,13 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: AccentDimens.dialogActionHPadding,
-                          ),
+                              horizontal: AccentDimens.dialogActionHPadding),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
-                              AccentDimens.dialogActionRadius,
-                            ),
+                                AccentDimens.dialogActionRadius),
                           ),
                           textStyle: const TextStyle(
-                            fontSize: AccentDimens.dialogActionFontSize,
-                          ),
+                              fontSize: AccentDimens.dialogActionFontSize),
                         ),
                         child: const Text('去设置'),
                       ),
@@ -193,9 +180,7 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
         file.path,
         type: 'application/vnd.android.package-archive',
       );
-      debugPrint(
-        '[VersionDetail] OpenFilex type=${result.type} message=${result.message}',
-      );
+      debugPrint('[VersionDetail] OpenFilex type=${result.type} message=${result.message}');
       if (result.type == ResultType.done) {
         _toast('已打开安装界面，请确认安装');
       } else {
@@ -234,50 +219,63 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppColors>()!;
-    final isCurrent =
-        widget.version.versionNumber == VersionInfo.currentVersion;
+    final isCurrent = widget.version.versionNumber == VersionInfo.currentVersion;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
-          AppAppBar(
-            title: 'v${widget.version.versionNumber} ${widget.version.title}',
-            onBack: () => Navigator.pop(context),
-            trailing: Padding(
-              padding: EdgeInsets.only(
-                right: AppDimens.postCreateSubmitMarginRight,
-              ),
+          Container(
+            color: colors.postCreate.topBarBg,
+            child: SafeArea(
+              bottom: false,
               child: SizedBox(
-                height: AppDimens.postCreateSubmitHeight,
-                child: ElevatedButton(
-                  onPressed: isCurrent || _downloading ? null : _install,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colors.postCreate.submitBg,
-                    foregroundColor: colors.postCreate.submitText,
-                    elevation: 0,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppDimens.postCreateSubmitHPadding,
-                      vertical: 0,
+                height: AppDimens.settingsBarHeight,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.arrow_back, color: colors.common.barText),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppDimens.postCreateSubmitRadius,
+                    Expanded(
+                      child: Text(
+                        'v${widget.version.versionNumber} ${widget.version.title}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w500,
+                          color: colors.common.barText,
+                        ),
                       ),
                     ),
-                    textStyle: TextStyle(
-                      fontSize: AppDimens.postCreateSubmitFontSize,
+                    Padding(
+                      padding: EdgeInsets.only(right: AppDimens.postCreateSubmitMarginRight),
+                      child: SizedBox(
+                        height: AppDimens.postCreateSubmitHeight,
+                        child: ElevatedButton(
+                          onPressed: isCurrent || _downloading ? null : _install,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colors.postCreate.submitBg,
+                            foregroundColor: colors.postCreate.submitText,
+                            elevation: 0,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppDimens.postCreateSubmitHPadding,
+                              vertical: 0,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppDimens.postCreateSubmitRadius),
+                            ),
+                            textStyle: TextStyle(fontSize: AppDimens.postCreateSubmitFontSize),
+                          ),
+                          child: Text(
+                            isCurrent ? '已是最新' : _downloading ? '下载中...' : '更新',
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    isCurrent
-                        ? '已是最新'
-                        : _downloading
-                        ? '下载中...'
-                        : '更新',
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -286,9 +284,7 @@ class _VersionDetailPageState extends State<VersionDetailPage> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Text(
-                widget.version.description.isNotEmpty
-                    ? widget.version.description
-                    : '暂无详细说明',
+                widget.version.description.isNotEmpty ? widget.version.description : '暂无详细说明',
                 style: TextStyle(
                   fontSize: 15,
                   color: colors.common.onSurface,
