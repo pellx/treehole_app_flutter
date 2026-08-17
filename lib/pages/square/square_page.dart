@@ -171,7 +171,9 @@ class SquarePageState extends State<SquarePage>
     // 释放触发刷新：可选触觉 + 球体循环抖动（加载期间持续）
     AppSquareRefreshTheme.hapticOnRefresh.trigger();
     if (_ballShakeController.isAnimating) _ballShakeController.stop();
-    _ballShakeController.repeat(from: 0);
+    _ballShakeController
+      ..value = 0
+      ..repeat();
     setState(() {
       _leftRefreshing = true;
       _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
