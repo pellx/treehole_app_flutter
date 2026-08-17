@@ -168,10 +168,10 @@ class SquarePageState extends State<SquarePage>
   }
 
   Future<void> _triggerLeftRefresh() async {
-    // 释放触发刷新：可选触觉 + 球体视觉抖动
+    // 释放触发刷新：可选触觉 + 球体循环抖动（加载期间持续）
     AppSquareRefreshTheme.hapticOnRefresh.trigger();
     if (_ballShakeController.isAnimating) _ballShakeController.stop();
-    _ballShakeController.forward(from: 0);
+    _ballShakeController.repeat(from: 0);
     setState(() {
       _leftRefreshing = true;
       _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
@@ -179,8 +179,11 @@ class SquarePageState extends State<SquarePage>
     });
     await _refresh();
     if (mounted) {
-      // 释放后保持 puton 图不再切回 waiting（避免刷新很快时出现闪烁），
+      // 加载完成：停止循环抖动并归位（offset 回到 0）。
+      // 保持 puton 图不再切回 waiting（避免刷新很快时出现闪烁），
       // 随缩回动画一起消失；状态在下次下拉开始时重置。
+      _ballShakeController.stop();
+      _ballShakeController.value = 1.0;
       _animateLeftRetract();
     }
   }
@@ -712,9 +715,13 @@ class SquarePageState extends State<SquarePage>
                         // 否则每次在顶部点击（如切换 tab）都会触发重建，导致 tab 点击失效。
                         // 若上一轮缩回动画仍在进行，先停掉，避免动画回写距离。
                         _retractController.stop();
+                        // 新一轮下拉开始：停止上一轮的循环抖动并归位
+                        // （控制器通知会触发球体重建，无需 setState）。
+                        _ballShakeController.stop();
+                        _ballShakeController.value = 1.0;
                         _leftPullDistance = 0;
-                        // 新一轮下拉开始：球回到 waiting 图（首次 onMove 的
-                        // setState 会带着这个状态重建）。
+                        // 球回到 waiting 图（首次 onMove 的 setState
+                        // 会带着这个状态重建）。
                         _leftRefreshing = false;
                         _leftPullHapticTriggered = false;
                       };

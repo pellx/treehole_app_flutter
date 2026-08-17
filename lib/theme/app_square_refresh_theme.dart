@@ -10,15 +10,16 @@ import 'package:flutter/services.dart';
 ///      顶栏遮盖（不盖住顶栏），从顶栏底边下方露出，无透明度渐变。
 ///   3. 拉满（进度 ≥ 1.0）时球顶边停在顶栏底边下方 [ballMaxDropDistance]
 ///      处；继续下拉不再改变球的位置。
-///   4. 松手时：进度 ≥ 1.0 → 触发刷新并切换为 [putonImage]；否则球以
-///      [ballRetractDuration] 平滑缩回顶栏底边后消失，而不是直接消失。
-///      （刷新结束后同样平滑缩回。）
+///   4. 松手时：进度 ≥ 1.0 → 触发刷新并切换为 [putonImage]，加载期间
+///      球体持续循环抖动，加载完成后停止；否则球以 [ballRetractDuration]
+///      平滑缩回顶栏底边后消失，而不是直接消失。
 ///
 /// 视觉：未释放（下拉中）时球内背景为 [waitingImage]，边框为绿色
 /// [ballBorderColor]；释放进入刷新态后背景切换为 [putonImage]，并伴随
-/// [ballShakeAmplitude]/[ballShakeDuration] 参数化的视觉抖动，球左侧
-/// 立即显示 [loadingLabelText] 文案（无淡入）。释放后保持 [putonImage]
-/// 不再切回 waiting，随缩回动画一起消失（下次下拉开始时重置）。
+/// [ballShakeAmplitude]/[ballShakeDuration] 参数化的循环抖动（加载期间
+/// 持续，完成后停止），球左侧立即显示 [loadingLabelText] 文案（无淡入）。
+/// 释放后保持 [putonImage] 不再切回 waiting，随缩回动画一起消失
+/// （下次下拉开始时重置）。
 /// 触觉：拉满瞬间触发 [hapticOnArmed]（可选 [hapticOnRefresh]）。
 class AppSquareRefreshTheme {
   const AppSquareRefreshTheme._();
@@ -38,7 +39,8 @@ class AppSquareRefreshTheme {
 
   // ---- 释放视觉震动 ----
 
-  /// 释放触发刷新时，球体水平抖动的总时长。
+  /// 释放触发刷新后，球体水平抖动单个来回的时长。
+  /// 刷新（加载）期间循环抖动，加载完成后停止。
   static const Duration ballShakeDuration = Duration(milliseconds: 400);
 
   /// 释放触发刷新时，球体水平抖动的最大偏移（像素）。
