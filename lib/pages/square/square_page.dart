@@ -49,6 +49,10 @@ class SquarePageState extends State<SquarePage>
   /// 是否正在执行左侧刷新
   bool _leftRefreshing = false;
 
+  /// “加载中”文案是否显示：仅在释放后的加载期间显示，
+  /// 加载完成立即隐藏（缩回时无文字）。
+  bool _leftLabelVisible = false;
+
   /// 释放触发刷新时球体的视觉抖动动画（水平来回摆动）
   late final AnimationController _ballShakeController;
   late final Animation<double> _ballShakeOffset;
@@ -176,16 +180,20 @@ class SquarePageState extends State<SquarePage>
       ..repeat();
     setState(() {
       _leftRefreshing = true;
+      _leftLabelVisible = true;
       _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
       _leftPullHapticTriggered = false;
     });
     await _refresh();
     if (mounted) {
       // 加载完成：停止循环抖动并归位（offset 回到 0）。
-      // 保持 puton 图不再切回 waiting（避免刷新很快时出现闪烁），
-      // 随缩回动画一起消失；状态在下次下拉开始时重置。
+      // 文字立即消失（缩回时无文字）；球保持 puton 图不再切回 waiting
+      // （避免刷新很快时出现闪烁），随缩回动画一起消失。
       _ballShakeController.stop();
       _ballShakeController.value = 1.0;
+      setState(() {
+        _leftLabelVisible = false;
+      });
       _animateLeftRetract();
     }
   }
@@ -693,6 +701,14 @@ class SquarePageState extends State<SquarePage>
   Widget _buildRefreshShell(Widget child) {
     final colors = Theme.of(context).extension<AppColors>()!;
     final progress = _leftPullProgress;
+    // 本层坐标原点 = 顶栏底边：拉满时球顶边停在 y = ballMaxDropDistance
+    final ballTop =
+        -AppSquareRefreshTheme.ballSize +
+        (AppSquareRefreshTheme.ballSize +
+                AppSquareTopBarTheme.height +
+                AppSquareRefreshTheme.ballMaxDropDistance) *
+            progress -
+        AppSquareTopBarTheme.height;
 
     return Stack(
       children: [
@@ -725,6 +741,7 @@ class SquarePageState extends State<SquarePage>
                         // 球回到 waiting 图（首次 onMove 的 setState
                         // 会带着这个状态重建）。
                         _leftRefreshing = false;
+                        _leftLabelVisible = false;
                         _leftPullHapticTriggered = false;
                       };
                       instance.onMove = (cumulativeDy) {
@@ -754,74 +771,72 @@ class SquarePageState extends State<SquarePage>
           child: ClipRect(
             child: Stack(
               children: [
+                // “加载中”文案：位于球左侧、与球竖直居中对齐；
+                // 独立定位不随球抖动，加载完成立即消失（缩回时无文字）。
+                Positioned(
+                  right:
+                      AppSquareRefreshTheme.ballRightFinalInset +
+                      AppSquareRefreshTheme.ballSize +
+                      AppSquareRefreshTheme.loadingLabelGap,
+                  top: ballTop,
+                  height: AppSquareRefreshTheme.ballSize,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Visibility(
+                      visible: _leftLabelVisible,
+                      child: Text(
+                        AppSquareRefreshTheme.loadingLabelText,
+                        style: TextStyle(
+                          fontSize: AppSquareRefreshTheme
+                              .loadingLabelFontSize,
+                          fontWeight: AppSquareRefreshTheme
+                              .loadingLabelFontWeight,
+                          color: AppSquareRefreshTheme.loadingLabelColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 Positioned(
                   // 水平固定在右侧
                   right: AppSquareRefreshTheme.ballRightFinalInset,
-                  // 本层坐标原点 = 顶栏底边：拉满时球顶边停在 y = ballMaxDropDistance
-                  top:
-                      -AppSquareRefreshTheme.ballSize +
-                      (AppSquareRefreshTheme.ballSize +
-                              AppSquareTopBarTheme.height +
-                              AppSquareRefreshTheme.ballMaxDropDistance) *
-                          progress -
-                      AppSquareTopBarTheme.height,
+                  top: ballTop,
                   child: AnimatedBuilder(
                     animation: _ballShakeController,
-                    // 释放时球与左侧文案一起水平抖动
+                    // 释放后球体水平抖动（文案不跟随）
                     builder: (context, child) => Transform.translate(
                       offset: Offset(_ballShakeOffset.value, 0),
                       child: child,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // “加载中”文案：仅刷新态（puton 图）立即显示，位于球左侧
-                        if (_leftRefreshing) ...[
-                          Text(
-                            AppSquareRefreshTheme.loadingLabelText,
-                            style: TextStyle(
-                              fontSize: AppSquareRefreshTheme
-                                  .loadingLabelFontSize,
-                              fontWeight: AppSquareRefreshTheme
-                                  .loadingLabelFontWeight,
-                              color: AppSquareRefreshTheme.loadingLabelColor,
+                    child: Container(
+                      width: AppSquareRefreshTheme.ballSize,
+                      height: AppSquareRefreshTheme.ballSize,
+                      decoration: BoxDecoration(
+                        color: colors.common.surface,
+                        shape: BoxShape.circle,
+                        // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
+                        border: Border.all(
+                          color: AppSquareRefreshTheme.ballBorderColor,
+                          width: AppSquareRefreshTheme.ballBorderWidth,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.common.onSurface.withValues(
+                              alpha: AppSquareRefreshTheme.shadowOpacity,
                             ),
-                          ),
-                          SizedBox(
-                            width: AppSquareRefreshTheme.loadingLabelGap,
+                            blurRadius: 8,
+                            offset: const Offset(2, 2),
                           ),
                         ],
-                        Container(
-                          width: AppSquareRefreshTheme.ballSize,
-                          height: AppSquareRefreshTheme.ballSize,
-                          decoration: BoxDecoration(
-                            color: colors.common.surface,
-                            shape: BoxShape.circle,
-                            // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
-                            border: Border.all(
-                              color: AppSquareRefreshTheme.ballBorderColor,
-                              width: AppSquareRefreshTheme.ballBorderWidth,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: colors.common.onSurface.withValues(
-                                  alpha: AppSquareRefreshTheme.shadowOpacity,
-                                ),
-                                blurRadius: 8,
-                                offset: const Offset(2, 2),
-                              ),
-                            ],
-                            image: DecorationImage(
-                              image: AssetImage(
-                                _leftRefreshing
-                                    ? AppSquareRefreshTheme.putonImage
-                                    : AppSquareRefreshTheme.waitingImage,
-                              ),
-                              fit: AppSquareRefreshTheme.ballImageFit,
-                            ),
+                        image: DecorationImage(
+                          image: AssetImage(
+                            _leftRefreshing
+                                ? AppSquareRefreshTheme.putonImage
+                                : AppSquareRefreshTheme.waitingImage,
                           ),
+                          fit: AppSquareRefreshTheme.ballImageFit,
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

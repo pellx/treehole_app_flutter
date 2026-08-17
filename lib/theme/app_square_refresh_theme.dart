@@ -17,7 +17,8 @@ import 'package:flutter/services.dart';
 /// 视觉：未释放（下拉中）时球内背景为 [waitingImage]，边框为绿色
 /// [ballBorderColor]；释放进入刷新态后背景切换为 [putonImage]，并伴随
 /// [ballShakeAmplitude]/[ballShakeDuration] 参数化的循环抖动（加载期间
-/// 持续，完成后停止），球左侧立即显示 [loadingLabelText] 文案（无淡入）。
+/// 持续，完成后停止），球左侧立即显示 [loadingLabelText] 文案——文案
+/// 独立定位，不随球抖动，加载完成立即消失（缩回时无文字）。
 /// 释放后保持 [putonImage] 不再切回 waiting，随缩回动画一起消失
 /// （下次下拉开始时重置）。
 /// 触觉：拉满瞬间触发 [hapticOnArmed]（可选 [hapticOnRefresh]）。
