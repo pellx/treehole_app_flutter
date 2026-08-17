@@ -76,9 +76,16 @@ jobs:
           path: build/ios/ipa/*.ipa
 
       - name: Upload to TestFlight
-        uses: apple-actions/upload-testflight-build@v3
-        with:
-          app-path: 'build/ios/ipa/*.ipa'
-          issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
-          api-key-id: ${{ secrets.APPLE_KEY_ID }}
-          api-private-key: ${{ secrets.APPLE_API_KEY_P8 }}
+        env:
+          API_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPLE_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          mkdir -p "$HOME/.private_keys"
+          echo -n "$API_KEY_P8" | base64 --decode -o "$HOME/.private_keys/AuthKey_${API_KEY_ID}.p8"
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file build/ios/ipa/*.ipa \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$API_ISSUER_ID"
