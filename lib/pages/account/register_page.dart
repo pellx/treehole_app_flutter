@@ -11,7 +11,7 @@ import '../../services/device_fingerprint.dart';
 import '../../services/pow.dart';
 import '../../services/session_service.dart';
 import '../../services/storage.dart';
-import '../../services/turnstile_service.dart';
+import '../../services/captcha_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens_accent.dart';
 import '../../theme/app_dimens_register.dart';
@@ -43,18 +43,18 @@ class _RegisterPageState extends State<RegisterPage> {
 
   WebViewController? _webViewController;
 
-  _StepStatus _turnstileStatus = _StepStatus.pending;
+  _StepStatus _captchaStatus = _StepStatus.pending;
   _StepStatus _powStatus = _StepStatus.pending;
 
   // 预取验证结果（页面加载时后台开始，点击注册时直接使用）
-  String? _preTurnstileToken;
+  String? _preCaptchaToken;
   int? _prePowNonce;
   PoWChallenge? _prePowChallenge;
 
   @override
   void initState() {
     super.initState();
-    _initTurnstile();
+    _initCaptcha();
     _nameController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -170,13 +170,13 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _initTurnstile() async {
+  Future<void> _initCaptcha() async {
     try {
       final controller = WebViewController();
-      TurnstileService.instance.bindController(controller);
+      CaptchaService.instance.bindController(controller);
       setState(() => _webViewController = controller);
     } catch (e) {
-      debugPrint('[Register] Turnstile init failed: $e');
+      debugPrint('[Register] Captcha init failed: $e');
     }
   }
 
@@ -207,7 +207,7 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// 后台预取 PoW 和 Turnstile 验证，缩短点击注册后的等待时间
+  /// 后台预取 PoW 和验证码，缩短点击注册后的等待时间
   void _preFetchVerification() {
     // PoW
     ApiService.getPoWChallenge().then((challenge) async {
@@ -216,9 +216,9 @@ class _RegisterPageState extends State<RegisterPage> {
       final nonce = await PoWService.solve(challenge);
       if (mounted && nonce != null) _prePowNonce = nonce;
     });
-    // Turnstile
-    TurnstileService.instance.getToken().then((token) {
-      if (mounted && token != null) _preTurnstileToken = token;
+    // 阿里云验证码
+    CaptchaService.instance.getToken().then((token) {
+      if (mounted && token != null) _preCaptchaToken = token;
     });
   }
 
@@ -226,7 +226,7 @@ class _RegisterPageState extends State<RegisterPage> {
   void _reset() {
     _nameController.clear();
     _tokenController.clear();
-    _preTurnstileToken = null;
+    _preCaptchaToken = null;
     _prePowNonce = null;
     _prePowChallenge = null;
     setState(() {
@@ -234,7 +234,7 @@ class _RegisterPageState extends State<RegisterPage> {
       _error = null;
       _submitting = false;
       _renameError = null;
-      _turnstileStatus = _StepStatus.pending;
+      _captchaStatus = _StepStatus.pending;
       _powStatus = _StepStatus.pending;
     });
     _check();
@@ -250,12 +250,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // 优先使用预取结果
       final hasPrePow = _prePowNonce != null && _prePowChallenge != null;
-      final hasPreTurnstile = _preTurnstileToken != null;
+      final hasPreCaptcha = _preCaptchaToken != null;
 
-      if (hasPrePow && hasPreTurnstile) {
+      if (hasPrePow && hasPreCaptcha) {
         // 预取完成，直接跳到取名
         setState(() {
-          _turnstileStatus = _StepStatus.completed;
+          _captchaStatus = _StepStatus.completed;
           _powStatus = _StepStatus.completed;
           _phase = 'naming';
         });
@@ -266,7 +266,7 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() {
         _phase = 'registering';
         _error = null;
-        _turnstileStatus = hasPreTurnstile ? _StepStatus.completed : _StepStatus.loading;
+        _captchaStatus = hasPreCaptcha ? _StepStatus.completed : _StepStatus.loading;
         _powStatus = hasPrePow ? _StepStatus.completed : _StepStatus.loading;
       });
 
@@ -288,17 +288,17 @@ class _RegisterPageState extends State<RegisterPage> {
         setState(() => _powStatus = _StepStatus.completed);
       }
 
-      // Turnstile
-      String? turnstileToken = _preTurnstileToken;
-      if (turnstileToken == null) {
-        turnstileToken = await TurnstileService.instance.getToken();
+      // 阿里云验证码
+      String? captchaToken = _preCaptchaToken;
+      if (captchaToken == null) {
+        captchaToken = await CaptchaService.instance.getToken();
         if (!mounted) return;
-        if (turnstileToken == null) {
-          setState(() { _turnstileStatus = _StepStatus.failed; _phase = 'failed'; });
+        if (captchaToken == null) {
+          setState(() { _captchaStatus = _StepStatus.failed; _phase = 'failed'; });
           return;
         }
-        _preTurnstileToken = turnstileToken;
-        setState(() => _turnstileStatus = _StepStatus.completed);
+        _preCaptchaToken = captchaToken;
+        setState(() => _captchaStatus = _StepStatus.completed);
       }
 
       // 验证通过 → 进入取名阶段
@@ -321,10 +321,21 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
 
-      final result = await ApiService.register(
+      // 阿里云 token 一次性（复用报 F008）：上次失败已清空，这里重新获取
+      if (_preCaptchaToken == null) {
+        final token = await CaptchaService.instance.getToken();
+        if (!mounted) return;
+        if (token == null) {
+          setState(() => _renameError = '验证码获取失败，请重试');
+          return;
+        }
+        _preCaptchaToken = token;
+      }
+
+      final result = await ApiService.registerV2(
         userDisplayId: name,
         deviceFingerPrint: fp,
-        verificationTurnstile: _preTurnstileToken ?? '',
+        verificationCaptcha: _preCaptchaToken!,
         verificationPow: PoWResult(
           challengeId: _prePowChallenge!.challengeId,
           nonce: _prePowNonce!,
@@ -334,6 +345,8 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       if (result == null) {
+        // 关键：captchaVerifyParam 一次性，失败后必须清空，下次重试重新获取
+        _preCaptchaToken = null;
         setState(() => _renameError = _mapRegisterError(ApiService.lastError));
         return;
       }
@@ -740,7 +753,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
               ),
-            // Turnstile 需挂在树上才能跑 JS（1×1 透明，不拦截触摸）
+            // 验证码 WebView 需挂在树上才能跑 JS（1×1 透明，不拦截触摸）
             if (_webViewController != null)
               Positioned(
                 left: 0,
@@ -847,7 +860,7 @@ class _RegisterPageState extends State<RegisterPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildStepRow('Turnstile 检测', _turnstileStatus, colors, onSurface),
+        _buildStepRow('验证码检测', _captchaStatus, colors, onSurface),
         const SizedBox(height: RegisterDimens.stepGap),
         _buildStepRow('PoW 检测', _powStatus, colors, onSurface),
         if (_error != null) ...[

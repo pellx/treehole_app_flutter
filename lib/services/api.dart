@@ -848,7 +848,7 @@ class ApiService {
 
   static const _userBase = 'https://tree.leisure.xin/node/user';
 
-  /// POST /user/check — 纯查询，不消耗 Turnstile/PoW，返回该指纹是否已注册
+  /// POST /user/check — 纯查询，不消耗验证码/PoW，返回该指纹是否已注册
   static Future<bool?> check({
     required DeviceFingerprint deviceFingerPrint,
   }) async {
@@ -876,18 +876,19 @@ class ApiService {
     }
   }
 
-  /// POST /user/register — 为新设备创建用户，返回 user_token + device_secret
-  static Future<RegisterResult?> register({
+  /// POST /user/registerV2 — 为新设备创建用户，返回 user_token + device_secret
+  /// 验证码改为阿里云验证码 2.0（后端 VerifyIntelligentCaptcha）
+  static Future<RegisterResult?> registerV2({
     required String userDisplayId,
     required DeviceFingerprint deviceFingerPrint,
-    required String verificationTurnstile,
+    required String verificationCaptcha,
     required PoWResult verificationPow,
   }) async {
     try {
       final requestBody = {
         'user_display_id': userDisplayId,
         'device_finger_print': deviceFingerPrint.toJson(),
-        'verification_turnstile': verificationTurnstile,
+        'verification_captcha': verificationCaptcha,
         'verification_pow': {
           'challenge_id': verificationPow.challengeId,
           'nonce': verificationPow.nonce,
@@ -895,7 +896,7 @@ class ApiService {
       };
       final res = await _client
           .post(
-            Uri.parse('$_userBase/register'),
+            Uri.parse('$_userBase/registerV2'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(requestBody),
           )
@@ -908,17 +909,17 @@ class ApiService {
           return RegisterResult(userToken: token, deviceSecret: secret);
         }
         lastError = '响应缺少字段';
-        debugPrint('[ApiService] register missing fields');
+        debugPrint('[ApiService] registerV2 missing fields');
       } else {
         lastError = _parseErrorMessage(res.body);
         debugPrint(
-          '[ApiService] register status=${res.statusCode} body=${res.body}',
+          '[ApiService] registerV2 status=${res.statusCode} body=${res.body}',
         );
       }
       return null;
     } catch (e) {
       lastError = '网络连接失败';
-      debugPrint('[ApiService] register error: $e');
+      debugPrint('[ApiService] registerV2 error: $e');
       return null;
     }
   }

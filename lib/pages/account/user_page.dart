@@ -413,8 +413,16 @@ class _UserPageState extends State<UserPage> {
     }
   }
 
-  void _openDeviceBinding() {
+  Future<void> _openDeviceBinding() async {
     HapticFeedback.lightImpact();
+    // 未注册账户时先走注册流程
+    if (!PostStorage.isRegistered()) {
+      await Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+      if (!mounted) return;
+      _reloadAccountUi();
+      _prefetchFuture = BindingCache.prefetchAll();
+      return;
+    }
     Navigator.of(context).push(topDownRoute(const DeviceBindingPage()));
   }
 
@@ -430,6 +438,14 @@ class _UserPageState extends State<UserPage> {
 
   Future<void> _openLoginOther() async {
     HapticFeedback.lightImpact();
+    // 未注册账户时先走注册流程
+    if (!PostStorage.isRegistered()) {
+      await Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+      if (!mounted) return;
+      _reloadAccountUi();
+      _prefetchFuture = BindingCache.prefetchAll();
+      return;
+    }
     final pending = _prefetchFuture;
     if (pending != null) {
       try {
