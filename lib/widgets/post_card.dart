@@ -56,6 +56,8 @@ class _PostCardState extends State<PostCard> {
   final _commentInputBarKey = GlobalKey(); // 输入栏定位（用于滚动对齐）
   bool _commentKeyboardVisible = false; // 跟踪键盘状态
   double _commentLastBottomInset = 0; // 上次键盘高度
+  Timer? _commentScrollTimer; // 滚动对齐防抖计时器
+  double _commentLastAlignedBottomInset = -1; // 上次对齐时的键盘高度
 
   @override
   void initState() {
@@ -121,6 +123,7 @@ class _PostCardState extends State<PostCard> {
     _commentFocusNode.removeListener(_onCommentFocusChanged);
     _commentOverlay?.remove();
     _commentAuthorTimer?.cancel();
+    _commentScrollTimer?.cancel();
     _commentController.dispose();
     _commentFocusNode.dispose();
     super.dispose();
@@ -578,12 +581,25 @@ class _PostCardState extends State<PostCard> {
         // 键盘高度下降 → 立即关闭输入栏
         if (_commentKeyboardVisible && bottomInset < _commentLastBottomInset) {
           _commentKeyboardVisible = false;
+          _commentScrollTimer?.cancel();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _dismissCommentOverlay();
           });
         } else {
           _commentKeyboardVisible = keyboardUp;
         }
+
+        // 键盘升起或高度变化稳定时，自动平滑滚动对齐帖子底部到输入栏上方
+        if (keyboardUp && (bottomInset - _commentLastAlignedBottomInset).abs() > 1) {
+          _commentScrollTimer?.cancel();
+          _commentScrollTimer = Timer(const Duration(milliseconds: 60), () {
+            _commentLastAlignedBottomInset = bottomInset;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _scrollToAlignPostBottom();
+            });
+          });
+        }
+
         _commentLastBottomInset = bottomInset;
 
         return Material(
@@ -1132,53 +1148,87 @@ class _PostCardState extends State<PostCard> {
       _commentController.text = draft;
     }
     _commentKeyboardVisible = false;
+    _commentLastAlignedBottomInset = -1;
     // 先聚焦唤出键盘，再滚动对齐
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _commentOverlay == null) return;
       _commentFocusNode.requestFocus();
-      // 等键盘出现后再滚动
-      Future.delayed(const Duration(milliseconds: 350), () {
-        if (!mounted || _commentOverlay == null) return;
-        // 目标：把帖子底部（日期行）对齐到输入栏上方，而不是评论区底部
-        final ctx = _dateRowKey.currentContext;
-        if (ctx == null || !ctx.mounted) return;
-        final box = ctx.findRenderObject() as RenderBox;
-        final scrollable = Scrollable.of(ctx);
-        // 目标区域底部在屏幕中的位置
-        final targetBottom = box.localToGlobal(Offset(0, box.size.height)).dy;
-
-        // 直接测量输入栏顶部在屏幕中的真实位置，避免用固定偏移导致不同设备/键盘高度下对不齐
-        final inputBarCtx = _commentInputBarKey.currentContext;
-        final double inputBarTop;
-        if (inputBarCtx != null) {
-          final inputBarBox = inputBarCtx.findRenderObject() as RenderBox;
-          inputBarTop = inputBarBox.localToGlobal(Offset.zero).dy;
-        } else {
-          final mq = MediaQuery.of(context);
-          final bottomOccupied = max(mq.viewInsets.bottom, mq.padding.bottom);
-          inputBarTop = mq.size.height -
-              bottomOccupied -
-              AppDimens.commentInputHeight -
-              AppDimens.commentInputSectionMarginTop -
-              AppDimens.commentInputSectionMarginBottom;
-        }
-        final desiredGap = AppDimens.commentInputSectionMarginBottom;
-        final delta = targetBottom - (inputBarTop - desiredGap);
-        if (delta.abs() > 2) {
-          scrollable.position.animateTo(
-            (scrollable.position.pixels + delta).clamp(
-              scrollable.position.minScrollExtent,
-              scrollable.position.maxScrollExtent,
-            ),
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
+      // 兜底：若在部分设备或无软键盘变化场景下，延时触发对齐
+      _commentScrollTimer?.cancel();
+      _commentScrollTimer = Timer(const Duration(milliseconds: 250), () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToAlignPostBottom();
+        });
       });
     });
   }
 
+  void _scrollToAlignPostBottom() {
+    if (!mounted || _commentOverlay == null) return;
+
+    // 目标：帖子最底下，即回复内容展示的下面（有回复展示时为评论区底部，无回复时为日期行底部）
+    final targetCtx =
+        (widget.comments.isNotEmpty && _commentSectionKey.currentContext != null)
+            ? _commentSectionKey.currentContext
+            : _dateRowKey.currentContext;
+
+    if (targetCtx == null || !targetCtx.mounted) return;
+
+    final targetBox = targetCtx.findRenderObject() as RenderBox?;
+    if (targetBox == null || !targetBox.hasSize) return;
+
+    final scrollable = Scrollable.maybeOf(targetCtx);
+    if (scrollable == null) return;
+
+    // 目标区域底部在屏幕中的全局绝对 Y 坐标
+    final targetBottom =
+        targetBox.localToGlobal(Offset(0, targetBox.size.height)).dy;
+
+    // 获取输入栏顶部在屏幕中的全局绝对 Y 坐标
+    final inputBarCtx = _commentInputBarKey.currentContext;
+    final double inputBarTop;
+    if (inputBarCtx != null && inputBarCtx.mounted) {
+      final inputBarBox = inputBarCtx.findRenderObject() as RenderBox?;
+      if (inputBarBox != null && inputBarBox.hasSize) {
+        inputBarTop = inputBarBox.localToGlobal(Offset.zero).dy;
+      } else {
+        final mq = MediaQuery.of(context);
+        final bottomOccupied = max(mq.viewInsets.bottom, mq.padding.bottom);
+        inputBarTop = mq.size.height -
+            bottomOccupied -
+            AppDimens.commentInputHeight -
+            AppDimens.commentInputSectionMarginTop -
+            AppDimens.commentInputSectionMarginBottom;
+      }
+    } else {
+      final mq = MediaQuery.of(context);
+      final bottomOccupied = max(mq.viewInsets.bottom, mq.padding.bottom);
+      inputBarTop = mq.size.height -
+          bottomOccupied -
+          AppDimens.commentInputHeight -
+          AppDimens.commentInputSectionMarginTop -
+          AppDimens.commentInputSectionMarginBottom;
+    }
+
+    final desiredGap = AppDimens.commentInputSectionMarginBottom;
+    final delta = targetBottom - (inputBarTop - desiredGap);
+
+    if (delta.abs() > 1) {
+      final newOffset = (scrollable.position.pixels + delta).clamp(
+        scrollable.position.minScrollExtent,
+        scrollable.position.maxScrollExtent,
+      );
+      scrollable.position.animateTo(
+        newOffset,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   void _dismissCommentOverlay() {
+    _commentScrollTimer?.cancel();
+    _commentLastAlignedBottomInset = -1;
     _commentOverlay?.remove();
     _commentOverlay = null;
     _commentFocusNode.unfocus();

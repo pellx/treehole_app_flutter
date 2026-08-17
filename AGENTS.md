@@ -107,7 +107,7 @@ lib/
 - 操作菜单使用 `showAppActionsSheet`（底部 Sheet），不要恢复旧的 Overlay 菜单。
 - 长文展开使用旋转 SVG `expand_icon.svg`。
 - 评论展开使用 `+/-` SVG 按钮。
-- **评论输入栏对齐目标**：`_dateRowKey`（帖子底部的日期行），而不是评论区底部。
+- **评论输入栏对齐目标**：帖子最底部（有回复时为回复展示区 `_commentSectionKey` 底部，无回复时为 `_dateRowKey` 底部），自动平滑定位到输入栏上方。
 
 ### 4.3 PostCreatePage（发帖页）
 
