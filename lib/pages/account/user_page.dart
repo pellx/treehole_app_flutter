@@ -20,6 +20,7 @@ import '../settings/settings_page.dart';
 import '../settings/version_page.dart';
 import '../../widgets/app_snackbar.dart';
 import 'device_binding_page.dart';
+import 'register_page.dart';
 import 'switch_account_page.dart';
 import 'user_profile_page.dart';
 
@@ -576,7 +577,17 @@ class _UserPageState extends State<UserPage> {
     );
   }
 
+  Future<void> _openRegister() async {
+    HapticFeedback.lightImpact();
+    await Navigator.of(context).push(bottomUpRoute(const RegisterPage()));
+    if (!mounted) return;
+    _reloadAccountUi();
+    _prefetchFuture = BindingCache.prefetchAll();
+  }
+
   Widget _profileCard(AppColors colors, Color onSurface) {
+    final isRegistered = PostStorage.isRegistered();
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -586,7 +597,7 @@ class _UserPageState extends State<UserPage> {
       child: Row(
         children: [
           GestureDetector(
-            onTap: _pickAvatar,
+            onTap: isRegistered ? _pickAvatar : _openRegister,
             child: CircleAvatar(
               radius: 36,
               backgroundColor: colors.common.idTint.withValues(alpha: 0.2),
@@ -599,76 +610,96 @@ class _UserPageState extends State<UserPage> {
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _openProfile,
+              onTap: isRegistered ? _openProfile : _openRegister,
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _editingName
-                            ? TextField(
-                                controller: _nameController,
-                                focusNode: _nameFocus,
-                                maxLength: AccentDimens.nameMaxLength,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: onSurface,
-                                ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  counterText: '',
-                                  hintText: '昵称',
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 6,
+                        if (isRegistered) ...[
+                          _editingName
+                              ? TextField(
+                                  controller: _nameController,
+                                  focusNode: _nameFocus,
+                                  maxLength: AccentDimens.nameMaxLength,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: onSurface,
                                   ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: onSurface.withValues(alpha: 0.3),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    counterText: '',
+                                    hintText: '昵称',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 6,
+                                    ),
+                                    enabledBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: onSurface.withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    focusedBorder: UnderlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: colors.common.green,
+                                      ),
                                     ),
                                   ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: colors.common.green,
-                                    ),
+                                )
+                              : Text(
+                                  _nameController.text.isEmpty
+                                      ? '未设置昵称'
+                                      : _nameController.text,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: onSurface,
                                   ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              )
-                            : Text(
-                                _nameController.text.isEmpty
-                                    ? '未设置昵称'
-                                    : _nameController.text,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: onSurface,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 6),
+                          if (_submittingName)
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colors.common.green,
                               ),
-                        const SizedBox(height: 6),
-                        if (_submittingName)
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.common.green,
+                            )
+                          else
+                            GestureDetector(
+                              onTap: _onNameButtonTap,
+                              child: Text(
+                                _editingName ? '保存' : '点击修改昵称',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _editingName
+                                      ? colors.common.green
+                                      : onSurface.withValues(alpha: 0.5),
+                                ),
+                              ),
                             ),
-                          )
-                        else
-                          GestureDetector(
-                            onTap: _onNameButtonTap,
-                            child: Text(
-                              _editingName ? '保存' : '点击修改昵称',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: _editingName
-                                    ? colors.common.green
-                                    : onSurface.withValues(alpha: 0.5),
-                              ),
+                        ] else ...[
+                          Text(
+                            '注册用户',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '点击前往注册',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: onSurface.withValues(alpha: 0.5),
                             ),
                           ),
+                        ],
                       ],
                     ),
                   ),
@@ -685,7 +716,7 @@ class _UserPageState extends State<UserPage> {
               ),
             ),
           ),
-          if (_editingName)
+          if (_editingName && isRegistered)
             IconButton(
               icon: Icon(
                 Icons.close,
