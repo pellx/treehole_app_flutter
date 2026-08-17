@@ -733,76 +733,89 @@ class SquarePageState extends State<SquarePage>
             },
           ),
         ),
-        // 刷新球：下拉开始（进度 > 0）的瞬间完整出现在顶栏（含搜索）正下方，
-        // 无渐变淡入、无裁剪缩放；继续下拉时只竖直下移，最多落下
-        // ballMaxDropDistance。
+        // 刷新球：下拉起始位置不变——从顶栏上方竖直滑下，滑过顶栏区域时
+        // 被顶栏遮盖（不盖住顶栏、无透明度渐变），从顶栏底边下方露出；
+        // 拉满时球顶边停在顶栏底边下方 ballMaxDropDistance 处。
         Positioned(
-          // 水平固定在右侧
-          right: AppSquareRefreshTheme.ballRightFinalInset,
-          // 球顶边 = 顶栏底边 + 下拉进度 × 最大落下距离
-          top:
-              AppSquareTopBarTheme.height +
-              progress * AppSquareRefreshTheme.ballMaxDropDistance,
-          child: AnimatedBuilder(
-            animation: _ballShakeController,
-            builder: (context, child) => Transform.translate(
-              offset: Offset(_ballShakeOffset.value, 0),
-              child: child,
-            ),
-            child: Visibility(
-              // 进度为 0（未下拉）时不占位、不显示；下拉开始瞬间完整出现
-              visible: progress > 0,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // “加载中”文案：仅刷新态（puton 图）瞬间显示，位于球左侧
-                  if (_leftRefreshing) ...[
-                    Text(
-                      AppSquareRefreshTheme.loadingLabelText,
-                      style: TextStyle(
-                        fontSize: AppSquareRefreshTheme.loadingLabelFontSize,
-                        fontWeight:
-                            AppSquareRefreshTheme.loadingLabelFontWeight,
-                        color: AppSquareRefreshTheme.loadingLabelColor,
-                      ),
+          left: 0,
+          right: 0,
+          top: AppSquareTopBarTheme.height,
+          bottom: 0,
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Positioned(
+                  // 水平固定在右侧
+                  right: AppSquareRefreshTheme.ballRightFinalInset,
+                  // 本层坐标原点 = 顶栏底边：拉满时球顶边停在 y = ballMaxDropDistance
+                  top:
+                      -AppSquareRefreshTheme.ballSize +
+                      (AppSquareRefreshTheme.ballSize +
+                              AppSquareTopBarTheme.height +
+                              AppSquareRefreshTheme.ballMaxDropDistance) *
+                          progress -
+                      AppSquareTopBarTheme.height,
+                  child: AnimatedBuilder(
+                    animation: _ballShakeController,
+                    // 释放时球与左侧文案一起水平抖动
+                    builder: (context, child) => Transform.translate(
+                      offset: Offset(_ballShakeOffset.value, 0),
+                      child: child,
                     ),
-                    SizedBox(
-                      width: AppSquareRefreshTheme.loadingLabelGap,
-                    ),
-                  ],
-                  // 释放时球与左侧文案一起水平抖动
-                  Container(
-                    width: AppSquareRefreshTheme.ballSize,
-                    height: AppSquareRefreshTheme.ballSize,
-                    decoration: BoxDecoration(
-                      color: colors.common.surface,
-                      shape: BoxShape.circle,
-                      // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
-                      border: Border.all(
-                        color: AppSquareRefreshTheme.ballBorderColor,
-                        width: AppSquareRefreshTheme.ballBorderWidth,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colors.common.onSurface.withValues(
-                            alpha: AppSquareRefreshTheme.shadowOpacity,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // “加载中”文案：仅刷新态（puton 图）立即显示，位于球左侧
+                        if (_leftRefreshing) ...[
+                          Text(
+                            AppSquareRefreshTheme.loadingLabelText,
+                            style: TextStyle(
+                              fontSize: AppSquareRefreshTheme
+                                  .loadingLabelFontSize,
+                              fontWeight: AppSquareRefreshTheme
+                                  .loadingLabelFontWeight,
+                              color: AppSquareRefreshTheme.loadingLabelColor,
+                            ),
                           ),
-                          blurRadius: 8,
-                          offset: const Offset(2, 2),
+                          SizedBox(
+                            width: AppSquareRefreshTheme.loadingLabelGap,
+                          ),
+                        ],
+                        Container(
+                          width: AppSquareRefreshTheme.ballSize,
+                          height: AppSquareRefreshTheme.ballSize,
+                          decoration: BoxDecoration(
+                            color: colors.common.surface,
+                            shape: BoxShape.circle,
+                            // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
+                            border: Border.all(
+                              color: AppSquareRefreshTheme.ballBorderColor,
+                              width: AppSquareRefreshTheme.ballBorderWidth,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.common.onSurface.withValues(
+                                  alpha: AppSquareRefreshTheme.shadowOpacity,
+                                ),
+                                blurRadius: 8,
+                                offset: const Offset(2, 2),
+                              ),
+                            ],
+                            image: DecorationImage(
+                              image: AssetImage(
+                                _leftRefreshing
+                                    ? AppSquareRefreshTheme.putonImage
+                                    : AppSquareRefreshTheme.waitingImage,
+                              ),
+                              fit: AppSquareRefreshTheme.ballImageFit,
+                            ),
+                          ),
                         ),
                       ],
-                      image: DecorationImage(
-                        image: AssetImage(
-                          _leftRefreshing
-                              ? AppSquareRefreshTheme.putonImage
-                              : AppSquareRefreshTheme.waitingImage,
-                        ),
-                        fit: AppSquareRefreshTheme.ballImageFit,
-                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

@@ -5,11 +5,11 @@ import 'package:flutter/services.dart';
 ///
 /// 交互过程：
 ///   1. 列表在最顶部时，从屏幕任意位置向下滑动。
-///   2. 下拉开始（进度 > 0）的瞬间，刷新球完整出现在顶栏正下方（球顶边 =
-///      顶部栏底边）——无渐变淡入、无裁剪缩放；水平位置固定于右侧
-///      [ballRightFinalInset]。
-///   3. 继续下拉时球竖直下移，最多落下 [ballMaxDropDistance]；拉满后进度
-///      被钳制在 1.0，继续下拉不再改变球的位置。
+///   2. 随着下拉距离增加，刷新球从顶栏上方竖直滑下（下拉起始位置固定，
+///      水平位置固定于右侧 [ballRightFinalInset]）；滑过顶栏区域时被
+///      顶栏遮盖（不盖住顶栏），从顶栏底边下方露出，无透明度渐变。
+///   3. 拉满（进度 ≥ 1.0）时球顶边停在顶栏底边下方 [ballMaxDropDistance]
+///      处；继续下拉不再改变球的位置。
 ///   4. 松手时：进度 ≥ 1.0 → 触发刷新并切换为 [putonImage]；否则球以
 ///      [ballRetractDuration] 平滑缩回顶栏底边后消失，而不是直接消失。
 ///      （刷新结束后同样平滑缩回。）
@@ -90,8 +90,8 @@ class AppSquareRefreshTheme {
   static const double ballRightFinalInset = 16;
 
   /// 刷新球的最大落下距离：拉满时球顶边停在顶部栏底边下方
-  /// [ballMaxDropDistance] 处；下拉过程中球从顶栏底边竖直下移，
-  /// 最多移动这么多像素。
+  /// [ballMaxDropDistance] 处；下拉过程中球从顶栏上方滑下、穿过顶栏后
+  /// 露出，最多下落这么多像素。
   static const double ballMaxDropDistance = 24;
 
   /// 刷新球阴影的不透明度。
