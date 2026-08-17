@@ -118,6 +118,8 @@ class SquarePageState extends State<SquarePage> {
   }
 
   Future<void> _triggerLeftRefresh() async {
+    // 释放触发刷新时震动
+    AppSquareRefreshTheme.hapticOnRefresh.trigger();
     setState(() {
       _leftRefreshing = true;
       _leftPullDistance = AppSquareRefreshTheme.pullThreshold;
@@ -661,7 +663,7 @@ class SquarePageState extends State<SquarePage> {
                           _leftPullDistance = cumulativeDy;
                           if (_leftPullProgress >= 1.0 &&
                               !_leftPullHapticTriggered) {
-                            HapticFeedback.mediumImpact();
+                            AppSquareRefreshTheme.hapticOnArmed.trigger();
                             _leftPullHapticTriggered = true;
                           }
                         });
@@ -691,6 +693,11 @@ class SquarePageState extends State<SquarePage> {
               decoration: BoxDecoration(
                 color: colors.common.surface,
                 shape: BoxShape.circle,
+                // 绿色边框圆球：未释放显示 waiting 图，释放刷新切换 puton 图
+                border: Border.all(
+                  color: AppSquareRefreshTheme.ballBorderColor,
+                  width: AppSquareRefreshTheme.ballBorderWidth,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: colors.common.onSurface.withValues(
@@ -700,23 +707,14 @@ class SquarePageState extends State<SquarePage> {
                     offset: const Offset(2, 2),
                   ),
                 ],
-              ),
-              child: Center(
-                child: _leftRefreshing
-                    ? SizedBox(
-                        width: AppSquareRefreshTheme.indicatorSize,
-                        height: AppSquareRefreshTheme.indicatorSize,
-                        child: CircularProgressIndicator(
-                          strokeWidth:
-                              AppSquareRefreshTheme.indicatorStrokeWidth,
-                          color: colors.common.green,
-                        ),
-                      )
-                    : Icon(
-                        Icons.refresh,
-                        size: AppSquareRefreshTheme.iconSize,
-                        color: colors.common.green,
-                      ),
+                image: DecorationImage(
+                  image: AssetImage(
+                    _leftRefreshing
+                        ? AppSquareRefreshTheme.putonImage
+                        : AppSquareRefreshTheme.waitingImage,
+                  ),
+                  fit: AppSquareRefreshTheme.ballImageFit,
+                ),
               ),
             ),
           ),
