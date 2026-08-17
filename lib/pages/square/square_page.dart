@@ -179,10 +179,8 @@ class SquarePageState extends State<SquarePage>
     });
     await _refresh();
     if (mounted) {
-      setState(() {
-        _leftRefreshing = false;
-      });
-      // 刷新结束同样平滑缩回顶栏下方
+      // 释放后保持 puton 图不再切回 waiting（避免刷新很快时出现闪烁），
+      // 随缩回动画一起消失；状态在下次下拉开始时重置。
       _animateLeftRetract();
     }
   }
@@ -715,6 +713,9 @@ class SquarePageState extends State<SquarePage>
                         // 若上一轮缩回动画仍在进行，先停掉，避免动画回写距离。
                         _retractController.stop();
                         _leftPullDistance = 0;
+                        // 新一轮下拉开始：球回到 waiting 图（首次 onMove 的
+                        // setState 会带着这个状态重建）。
+                        _leftRefreshing = false;
                         _leftPullHapticTriggered = false;
                       };
                       instance.onMove = (cumulativeDy) {
