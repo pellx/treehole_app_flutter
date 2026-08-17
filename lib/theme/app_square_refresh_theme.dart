@@ -7,15 +7,19 @@ import 'app_square_top_bar_theme.dart';
 ///
 /// 交互过程：
 ///   1. 列表在最顶部时，从屏幕任意位置向下滑动。
-///   2. 随着下拉距离增加，刷新球从顶部栏上方竖直滑下（水平位置固定于右侧
-///      [ballRightFinalInset]），直到下拉距离达到 [pullThreshold] 时球完全
-///      显示并停在顶部栏正下方（球顶边 = 顶部栏底边，即最顶端位置）。
+///   2. 随着下拉距离增加，刷新球从顶栏底边下方逐渐探出（水平位置固定于
+///      右侧 [ballRightFinalInset]），直到下拉距离达到 [pullThreshold] 时
+///      球完全显示并停在顶部栏正下方（球顶边 = 顶部栏底边）。
+///      球被裁剪在顶栏下方的区域内，任何时刻都不会盖住顶栏（搜索区）。
 ///   3. 继续下拉不再改变球的位置（进度被钳制在 1.0）。
-///   4. 松手时如果进度 ≥ 1.0，触发刷新并切换为 [putonImage]；否则球收回。
+///   4. 松手时：进度 ≥ 1.0 → 触发刷新并切换为 [putonImage]；否则球以
+///      [ballRetractDuration] 平滑缩回顶栏下方，而不是直接消失。
+///      （刷新结束后同样平滑缩回。）
 ///
 /// 视觉：未释放（下拉中）时球内背景为 [waitingImage]，边框为绿色
 /// [ballBorderColor]；释放进入刷新态后背景切换为 [putonImage]，并伴随
-/// [ballShakeAmplitude]/[ballShakeDuration] 参数化的视觉抖动。
+/// [ballShakeAmplitude]/[ballShakeDuration] 参数化的视觉抖动，球左侧
+/// 淡入 [loadingLabelText] 文案（淡入时长 [loadingLabelFadeIn]）。
 /// 触觉：拉满瞬间触发 [hapticOnArmed]（可选 [hapticOnRefresh]）。
 class AppSquareRefreshTheme {
   const AppSquareRefreshTheme._();
@@ -40,6 +44,31 @@ class AppSquareRefreshTheme {
 
   /// 释放触发刷新时，球体水平抖动的最大偏移（像素）。
   static const double ballShakeAmplitude = 6;
+
+  // ---- 缩回 ----
+
+  /// 未拉满松手（或刷新结束）时，球缩回顶栏下方的动画时长。
+  static const Duration ballRetractDuration = Duration(milliseconds: 220);
+
+  // ---- 刷新中文案 ----
+
+  /// 刷新态（显示 [putonImage]）时球左侧显示的文字。
+  static const String loadingLabelText = '加载中';
+
+  /// 刷新中文案的淡入时长。
+  static const Duration loadingLabelFadeIn = Duration(milliseconds: 250);
+
+  /// 刷新中文案的字体大小。
+  static const double loadingLabelFontSize = 14;
+
+  /// 刷新中文案的字体粗细。
+  static const FontWeight loadingLabelFontWeight = FontWeight.w500;
+
+  /// 刷新中文案的颜色（与球边框同色，亮暗色下均可读）。
+  static const Color loadingLabelColor = Color(0xFF7BB380);
+
+  /// 刷新中文案右边缘到球左边缘的间距。
+  static const double loadingLabelGap = 8;
 
   // ---- 球体 ----
 
